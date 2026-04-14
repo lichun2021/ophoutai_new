@@ -1,0 +1,34 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="200" height="200" fill="#f8fafc"/>
+  
+  <!-- 礼品盒底部 -->
+  <rect x="50" y="100" width="100" height="80" fill="#e53e3e" rx="5"/>
+  
+  <!-- 礼品盒顶部 -->
+  <rect x="45" y="95" width="110" height="20" fill="#c53030" rx="3"/>
+  
+  <!-- 蝴蝶结中心 -->
+  <circle cx="100" cy="80" r="12" fill="#fed7d7"/>
+  
+  <!-- 蝴蝶结左侧 -->
+  <ellipse cx="85" cy="80" rx="18" ry="12" fill="#f56565"/>
+  
+  <!-- 蝴蝶结右侧 -->
+  <ellipse cx="115" cy="80" rx="18" ry="12" fill="#f56565"/>
+  
+  <!-- 垂直丝带 -->
+  <rect x="95" y="80" width="10" height="100" fill="#fed7d7"/>
+  
+  <!-- 水平丝带 -->
+  <rect x="45" y="95" width="110" height="10" fill="#fed7d7"/>
+  
+  <!-- 装饰点 -->
+  <circle cx="70" cy="120" r="3" fill="#fed7d7"/>
+  <circle cx="130" cy="120" r="3" fill="#fed7d7"/>
+  <circle cx="70" cy="150" r="3" fill="#fed7d7"/>
+  <circle cx="130" cy="150" r="3" fill="#fed7d7"/>
+  
+  <!-- 阴影 -->
+  <ellipse cx="100" cy="185" rx="45" ry="8" fill="#e2e8f0" opacity="0.5"/>
+</svg> 

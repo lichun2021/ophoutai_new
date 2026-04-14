@@ -1,0 +1,30 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景圆形 -->
+  <circle cx="32" cy="32" r="30" fill="#0f172a" stroke="#3b82f6" stroke-width="2"/>
+  
+  <!-- 量子原子图标 -->
+  <g transform="translate(32, 32)">
+    <!-- 原子核 -->
+    <circle cx="0" cy="0" r="3" fill="#06b6d4"/>
+    
+    <!-- 电子轨道1 -->
+    <ellipse cx="0" cy="0" rx="12" ry="6" stroke="#3b82f6" stroke-width="1.5" fill="none" opacity="0.9"/>
+    
+    <!-- 电子轨道2 -->
+    <ellipse cx="0" cy="0" rx="12" ry="6" stroke="#06b6d4" stroke-width="1.5" fill="none" opacity="0.9" transform="rotate(60)"/>
+    
+    <!-- 电子轨道3 -->
+    <ellipse cx="0" cy="0" rx="12" ry="6" stroke="#3b82f6" stroke-width="1.5" fill="none" opacity="0.9" transform="rotate(-60)"/>
+    
+    <!-- 电子 -->
+    <circle cx="12" cy="0" r="2" fill="#06b6d4"/>
+    <circle cx="-6" cy="10" r="2" fill="#3b82f6" transform="rotate(60)"/>
+    <circle cx="-6" cy="-10" r="2" fill="#06b6d4" transform="rotate(-60)"/>
+  </g>
+  
+  <!-- 装饰粒子 -->
+  <circle cx="16" cy="16" r="1" fill="#06b6d4" opacity="0.8"/>
+  <circle cx="48" cy="16" r="1" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="16" cy="48" r="1" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="48" cy="48" r="1" fill="#06b6d4" opacity="0.8"/>
+</svg> 

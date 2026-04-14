@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景圆形 -->
+  <circle cx="32" cy="32" r="30" fill="#4F46E5" stroke="#3730A3" stroke-width="2"/>
+  
+  <!-- 耳机头带 -->
+  <path d="M20 28C20 21.3726 25.3726 16 32 16C38.6274 16 44 21.3726 44 28V32" 
+        stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- 左耳机 -->
+  <rect x="16" y="28" width="6" height="10" rx="3" fill="white"/>
+  <rect x="17" y="30" width="4" height="6" rx="2" fill="#4F46E5"/>
+  
+  <!-- 右耳机 -->
+  <rect x="42" y="28" width="6" height="10" rx="3" fill="white"/>
+  <rect x="43" y="30" width="4" height="6" rx="2" fill="#4F46E5"/>
+  
+  <!-- 麦克风 -->
+  <path d="M19 35L24 40" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="25" cy="41" r="2" fill="white"/>
+  
+  <!-- 对话气泡 -->
+  <circle cx="40" cy="45" r="8" fill="#10B981"/>
+  <path d="M36 49L38 51L44 45" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- 小装饰点 -->
+  <circle cx="32" cy="50" r="1.5" fill="white" opacity="0.6"/>
+  <circle cx="28" cy="52" r="1" fill="white" opacity="0.4"/>
+  <circle cx="36" cy="52" r="1" fill="white" opacity="0.4"/>
+</svg> 

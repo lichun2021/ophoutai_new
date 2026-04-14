@@ -1,0 +1,13 @@
+{
+  "defaultIp": {
+    "10001": "wss://server1.fizzlewump.top",
+    "10002": "wss://server2.fizzlewump.top"
+  },
+  "tiers": [
+    { "min": 0, "max": 999, "ip": { "10001": "wss://server1.fizzlewump.top", "10002": "wss://server2.fizzlewump.top" } },
+    { "min": 1000, "max": 4999, "ip": { "10001": "wss://server1.fizzlewump.top", "10002": "wss://server2.fizzlewump.top" } },
+    { "min": 5000, "ip": { "10001": "wss://server1.fizzlewump.top", "10002": "wss://server2.fizzlewump.top" } }
+  ],
+  "lastUpdate": "2025-11-04"
+}
+

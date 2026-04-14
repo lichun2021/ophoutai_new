@@ -1,0 +1,6 @@
+{
+  "compilerOptions": {
+    "types": ["@vue/runtime-core"]
+  },
+  "extends": "./.nuxt/tsconfig.json"
+}

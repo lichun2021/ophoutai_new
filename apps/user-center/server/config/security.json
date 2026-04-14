@@ -1,0 +1,5 @@
+{
+  "adminLoginIpWhitelist": "*",
+  "comment": "IP 白名单配置，* 表示不限制，多个 IP 用逗号分隔，支持 CIDR 格式（如 192.168.1.0/24）"
+}
+

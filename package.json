@@ -1,0 +1,13 @@
+{
+  "name": "houtai-monorepo",
+  "private": true,
+  "scripts": {
+    "dev:user": "cd apps/user-center && npm run dev",
+    "dev:agent": "cd apps/agent-admin && npm run dev",
+    "dev:op": "cd apps/op-admin && npm run dev",
+    "install:all": "cd apps/user-center && npm install && cd ../agent-admin && npm install && cd ../op-admin && npm install",
+    "build:user": "cd apps/user-center && npm run build",
+    "build:agent": "cd apps/agent-admin && npm run build",
+    "build:op": "cd apps/op-admin && npm run build"
+  }
+}

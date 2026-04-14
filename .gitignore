@@ -1,0 +1,33 @@
+# Original source (has its own git repo, excluded from monorepo)
+op_houtai/
+
+# Node
+node_modules/
+.nuxt/
+.output/
+dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Build artifacts
+zips/
+backup_*.sh
+backup_db.sql
+clear_db.sql
