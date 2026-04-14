@@ -1,658 +1,475 @@
-<!-- layouts/user.vue - 用户页面专用布局，移动端和PC端自适应 -->
+<!-- layouts/user.vue - 深色游戏风格布局 -->
 <template>
   <div class="user-layout">
     <!-- PC端侧边栏 -->
     <aside class="pc-sidebar">
-      <div class="sidebar-header">
-        <div class="logo">
-          <UIcon name="i-heroicons-user-circle" class="logo-icon" />
-          <span class="logo-text">用户中心</span>
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <img src="/platform-coin.svg" alt="logo" class="brand-icon" />
+        </div>
+        <span class="brand-name">会员中心</span>
+      </div>
+
+      <!-- 用户信息卡片 -->
+      <div class="sidebar-user-card">
+        <div class="user-avatar">{{ userInitial }}</div>
+        <div class="user-meta">
+          <p class="user-name">{{ userDisplayName }}</p>
+          <div class="user-balance-row">
+            <img src="/platform-coin.svg" alt="coin" class="coin-sm" />
+            <span class="user-coins">{{ formatBalance(userBalance) }}</span>
+          </div>
         </div>
       </div>
-      
+
       <nav class="sidebar-nav">
-        <NuxtLink 
-          to="/user/home" 
-          class="sidebar-nav-item"
-          :class="{ 'active': $route.path === '/user/home' }"
-        >
-          <UIcon name="i-heroicons-home" class="nav-icon" />
+        <NuxtLink to="/user/home" class="sn-item" :class="{ active: $route.path === '/user/home' }">
+          <span class="sn-icon">🏠</span>
           <span>首页</span>
         </NuxtLink>
-
-        <NuxtLink 
-          to="/user/cashier" 
-          class="sidebar-nav-item"
-          :class="{ 'active': $route.path === '/user/cashier' }"
-        >
-          <UIcon name="i-heroicons-banknotes" class="nav-icon" />
-          <span>充值收银台</span>
+        <NuxtLink to="/user/cashier" class="sn-item" :class="{ active: $route.path === '/user/cashier' }">
+          <span class="sn-icon">💳</span>
+          <span>充值</span>
         </NuxtLink>
-
-        <NuxtLink 
-          to="/user/recharge" 
-          class="sidebar-nav-item"
-          :class="{ 'active': $route.path === '/user/recharge' }"
-        >
-          <UIcon name="i-heroicons-credit-card" class="nav-icon" />
+        <NuxtLink to="/user/recharge" class="sn-item" :class="{ active: $route.path === '/user/recharge' }">
+          <span class="sn-icon">📋</span>
           <span>充值记录</span>
         </NuxtLink>
-
-        <NuxtLink 
-          to="/user/mall" 
-          class="sidebar-nav-item"
-          :class="{ 'active': $route.path === '/user/mall' }"
-        >
-          <UIcon name="i-heroicons-gift" class="nav-icon" />
+        <NuxtLink to="/user/mall" class="sn-item" :class="{ active: $route.path === '/user/mall' }">
+          <span class="sn-icon">🎁</span>
           <span>礼包商城</span>
         </NuxtLink>
-
-        <NuxtLink 
-          to="/user/orders" 
-          class="sidebar-nav-item"
-          :class="{ 'active': $route.path === '/user/orders' }"
-        >
-          <UIcon name="i-heroicons-shopping-bag" class="nav-icon" />
+        <NuxtLink to="/user/orders" class="sn-item" :class="{ active: $route.path === '/user/orders' }">
+          <span class="sn-icon">📦</span>
           <span>购买记录</span>
         </NuxtLink>
       </nav>
 
-      <div class="sidebar-footer">
-        <UButton 
-          variant="ghost" 
-          color="red" 
-          block
-          @click="handleLogout"
-          icon="i-heroicons-arrow-right-on-rectangle"
-        >
-          退出登录
-        </UButton>
+      <div class="sidebar-bottom">
+        <button class="logout-btn" @click="handleLogout">
+          <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-4 h-4" />
+          <span>退出登录</span>
+        </button>
       </div>
     </aside>
 
     <!-- 主容器 -->
-    <div class="main-container">
-      <!-- 顶部状态栏 -->
-      <header class="user-header">
-        <div class="header-content">
-          <!-- 移动端菜单按钮 -->
-          <UButton
-            class="mobile-menu-btn"
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-bars-3"
-            @click="toggleMobileMenu"
-          />
-
-          <!-- 左侧用户信息 -->
-          <div class="user-info">
-            <div class="avatar">
-              {{ userInitial }}
-            </div>
-                      <div class="user-details">
-            <h3>{{ userDisplayName }}</h3>
-            <p class="user-balance">
-              <img src="/platform-coin.svg" alt="平台币" class="header-coin-icon" />
-              {{ formatBalance(userBalance) }}
-            </p>
+    <div class="main-wrap">
+      <!-- 顶部栏（PC端） -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button class="mobile-menu-btn" @click="toggleMobileMenu">
+            <UIcon name="i-heroicons-bars-3" class="w-5 h-5" />
+          </button>
+          <span class="top-title">{{ pageTitle }}</span>
+        </div>
+        <div class="top-bar-right">
+          <div class="balance-chip">
+            <img src="/platform-coin.svg" alt="coin" class="chip-coin" />
+            <span>{{ formatBalance(userBalance) }}</span>
           </div>
-          </div>
+          <div class="top-avatar">{{ userInitial }}</div>
         </div>
       </header>
 
-      <!-- 主要内容区 -->
-      <main class="user-main">
-        <div class="content-wrapper">
-          <NuxtPage />
-        </div>
+      <!-- 内容区 -->
+      <main class="main-content">
+        <NuxtPage />
       </main>
     </div>
 
-    <!-- 移动端底部导航栏 -->
+    <!-- 移动底部导航 -->
     <nav class="bottom-nav">
-      <NuxtLink 
-        to="/user/home" 
-        class="nav-item"
-        :class="{ 'active': $route.path === '/user/home' }"
-      >
-        <UIcon name="i-heroicons-home" class="nav-icon" />
-        <span class="nav-label">首页</span>
+      <NuxtLink to="/user/home" class="bn-item" :class="{ active: $route.path === '/user/home' }">
+        <span class="bn-icon">🏠</span>
+        <span class="bn-label">首页</span>
       </NuxtLink>
-
-      <NuxtLink 
-        to="/user/cashier" 
-        class="nav-item"
-        :class="{ 'active': $route.path === '/user/cashier' }"
-      >
-        <UIcon name="i-heroicons-banknotes" class="nav-icon" />
-        <span class="nav-label">充值</span>
+      <NuxtLink to="/user/cashier" class="bn-item" :class="{ active: $route.path === '/user/cashier' }">
+        <span class="bn-icon">💳</span>
+        <span class="bn-label">充值</span>
       </NuxtLink>
-
-      <NuxtLink 
-        to="/user/mall" 
-        class="nav-item"
-        :class="{ 'active': $route.path === '/user/mall' }"
-      >
-        <UIcon name="i-heroicons-gift" class="nav-icon" />
-        <span class="nav-label">商城</span>
+      <NuxtLink to="/user/mall" class="bn-item bn-center" :class="{ active: $route.path === '/user/mall' }">
+        <span class="bn-icon-center">🎁</span>
+        <span class="bn-label">商城</span>
       </NuxtLink>
-
-      <NuxtLink 
-        to="/user/orders" 
-        class="nav-item"
-        :class="{ 'active': $route.path === '/user/orders' }"
-      >
-        <UIcon name="i-heroicons-shopping-bag" class="nav-icon" />
-        <span class="nav-label">购买记录</span>
+      <NuxtLink to="/user/orders" class="bn-item" :class="{ active: $route.path === '/user/orders' }">
+        <span class="bn-icon">📦</span>
+        <span class="bn-label">记录</span>
+      </NuxtLink>
+      <NuxtLink to="/user/profile" class="bn-item" :class="{ active: $route.path === '/user/profile' }">
+        <span class="bn-icon">👤</span>
+        <span class="bn-label">我的</span>
       </NuxtLink>
     </nav>
 
-    <!-- 移动端侧边菜单遮罩 -->
-    <div v-if="mobileMenuOpen" class="mobile-menu-overlay" @click="closeMobileMenu">
-      <div class="mobile-menu" @click.stop>
-        <div class="mobile-menu-header">
-          <h3>用户菜单</h3>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            @click="closeMobileMenu"
-          />
-        </div>
-        <div class="mobile-menu-content">
-          <NuxtLink 
-            v-for="item in mobileMenuItems" 
-            :key="item.to"
-            :to="item.to" 
-            class="mobile-menu-item"
-            :class="{ 'active': $route.path === item.to }"
-            @click="closeMobileMenu"
-          >
-            <UIcon :name="item.icon" class="menu-icon" />
-            <span>{{ item.label }}</span>
-          </NuxtLink>
-          
-          <div class="mobile-menu-separator"></div>
-          
-          <button class="mobile-menu-item logout-btn" @click="handleLogout">
-            <UIcon name="i-heroicons-arrow-right-on-rectangle" class="menu-icon" />
-            <span>退出登录</span>
-          </button>
+    <!-- 移动端菜单抽屉 -->
+    <Transition name="drawer">
+      <div v-if="mobileMenuOpen" class="drawer-overlay" @click="closeMobileMenu">
+        <div class="drawer" @click.stop>
+          <div class="drawer-header">
+            <div class="drawer-user">
+              <div class="drawer-avatar">{{ userInitial }}</div>
+              <div>
+                <p class="drawer-name">{{ userDisplayName }}</p>
+                <div class="drawer-coins">
+                  <img src="/platform-coin.svg" alt="coin" class="coin-sm" />
+                  <span>{{ formatBalance(userBalance) }}</span>
+                </div>
+              </div>
+            </div>
+            <button class="drawer-close" @click="closeMobileMenu">
+              <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+          <div class="drawer-body">
+            <NuxtLink v-for="item in menuItems" :key="item.to" :to="item.to"
+              class="drawer-item" :class="{ active: $route.path === item.to }"
+              @click="closeMobileMenu">
+              <span>{{ item.emoji }}</span>
+              <span>{{ item.label }}</span>
+            </NuxtLink>
+            <div class="drawer-sep"></div>
+            <button class="drawer-item danger" @click="handleLogout">
+              <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-4 h-4" />
+              <span>退出登录</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '~/store/auth';
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-
-// 移动端菜单状态
 const mobileMenuOpen = ref(false);
 
-// 用户显示名称
-const userDisplayName = computed(() => {
-  return authStore.userInfo?.username || authStore.name || '用户';
-});
+const userDisplayName = computed(() => authStore.userInfo?.username || authStore.name || '用户');
+const userInitial = computed(() => userDisplayName.value.charAt(0).toUpperCase() || 'U');
+const userBalance = computed(() => authStore.userInfo?.platform_coins || 0);
+const formatBalance = (v) => Math.floor(Number(v || 0)).toString();
 
-// 用户头像首字母
-const userInitial = computed(() => {
-  const name = userDisplayName.value;
-  return name ? name.charAt(0).toUpperCase() : 'U';
-});
-
-// 用户余额
-const userBalance = computed(() => {
-  return authStore.userInfo?.platform_coins || 0;
-});
-
-// 格式化余额显示
-const formatBalance = (amount) => {
-  return Math.floor(Number(amount || 0)).toString();
+const pageTitles = {
+  '/user/home': '首页',
+  '/user/cashier': '充值收银台',
+  '/user/recharge': '充值记录',
+  '/user/mall': '礼包商城',
+  '/user/orders': '购买记录',
+  '/user/profile': '个人资料',
 };
+const pageTitle = computed(() => pageTitles[route.path] || '会员中心');
 
-// 移动端菜单项
-const mobileMenuItems = computed(() => [
-  {
-    to: '/user/home',
-    label: '首页',
-    icon: 'i-heroicons-home'
-  },
-  {
-    to: '/user/cashier',
-    label: '充值收银台',
-    icon: 'i-heroicons-banknotes'
-  },
-  {
-    to: '/user/recharge',
-    label: '充值记录',
-    icon: 'i-heroicons-credit-card'
-  },
-  {
-    to: '/user/mall',
-    label: '礼包商城',
-    icon: 'i-heroicons-gift'
-  },
-  {
-    to: '/user/orders',
-    label: '购买记录',
-    icon: 'i-heroicons-shopping-bag'
-  }
-]);
+const menuItems = [
+  { to: '/user/home', label: '首页', emoji: '🏠' },
+  { to: '/user/cashier', label: '充值收银台', emoji: '💳' },
+  { to: '/user/recharge', label: '充值记录', emoji: '📋' },
+  { to: '/user/mall', label: '礼包商城', emoji: '🎁' },
+  { to: '/user/orders', label: '购买记录', emoji: '📦' },
+  { to: '/user/profile', label: '个人资料', emoji: '👤' },
+];
 
-// 移动端菜单控制
-const toggleMobileMenu = () => {
-  mobileMenuOpen.value = !mobileMenuOpen.value;
-};
-
-const closeMobileMenu = () => {
-  mobileMenuOpen.value = false;
-};
-
-// 退出登录
-const handleLogout = () => {
-  authStore.logOut();
-  closeMobileMenu();
-};
+const toggleMobileMenu = () => { mobileMenuOpen.value = !mobileMenuOpen.value; };
+const closeMobileMenu = () => { mobileMenuOpen.value = false; };
+const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
 </script>
 
 <style scoped>
+/* ============ 全局变量 ============ */
+:root {
+  --c-bg: #0d0f1a;
+  --c-surface: #161929;
+  --c-card: #1e2235;
+  --c-border: rgba(255,255,255,0.08);
+  --c-primary: #6c5ce7;
+  --c-primary-glow: rgba(108,92,231,0.35);
+  --c-accent: #00cec9;
+  --c-gold: #fdcb6e;
+  --c-text: #e8eaf6;
+  --c-muted: #8892b0;
+  --c-danger: #ff4757;
+}
+
+/* ============ 基础布局 ============ */
 .user-layout {
-  @apply min-h-screen bg-gray-50;
-  /* 确保在移动端占满屏幕 */
+  display: flex;
   min-height: 100vh;
-  min-height: 100dvh; /* 动态视口高度，移动端更准确 */
+  min-height: 100dvh;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
+}
+
+/* ============ PC 侧边栏 ============ */
+.pc-sidebar {
+  width: 240px;
+  min-height: 100vh;
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  z-index: 30;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.brand-icon { width: 32px; height: 32px; }
+.brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sidebar-user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 12px;
+  padding: 14px;
+  background: var(--c-card);
+  border-radius: 14px;
+  border: 1px solid var(--c-border);
+}
+
+.user-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: white;
+  flex-shrink: 0;
+}
+
+.user-name { font-size: 14px; font-weight: 600; color: var(--c-text); margin: 0 0 4px; }
+.user-balance-row { display: flex; align-items: center; gap: 4px; }
+.coin-sm { width: 14px; height: 14px; }
+.user-coins { font-size: 13px; color: var(--c-gold); font-weight: 600; }
+
+.sidebar-nav {
+  flex: 1;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sn-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  color: var(--c-muted);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.sn-item:hover { background: rgba(108,92,231,0.12); color: var(--c-text); }
+.sn-item.active {
+  background: linear-gradient(135deg, rgba(108,92,231,0.25), rgba(108,92,231,0.1));
+  color: #a29bfe;
+  border: 1px solid rgba(108,92,231,0.3);
+}
+.sn-icon { font-size: 18px; }
+
+.sidebar-bottom { padding: 12px; border-top: 1px solid var(--c-border); }
+.logout-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; border-radius: 12px;
+  background: transparent; color: var(--c-danger);
+  border: 1px solid rgba(255,71,87,0.2);
+  font-size: 14px; cursor: pointer;
+  transition: all 0.2s;
+}
+.logout-btn:hover { background: rgba(255,71,87,0.12); }
+
+/* ============ 主区域 ============ */
+.main-wrap {
+  flex: 1;
+  margin-left: 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  height: 64px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  position: sticky; top: 0; z-index: 20;
+}
+
+.top-bar-left { display: flex; align-items: center; gap: 12px; }
+.mobile-menu-btn {
+  display: none;
+  background: none; border: none; color: var(--c-text);
+  cursor: pointer; padding: 6px;
+  border-radius: 8px;
+}
+.top-title { font-size: 16px; font-weight: 600; color: var(--c-text); }
+
+.top-bar-right { display: flex; align-items: center; gap: 12px; }
+
+.balance-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--c-card);
+  border: 1px solid rgba(253,203,110,0.3);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 14px; font-weight: 600; color: var(--c-gold);
+}
+.chip-coin { width: 16px; height: 16px; }
+
+.top-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: white;
+}
+
+.main-content {
+  flex: 1;
+  padding: 24px;
+  max-width: 1100px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ============ 底部导航（移动端） ============ */
+.bottom-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: 68px;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  z-index: 40;
+  padding-bottom: env(safe-area-inset-bottom);
+  backdrop-filter: blur(20px);
+  align-items: center;
+  justify-content: space-around;
+}
+
+.bn-item {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 6px 12px;
+  text-decoration: none;
+  color: var(--c-muted);
+  transition: all 0.2s;
+  border-radius: 12px;
+  flex: 1;
+}
+.bn-item.active { color: #a29bfe; }
+.bn-icon { font-size: 20px; }
+.bn-label { font-size: 10px; font-weight: 500; }
+
+.bn-center {
+  position: relative;
+  flex: 1.2;
+}
+.bn-icon-center {
+  font-size: 22px;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 16px var(--c-primary-glow);
+  margin-top: -16px;
+}
+
+/* ============ 抽屉 ============ */
+.drawer-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 50;
   display: flex;
 }
 
-/* ==================== PC端侧边栏 ==================== */
-.pc-sidebar {
-  @apply bg-white border-r border-gray-200 flex flex-col;
-  width: 256px;
-  min-height: 100vh;
-  position: fixed;
-  left: 0;
-  top: 0;
-  z-index: 30;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+.drawer {
+  width: 280px;
+  background: var(--c-surface);
+  height: 100%;
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--c-border);
 }
 
-.sidebar-header {
-  @apply p-6 border-b border-gray-200;
+.drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 16px;
+  border-bottom: 1px solid var(--c-border);
 }
 
-.logo {
-  @apply flex items-center gap-3;
+.drawer-user { display: flex; align-items: center; gap: 12px; }
+.drawer-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: white;
 }
 
-.logo-icon {
-  @apply w-8 h-8 text-blue-600;
-}
-
-.logo-text {
-  @apply text-lg font-bold text-gray-900;
-}
-
-.sidebar-nav {
-  @apply flex-1 p-4 space-y-2;
-}
-
-.sidebar-nav-item {
-  @apply flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition-all duration-200;
-  text-decoration: none;
-}
-
-.sidebar-nav-item.active {
-  @apply bg-blue-50 text-blue-600 font-medium;
-}
-
-.sidebar-nav-item .nav-icon {
-  @apply w-5 h-5 flex-shrink-0;
-}
-
-.sidebar-footer {
-  @apply p-4 border-t border-gray-200;
-}
-
-/* ==================== 主容器 ==================== */
-.main-container {
-  @apply flex flex-col flex-1;
-  margin-left: 256px; /* PC端为侧边栏留出空间 */
-}
-
-/* 顶部状态栏 */
-.user-header {
-  @apply bg-white border-b border-gray-200 sticky top-0 z-40;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.header-content {
-  @apply flex items-center px-4 py-3;
-  max-width: 100%;
-}
-
-/* 移动端菜单按钮（仅移动端显示） */
-.mobile-menu-btn {
-  @apply hidden;
-}
-
-.user-info {
-  @apply flex items-center gap-3 flex-1 min-w-0;
-}
-
-.avatar {
-  @apply w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-semibold text-sm flex-shrink-0;
-}
-
-.user-details {
-  @apply min-w-0 flex-1;
-}
-
-.user-details h3 {
-  @apply text-sm font-semibold text-gray-900 truncate;
-}
-
-.user-details p {
-  @apply text-xs text-gray-600 mt-0.5;
-}
-
-.user-balance {
-  @apply flex items-center gap-1;
-}
-
-.header-coin-icon {
-  @apply w-3 h-3 flex-shrink-0;
-}
-
-
-
-/* 主要内容区 */
-.user-main {
-  @apply flex-1 overflow-y-auto;
-}
-
-.content-wrapper {
-  @apply p-6 max-w-6xl mx-auto;
-}
-
-/* ==================== 移动端底部导航栏 ==================== */
-.bottom-nav {
-  @apply fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex items-center justify-around z-40;
-  height: 70px;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
-  /* iOS安全区域适配 */
-  padding-bottom: env(safe-area-inset-bottom);
-  display: none; /* PC端隐藏 */
-}
-
-.nav-item {
-  @apply flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-all duration-200 min-w-0 flex-1;
-  text-decoration: none;
-}
-
-.nav-item:hover {
-  @apply bg-gray-50;
-}
-
-.nav-item.active {
-  @apply text-blue-600 bg-blue-50;
-}
-
-.nav-icon {
-  @apply w-5 h-5 mb-1 flex-shrink-0;
-}
-
-.nav-label {
-  @apply text-xs font-medium truncate max-w-full;
-}
-
-/* ==================== 移动端侧边菜单 ==================== */
-.mobile-menu-overlay {
-  @apply fixed inset-0 bg-black bg-opacity-50 z-50;
-  display: none;
-}
-
-.mobile-menu {
-  @apply bg-white rounded-t-3xl;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.mobile-menu-header {
-  @apply flex items-center justify-between p-4 border-b border-gray-200;
-}
-
-.mobile-menu-header h3 {
-  @apply text-lg font-semibold text-gray-900;
-}
-
-.mobile-menu-content {
-  @apply p-4;
-}
-
-.mobile-menu-item {
-  @apply flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-all duration-200 w-full;
-  text-decoration: none;
-  border: none;
-  background: none;
+.drawer-name { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.drawer-coins { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--c-gold); font-weight: 600; }
+.drawer-close {
+  background: var(--c-card); border: 1px solid var(--c-border);
+  border-radius: 8px; padding: 6px; color: var(--c-muted);
   cursor: pointer;
 }
 
-.mobile-menu-item.active {
-  @apply bg-blue-50 text-blue-600;
+.drawer-body { flex: 1; padding: 12px; overflow-y: auto; }
+
+.drawer-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border-radius: 12px;
+  color: var(--c-muted); text-decoration: none;
+  font-size: 15px; font-weight: 500;
+  transition: all 0.2s;
+  width: 100%; background: none; border: none; cursor: pointer;
+  margin-bottom: 4px;
 }
+.drawer-item:hover { background: rgba(255,255,255,0.06); color: var(--c-text); }
+.drawer-item.active { background: rgba(108,92,231,0.15); color: #a29bfe; }
+.drawer-item.danger { color: var(--c-danger); }
+.drawer-item.danger:hover { background: rgba(255,71,87,0.1); }
+.drawer-sep { height: 1px; background: var(--c-border); margin: 8px 0; }
 
-.mobile-menu-item.logout-btn {
-  @apply text-red-600 hover:bg-red-50;
-}
+/* ============ 动画 ============ */
+.drawer-enter-active, .drawer-leave-active { transition: opacity 0.25s; }
+.drawer-enter-active .drawer, .drawer-leave-active .drawer { transition: transform 0.25s; }
+.drawer-enter-from, .drawer-leave-to { opacity: 0; }
+.drawer-enter-from .drawer { transform: translateX(-100%); }
+.drawer-leave-to .drawer { transform: translateX(-100%); }
 
-.mobile-menu-item .menu-icon {
-  @apply w-5 h-5 flex-shrink-0;
-}
-
-.mobile-menu-separator {
-  @apply h-px bg-gray-200 my-2;
-}
-
-/* ==================== 响应式适配 ==================== */
-
-/* 平板尺寸 */
-@media (max-width: 1024px) {
-  .pc-sidebar {
-    width: 220px;
-  }
-  
-  .main-container {
-    margin-left: 220px;
-  }
-  
-  .content-wrapper {
-    @apply p-4;
-  }
-}
-
-/* 移动端尺寸 */
+/* ============ 响应式 ============ */
 @media (max-width: 768px) {
-  .user-layout {
-    @apply flex-col;
-  }
-  
-  /* 隐藏PC端侧边栏 */
-  .pc-sidebar {
-    @apply hidden;
-  }
-  
-  /* 隐藏移动端顶部状态栏 */
-  .user-header {
-    @apply hidden;
-  }
-  
-  /* 显示移动端菜单按钮 */
-  .mobile-menu-btn {
-    @apply block;
-  }
-  
-  /* 显示移动端底部导航 */
-  .bottom-nav {
-    @apply flex;
-  }
-  
-  /* 显示移动端侧边菜单 */
-  .mobile-menu-overlay {
-    @apply block;
-  }
-  
-  .main-container {
-    margin-left: 0;
-  }
-  
-  .user-main {
-    /* 为底部导航留出空间，移动端没有顶部状态栏 */
+  .pc-sidebar { display: none; }
+  .main-wrap { margin-left: 0; }
+  .top-bar { padding: 0 16px; }
+  .mobile-menu-btn { display: flex; }
+  .balance-chip { display: none; }
+  .bottom-nav { display: flex; }
+  .main-content {
+    padding: 16px 12px;
     padding-bottom: 80px;
-    padding-top: 0;
-  }
-  
-  .content-wrapper {
-    @apply p-4;
-    /* 移动端内容区域顶部需要一些间距 */
-    padding-top: 16px;
+    max-width: 100%;
   }
 }
 
-/* 小屏手机 */
-@media (max-width: 480px) {  
-  .nav-label {
-    @apply text-xs;
-  }
-  
-  .nav-icon {
-    @apply w-4 h-4;
-  }
-  
-  .content-wrapper {
-    @apply p-3;
-    /* 小屏设备顶部间距 */
-    padding-top: 12px;
-  }
+@media (max-width: 480px) {
+  .main-content { padding: 12px 10px; padding-bottom: 80px; }
 }
-
-/* 横屏适配 */
-@media (orientation: landscape) and (max-height: 500px) and (max-width: 768px) {
-  .bottom-nav {
-    height: 60px;
-  }
-  
-  .user-main {
-    padding-bottom: 60px;
-  }
-  
-  .nav-item {
-    @apply py-1;
-  }
-  
-  .nav-label {
-    @apply hidden;
-  }
-  
-  .nav-icon {
-    @apply mb-0;
-  }
-}
-
-/* ==================== 深色模式适配 ==================== */
-@media (prefers-color-scheme: dark) {
-  .user-layout {
-    @apply bg-gray-900;
-  }
-  
-  .pc-sidebar,
-  .user-header,
-  .bottom-nav {
-    @apply bg-gray-800 border-gray-700;
-  }
-  
-  .logo-text,
-  .user-details h3 {
-    @apply text-white;
-  }
-  
-  .user-details p {
-    @apply text-gray-300;
-  }
-  
-  .sidebar-nav-item {
-    @apply text-gray-300 hover:bg-gray-700 hover:text-blue-400;
-  }
-  
-  .sidebar-nav-item.active {
-    @apply bg-gray-700 text-blue-400;
-  }
-  
-  .nav-item:hover {
-    @apply bg-gray-700;
-  }
-  
-  .nav-item.active {
-    @apply text-blue-400 bg-gray-700;
-  }
-  
-  .mobile-menu {
-    @apply bg-gray-800;
-  }
-  
-  .mobile-menu-item {
-    @apply text-gray-300 hover:bg-gray-700;
-  }
-  
-  .mobile-menu-item.active {
-    @apply bg-gray-700 text-blue-400;
-  }
-}
-
-/* ==================== 高对比度适配 ==================== */
-@media (prefers-contrast: high) {
-  .pc-sidebar,
-  .user-header,
-  .bottom-nav {
-    @apply border-2 border-gray-900;
-  }
-  
-  .sidebar-nav-item.active,
-  .nav-item.active {
-    @apply bg-blue-600 text-white;
-  }
-}
-
-/* ==================== 减少动画效果 ==================== */
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-nav-item,
-  .nav-item,
-  .mobile-menu-item {
-    @apply transition-none;
-  }
-}
-
-/* ==================== PWA适配 ==================== */
-@media (display-mode: standalone) {
-  .user-layout {
-    @apply bg-white;
-  }
-  
-  .user-header {
-    padding-top: env(safe-area-inset-top);
-  }
-  
-  .pc-sidebar {
-    padding-top: env(safe-area-inset-top);
-  }
-}
-</style> 
+</style>

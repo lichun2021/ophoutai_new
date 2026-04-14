@@ -1,142 +1,70 @@
 <template>
-  <div class="recharge-container">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h1>充值记录</h1>
-      <p>查看您的所有充值记录和充值明细</p>
-    </div>
-
-    <!-- 统计卡片 -->
-    <div class="stats-cards">
+  <div class="recharge-page">
+    <!-- 顶部统计 -->
+    <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-icon">
-          <UIcon name="i-heroicons-banknotes" />
+        <div class="stat-icon" style="background: linear-gradient(135deg,#6c5ce7,#a29bfe)">💰</div>
+        <div>
+          <p class="stat-label">累计充值</p>
+          <p class="stat-value">¥{{ formatBalance(totalRecharge) }}</p>
         </div>
-                  <div class="stat-content">
-            <h3>累计充值</h3>
-            <p class="stat-value">¥{{ formatBalance(totalRecharge) }}</p>
-          </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: linear-gradient(135deg,#00b894,#00cec9)">📊</div>
+        <div>
+          <p class="stat-label">充值次数</p>
+          <p class="stat-value">{{ rechargeCount }}<small>次</small></p>
         </div>
-        
-        <div class="stat-card">
-          <div class="stat-icon">
-            <UIcon name="i-heroicons-credit-card" />
-          </div>
-          <div class="stat-content">
-            <h3>充值次数</h3>
-            <p class="stat-value">{{ rechargeCount }}次</p>
-          </div>
       </div>
     </div>
 
-    <!-- 筛选条件 -->
-    <div class="filters">
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
       <div class="filter-group">
-        <label>充值状态：</label>
-        <USelectMenu 
-          v-model="statusFilter" 
-          :options="statusOptions"
-          value-attribute="value"
-          option-attribute="label"
-          placeholder="选择状态"
-          class="filter-select"
-        >
-          <template #label>
-            {{ statusOptions.find(opt => opt.value === statusFilter)?.label || '选择状态' }}
-          </template>
+        <label class="filter-label">状态</label>
+        <USelectMenu v-model="statusFilter" :options="statusOptions" value-attribute="value" option-attribute="label" class="filter-select">
+          <template #label>{{ statusOptions.find(o => o.value === statusFilter)?.label || '全部' }}</template>
         </USelectMenu>
       </div>
-      
       <div class="filter-group">
-        <label>时间范围：</label>
-        <USelectMenu 
-          v-model="timeFilter" 
-          :options="timeOptions"
-          value-attribute="value"
-          option-attribute="label"
-          placeholder="选择时间"
-          class="filter-select"
-        >
-          <template #label>
-            {{ timeOptions.find(opt => opt.value === timeFilter)?.label || '选择时间' }}
-          </template>
+        <label class="filter-label">时间</label>
+        <USelectMenu v-model="timeFilter" :options="timeOptions" value-attribute="value" option-attribute="label" class="filter-select">
+          <template #label>{{ timeOptions.find(o => o.value === timeFilter)?.label || '全部' }}</template>
         </USelectMenu>
       </div>
     </div>
 
-    <!-- 充值记录列表 -->
-    <div class="recharge-list">
-      <div v-if="loading" class="loading-state">
-        <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
+    <!-- 记录列表 -->
+    <div class="record-area">
+      <div v-if="loading" class="center-box">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin" style="color:#a29bfe" />
         <p>加载中...</p>
       </div>
-
-      <div v-else-if="filteredRecords.length === 0" class="empty-state">
-        <UIcon name="i-heroicons-credit-card" />
-        <h3>暂无充值记录</h3>
-        <p>您还没有任何充值记录</p>
-        <UButton @click="goToRecharge" color="primary">
-          立即充值
-        </UButton>
+      <div v-else-if="filteredRecords.length === 0" class="center-box">
+        <span style="font-size:48px">📭</span>
+        <p>暂无充值记录</p>
+        <button class="mini-btn" @click="goToRecharge">立即充值</button>
       </div>
-
-      <div v-else class="records-grid">
-        <div 
-          v-for="record in filteredRecords" 
-          :key="record.id" 
-          class="record-card"
-        >
-          <div class="record-header">
-            <div class="record-info">
-              <h4>{{ record.item_name }}</h4>
-              <p class="record-id">订单号：{{ record.order_id }}</p>
+      <div v-else class="record-list">
+        <div v-for="record in filteredRecords" :key="record.id" class="record-card">
+          <div class="rc-top">
+            <div>
+              <h4 class="rc-name">{{ record.item_name }}</h4>
+              <p class="rc-id">{{ record.order_id }}</p>
             </div>
-            <div class="record-status">
-              <span class="status-badge" :class="getStatusClass(record.payment_status)">
-                {{ getStatusText(record.payment_status) }}
-              </span>
-            </div>
+            <span class="status-badge" :class="getStatusClass(record.payment_status)">{{ getStatusText(record.payment_status) }}</span>
           </div>
-
-          <div class="record-details">
-            <div class="detail-item">
-              <span class="label">充值金额：</span>
-              <span class="value amount">¥{{ formatBalance(record.amount) }}</span>
-            </div>
-            
-            <div class="detail-item">
-              <span class="label">支付方式：</span>
-              <span class="value">{{ record.payment_method || '线上支付' }}</span>
-            </div>
-            
-            <div class="detail-item">
-              <span class="label">充值时间：</span>
-              <span class="value">{{ formatDateTime(record.created_at) }}</span>
-            </div>
-
-            <div v-if="record.completed_at" class="detail-item">
-              <span class="label">完成时间：</span>
-              <span class="value">{{ formatDateTime(record.completed_at) }}</span>
-            </div>
+          <div class="rc-details">
+            <div class="rc-row"><span class="rc-key">充值金额</span><span class="rc-val amount">¥{{ formatBalance(record.amount) }}</span></div>
+            <div class="rc-row"><span class="rc-key">支付方式</span><span class="rc-val">{{ record.payment_method || '线上支付' }}</span></div>
+            <div class="rc-row"><span class="rc-key">充值时间</span><span class="rc-val">{{ formatDateTime(record.created_at) }}</span></div>
+            <div v-if="record.completed_at" class="rc-row"><span class="rc-key">完成时间</span><span class="rc-val">{{ formatDateTime(record.completed_at) }}</span></div>
           </div>
-
-          <div v-if="record.payment_status !== 3" class="record-actions">
-            <UButton 
-              @click="queryOrderStatus(record.order_id)" 
-              size="md" 
-              color="primary"
-              :disabled="isQueryCooldown(record.order_id)"
-              :loading="queryLoading[record.order_id]"
-              icon="i-heroicons-arrow-path"
-              class="query-button"
-            >
-              <template v-if="isQueryCooldown(record.order_id)">
-                {{ getQueryCooldownText(record.order_id) }}
-              </template>
-              <template v-else>
-                刷新
-              </template>
-            </UButton>
+          <div v-if="record.payment_status !== 3" class="rc-action">
+            <button class="query-btn" :disabled="isQueryCooldown(record.order_id) || queryLoading[record.order_id]" @click="queryOrderStatus(record.order_id)">
+              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4" :class="{ 'animate-spin': queryLoading[record.order_id] }" />
+              <span>{{ isQueryCooldown(record.order_id) ? getQueryCooldownText(record.order_id) : '刷新状态' }}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -150,28 +78,20 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
 
-// 页面元数据
-definePageMeta({
-  middleware: 'auth',
-  layout: 'user'
-});
+definePageMeta({ middleware: 'auth', layout: 'user' });
 
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
 
-// 响应式数据
 const rechargeRecords = ref([]);
 const loading = ref(false);
 const statusFilter = ref('all');
 const timeFilter = ref('all');
+const queryLoading = ref({});
+const queryCooldowns = ref({});
+const cooldownTimers = ref({});
 
-// 查询订单相关状态
-const queryLoading = ref({}); // 查询加载状态
-const queryCooldowns = ref({}); // 冷却时间对象 { orderId: endTime }
-const cooldownTimers = ref({}); // 倒计时定时器
-
-// 状态选项 - 根据 payment_status 字段定义
 const statusOptions = [
   { label: '全部状态', value: 'all' },
   { label: '未完成', value: '0' },
@@ -180,7 +100,6 @@ const statusOptions = [
   { label: '已完成', value: '3' }
 ];
 
-// 时间选项
 const timeOptions = [
   { label: '全部时间', value: 'all' },
   { label: '最近7天', value: '7days' },
@@ -188,231 +107,105 @@ const timeOptions = [
   { label: '最近3个月', value: '3months' }
 ];
 
-// 计算属性
-const totalRecharge = computed(() => {
-  return rechargeRecords.value
-    .filter(record => record.payment_status === 3) // 已完成的记录
-    .reduce((total, record) => total + parseFloat(record.amount || 0), 0);
-});
-
-const rechargeCount = computed(() => {
-  return rechargeRecords.value.filter(record => record.payment_status === 3).length;
-});
+const totalRecharge = computed(() =>
+  rechargeRecords.value.filter(r => r.payment_status === 3).reduce((t, r) => t + parseFloat(r.amount || 0), 0)
+);
+const rechargeCount = computed(() => rechargeRecords.value.filter(r => r.payment_status === 3).length);
 
 const filteredRecords = computed(() => {
-  let filtered = rechargeRecords.value;
-
-  // 状态筛选
+  let f = rechargeRecords.value;
   if (statusFilter.value !== 'all') {
-    const statusValue = parseInt(statusFilter.value);
-    filtered = filtered.filter(record => record.payment_status === statusValue);
+    const v = parseInt(statusFilter.value);
+    f = f.filter(r => r.payment_status === v);
   }
-
-  // 时间筛选
   if (timeFilter.value !== 'all') {
-    const now = new Date();
-    const cutoff = new Date();
-    
-    switch (timeFilter.value) {
-      case '7days':
-        cutoff.setDate(now.getDate() - 7);
-        break;
-      case '30days':
-        cutoff.setDate(now.getDate() - 30);
-        break;
-      case '3months':
-        cutoff.setMonth(now.getMonth() - 3);
-        break;
-    }
-    
-    filtered = filtered.filter(record => new Date(record.created_at) >= cutoff);
+    const now = new Date(); const cutoff = new Date();
+    if (timeFilter.value === '7days') cutoff.setDate(now.getDate() - 7);
+    else if (timeFilter.value === '30days') cutoff.setDate(now.getDate() - 30);
+    else if (timeFilter.value === '3months') cutoff.setMonth(now.getMonth() - 3);
+    f = f.filter(r => new Date(r.created_at) >= cutoff);
   }
-
-  return filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  return f.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 });
 
-// 方法
-const formatBalance = (amount) => {
-  if (!amount) return '0.00';
-  return parseFloat(amount).toFixed(2);
-};
+const formatBalance = (v) => { if (!v) return '0.00'; return parseFloat(v).toFixed(2); };
+const formatDateTime = (d) => { if (!d) return '-'; return new Date(d).toLocaleString('zh-CN'); };
+const getStatusText = (s) => ({ 0: '未完成', 1: '处理中', 2: '失败', 3: '已完成' }[s] || '未知');
+const getStatusClass = (s) => ({ 0: 'pending', 1: 'processing', 2: 'failed', 3: 'completed' }[s] || 'unknown');
+const goToRecharge = () => router.push('/user/cashier');
 
-const formatDateTime = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN');
-};
-
-const getStatusText = (paymentStatus) => {
-  const statusMap = {
-    0: '未完成',
-    1: '处理中',
-    2: '失败',
-    3: '已完成'
-  };
-  return statusMap[paymentStatus] || '未知';
-};
-
-const getStatusClass = (paymentStatus) => {
-  const classMap = {
-    0: 'pending',
-    1: 'processing', 
-    2: 'failed',
-    3: 'completed'
-  };
-  return classMap[paymentStatus] || 'unknown';
-};
-
-const goToRecharge = () => {
-  router.push('/user/cashier');
-};
-
-// 查询订单状态
 const queryOrderStatus = async (orderId) => {
-  if (isQueryCooldown(orderId)) {
-    tips.warning('请等待冷却时间结束');
-    return;
-  }
-  
+  if (isQueryCooldown(orderId)) { tips.warning('请等待冷却时间结束'); return; }
   queryLoading.value[orderId] = true;
-  
   try {
-    console.log(`[手动查询] 开始查询充值订单: ${orderId}`);
-    
-    const response = await $fetch('/api/user/payment/query', {
-      method: 'POST',
-      body: { transaction_id: orderId }
-    });
-    
-    console.log(`[手动查询] 查询结果:`, response);
-    
-    if (response.code === 200) {
-      const status = response.data?.status;
-      
+    const res = await $fetch('/api/user/payment/query', { method: 'POST', body: { transaction_id: orderId } });
+    if (res.code === 200) {
+      const status = res.data?.status;
       if (status === 1) {
-        // 支付成功
-        console.log(`[手动查询] ✅ 充值订单${orderId}支付成功`);
-        tips.success('充值成功！平台币已到账，刷新记录中...');
-        
-        // 启动冷却时间
+        tips.success('充值成功！平台币已到账');
         startQueryCooldown(orderId);
-        
-        // 刷新充值记录
-        setTimeout(() => {
-          loadRechargeRecords();
-        }, 1000);
-        
-        // 刷新用户信息（余额）
-        if (authStore.userInfo) {
-          try {
-            await authStore.fetchUserInfo();
-          } catch (e) {
-            console.error('[手动查询] 刷新用户信息失败:', e);
-          }
-        }
+        setTimeout(() => { loadRechargeRecords(); }, 1000);
+        if (authStore.userInfo) { try { await authStore.fetchUserInfo(); } catch {} }
       } else if (status === 0) {
-        // 未支付
-        console.log(`[手动查询] 充值订单${orderId}尚未支付`);
         tips.info('订单尚未支付完成');
-        
-        // 启动冷却时间
         startQueryCooldown(orderId);
       } else {
-        tips.warning('订单状态未知，请稍后再试');
+        tips.warning('订单状态未知');
         startQueryCooldown(orderId);
       }
     } else {
-      tips.error(response.msg || '查询失败');
-      // 查询失败也启动冷却（较短），防止频繁失败请求
-      startQueryCooldown(orderId, 30); // 失败时只冷却30秒
+      tips.error(res.msg || '查询失败');
+      startQueryCooldown(orderId, 30);
     }
-  } catch (error) {
-    console.error(`[手动查询] 查询异常:`, error);
-    tips.error('查询失败，请检查网络后重试');
-    startQueryCooldown(orderId, 30); // 异常时只冷却30秒
+  } catch {
+    tips.error('查询失败，请检查网络');
+    startQueryCooldown(orderId, 30);
   } finally {
     queryLoading.value[orderId] = false;
   }
 };
 
-// 启动查询冷却时间
 const startQueryCooldown = (orderId, seconds = 99) => {
-  const endTime = Date.now() + (seconds * 1000);
+  const endTime = Date.now() + seconds * 1000;
   queryCooldowns.value[orderId] = endTime;
-  
-  // 清除旧的定时器
-  if (cooldownTimers.value[orderId]) {
-    clearInterval(cooldownTimers.value[orderId]);
-  }
-  
-  // 启动新的定时器，每秒更新一次
+  if (cooldownTimers.value[orderId]) clearInterval(cooldownTimers.value[orderId]);
   cooldownTimers.value[orderId] = setInterval(() => {
-    const remaining = queryCooldowns.value[orderId] - Date.now();
-    if (remaining <= 0) {
-      // 冷却结束
+    if ((queryCooldowns.value[orderId] - Date.now()) <= 0) {
       clearInterval(cooldownTimers.value[orderId]);
       delete cooldownTimers.value[orderId];
       delete queryCooldowns.value[orderId];
     }
   }, 1000);
-  
-  console.log(`[查询CD] 充值订单 ${orderId} 启动 ${seconds}秒 冷却时间`);
 };
-
-// 检查是否在冷却中
-const isQueryCooldown = (orderId) => {
-  if (!queryCooldowns.value[orderId]) return false;
-  return queryCooldowns.value[orderId] > Date.now();
-};
-
-// 获取冷却时间文本
+const isQueryCooldown = (orderId) => !!(queryCooldowns.value[orderId] && queryCooldowns.value[orderId] > Date.now());
 const getQueryCooldownText = (orderId) => {
   if (!queryCooldowns.value[orderId]) return '刷新';
-  
-  const remaining = Math.ceil((queryCooldowns.value[orderId] - Date.now()) / 1000);
-  if (remaining <= 0) return '刷新';
-  
-  return `${remaining}s`;
+  const r = Math.ceil((queryCooldowns.value[orderId] - Date.now()) / 1000);
+  return r <= 0 ? '刷新' : `${r}s`;
 };
 
-// 加载充值记录
 const loadRechargeRecords = async () => {
   loading.value = true;
   try {
     const userId = authStore.userInfo?.id || authStore.id;
-    if (!userId) {
-      tips.error('用户信息获取失败');
-      return;
-    }
-
-    // 调用真实的API从PaymentRecords表获取充值记录
-    const response = await $fetch('/api/client/recharge-history', {
-      query: {
-        user_id: userId,
-        page: 1,
-        pageSize: 100 // 获取更多记录
-      }
-    });
-
-    if (response.code === 200) {
-      // 转换API返回的数据格式为前端需要的格式
-      rechargeRecords.value = (response.data.records || []).map(record => ({
-        id: record.id,
-        order_id: record.mch_order_id || record.transaction_id,
-        item_name: record.product_name,
-        amount: record.amount,
-        payment_status: record.payment_status, // 直接使用数据库的状态码
-        payment_method: record.payment_way || '线上支付',
-        created_at: record.created_at,
-        completed_at: record.payment_status === 3 ? record.notify_at || record.created_at : null
+    if (!userId) { tips.error('用户信息获取失败'); return; }
+    const res = await $fetch('/api/client/recharge-history', { query: { user_id: userId, page: 1, pageSize: 100 } });
+    if (res.code === 200) {
+      rechargeRecords.value = (res.data.records || []).map(r => ({
+        id: r.id,
+        order_id: r.mch_order_id || r.transaction_id,
+        item_name: r.product_name,
+        amount: r.amount,
+        payment_status: r.payment_status,
+        payment_method: r.payment_way || '线上支付',
+        created_at: r.created_at,
+        completed_at: r.payment_status === 3 ? r.notify_at || r.created_at : null
       }));
     } else {
-      console.error('获取充值记录失败:', response.message);
-      tips.error(response.message || '获取充值记录失败');
+      tips.error(res.message || '获取充值记录失败');
       rechargeRecords.value = [];
     }
-  } catch (error) {
-    console.error('加载充值记录失败:', error);
+  } catch {
     tips.error('加载充值记录失败');
     rechargeRecords.value = [];
   } finally {
@@ -420,358 +213,115 @@ const loadRechargeRecords = async () => {
   }
 };
 
-// 页面加载时初始化
-onMounted(() => {
-  loadRechargeRecords();
-});
-
-// 页面卸载时清理定时器
+onMounted(() => { loadRechargeRecords(); });
 onUnmounted(() => {
-  // 清理所有冷却定时器
-  Object.keys(cooldownTimers.value).forEach(orderId => {
-    if (cooldownTimers.value[orderId]) {
-      clearInterval(cooldownTimers.value[orderId]);
-    }
+  Object.keys(cooldownTimers.value).forEach(id => {
+    if (cooldownTimers.value[id]) clearInterval(cooldownTimers.value[id]);
   });
-  cooldownTimers.value = {};
-  queryCooldowns.value = {};
-  console.log('[页面卸载] 充值查询定时器已清理');
+  cooldownTimers.value = {}; queryCooldowns.value = {};
 });
 </script>
 
 <style scoped>
-.recharge-container {
-  padding: 16px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
+.recharge-page { display: flex; flex-direction: column; gap: 16px; }
 
-.page-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.page-header h1 {
-  margin: 0 0 8px;
-  font-size: 28px;
-  font-weight: 700;
-  color: #2d3748;
-}
-
-.page-header p {
-  margin: 0;
-  color: #718096;
-  font-size: 16px;
-}
-
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-  margin-bottom: 32px;
-}
+.stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .stat-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  display: flex;
-  align-items: center;
-  gap: 16px;
+  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px; padding: 18px;
+  display: flex; align-items: center; gap: 14px;
 }
-
 .stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 24px;
+  width: 46px; height: 46px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.stat-label { margin: 0 0 4px; font-size: 12px; color: #8892b0; }
+.stat-value { margin: 0; font-size: 22px; font-weight: 800; color: #e8eaf6; }
+.stat-value small { font-size: 13px; font-weight: 500; color: #8892b0; margin-left: 2px; }
+
+.filter-bar {
+  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px; padding: 16px 20px;
+  display: flex; gap: 20px; flex-wrap: wrap;
+}
+.filter-group { display: flex; align-items: center; gap: 10px; }
+.filter-label { font-size: 13px; color: #8892b0; font-weight: 500; white-space: nowrap; }
+.filter-select { min-width: 140px; }
+
+.record-area { display: flex; flex-direction: column; gap: 12px; }
+
+.center-box {
+  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 20px; padding: 60px 24px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 12px; text-align: center; color: #8892b0;
+}
+.center-box p { margin: 0; }
+
+.mini-btn {
+  padding: 8px 24px;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  border: none; border-radius: 20px;
+  color: white; font-size: 13px; font-weight: 600;
+  cursor: pointer; margin-top: 4px;
 }
 
-.stat-content h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
-  color: #718096;
-  font-weight: 500;
-}
-
-.stat-value {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 700;
-  color: #2d3748;
-}
-
-.filters {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 24px;
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.filter-group label {
-  font-weight: 500;
-  color: #4a5568;
-  white-space: nowrap;
-}
-
-.filter-select {
-  min-width: 180px;
-  max-height: none;
-}
-
-/* 修复下拉框显示问题 */
-.filter-select :deep(.ui-select-menu) {
-  min-height: 200px;
-  max-height: 300px;
-}
-
-.filter-select :deep(.ui-select-menu-option) {
-  padding: 8px 12px;
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-}
-
-.recharge-list {
-  margin-bottom: 32px;
-}
-
-.loading-state,
-.empty-state {
-  text-align: center;
-  padding: 64px 24px;
-  background: white;
-  border-radius: 12px;
-}
-
-.loading-state UIcon {
-  font-size: 32px;
-  color: #667eea;
-  margin-bottom: 16px;
-}
-
-.empty-state UIcon {
-  font-size: 64px;
-  color: #cbd5e0;
-  margin-bottom: 24px;
-}
-
-.empty-state h3 {
-  margin: 0 0 12px;
-  font-size: 20px;
-  color: #2d3748;
-}
-
-.empty-state p {
-  margin: 0 0 24px;
-  color: #718096;
-}
-
-.records-grid {
-  display: grid;
-  gap: 24px;
-}
+.record-list { display: flex; flex-direction: column; gap: 12px; }
 
 .record-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s;
+  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px; padding: 18px;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
+.record-card:hover { border-color: rgba(108,92,231,0.3); box-shadow: 0 4px 20px rgba(108,92,231,0.1); }
 
-.record-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+.rc-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 14px; padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-
-.record-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.record-info h4 {
-  margin: 0 0 8px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #2d3748;
-}
-
-.record-id {
-  margin: 0 0 6px;
-  font-size: 13px;
-  color: #94a3b8;
-  font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
-}
-
-.record-hint {
-  margin: 0;
-  font-size: 12px;
-  color: #f59e0b;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: #fffbeb;
-  border-radius: 6px;
-  border-left: 3px solid #f59e0b;
-  margin-top: 8px;
-}
-
-.hint-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
+.rc-name { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: #e8eaf6; }
+.rc-id { margin: 0; font-size: 11px; color: #8892b0; font-family: monospace; word-break: break-all; }
 
 .status-badge {
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 11px; padding: 4px 12px; border-radius: 20px;
+  font-weight: 700; flex-shrink: 0; margin-left: 8px;
 }
+.status-badge.completed { background: rgba(0,206,201,0.15); color: #00cec9; }
+.status-badge.processing { background: rgba(253,203,110,0.15); color: #fdcb6e; }
+.status-badge.pending { background: rgba(162,155,254,0.15); color: #a29bfe; }
+.status-badge.failed { background: rgba(255,71,87,0.15); color: #ff4757; }
+.status-badge.unknown { background: rgba(255,255,255,0.06); color: #8892b0; }
 
-.status-badge.pending {
-  background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.2);
+.rc-details { display: flex; flex-direction: column; gap: 10px; }
+.rc-row { display: flex; justify-content: space-between; align-items: center; }
+.rc-key { font-size: 13px; color: #8892b0; }
+.rc-val { font-size: 13px; color: #e8eaf6; font-weight: 500; }
+.rc-val.amount { font-size: 16px; font-weight: 800; color: #00b894; }
+
+.rc-action {
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex; justify-content: flex-end;
 }
-
-.status-badge.processing {
-  background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
-  color: #92400e;
-  box-shadow: 0 2px 8px rgba(214, 158, 46, 0.2);
+.query-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 20px;
+  background: rgba(108,92,231,0.15);
+  border: 1px solid rgba(108,92,231,0.3);
+  border-radius: 10px;
+  color: #a29bfe; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
 }
+.query-btn:hover:not(:disabled) { background: rgba(108,92,231,0.25); }
+.query-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.status-badge.completed {
-  background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%);
-  color: #166534;
-  box-shadow: 0 2px 8px rgba(56, 161, 105, 0.2);
+@media (max-width: 480px) {
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .filter-bar { flex-direction: column; gap: 12px; }
+  .filter-group { width: 100%; justify-content: space-between; }
+  .filter-select { flex: 1; }
 }
-
-.status-badge.failed {
-  background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(229, 62, 62, 0.2);
-}
-
-.status-badge.unknown {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.record-details {
-  display: grid;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.detail-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.detail-item .label {
-  font-size: 14px;
-  color: #718096;
-}
-
-.detail-item .value {
-  font-weight: 500;
-  color: #2d3748;
-}
-
-.detail-item .amount {
-  font-size: 18px;
-  font-weight: 700;
-  color: #38a169;
-}
-
-.record-actions {
-  display: flex;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 2px solid #f1f5f9;
-  justify-content: flex-end;
-}
-
-.query-button {
-  min-width: 140px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-/* 查询按钮禁用状态样式 */
-.record-actions :deep(button[disabled]) {
-  opacity: 0.7;
-  cursor: not-allowed;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.5px;
-}
-
-.record-actions :deep(button[disabled]:hover) {
-  transform: none;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .recharge-container {
-    padding: 12px;
-  }
-  
-  .stats-cards {
-    grid-template-columns: 1fr;
-  }
-  
-  .filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .filter-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .filter-select {
-    min-width: auto;
-  }
-  
-  .record-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .record-actions {
-    justify-content: stretch;
-  }
-  
-  .query-button {
-    flex: 1;
-  }
-
-  .record-hint {
-    font-size: 11px;
-  }
-}
-</style> 
+</style>

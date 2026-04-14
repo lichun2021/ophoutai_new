@@ -1,74 +1,77 @@
 <template>
-  <div class="login-container">
-    <UCard class="login-card">
-      <template #header>
-        <h2 class="text-center text-2xl font-bold text-gray-900">会员中心</h2>
-      </template>
+  <div class="login-page">
+    <!-- 背景装饰 -->
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-grid"></div>
 
-      <UForm @submit.prevent="login" :state="state" class="space-y-4">
-        <UFormGroup label="用户名" name="username" required>
-          <UInput
-            v-model="state.username"
-            placeholder="请输入用户名"
-            icon="i-heroicons-user"
-            size="lg"
-            :disabled="loading"
-          />
-        </UFormGroup>
+    <div class="login-box">
+      <!-- Logo -->
+      <div class="login-logo">
+        <img src="/platform-coin.svg" alt="logo" class="logo-img" />
+        <h1 class="logo-title">会员中心</h1>
+        <p class="logo-sub">登录以管理您的账户</p>
+      </div>
 
-        <UFormGroup label="密码" name="password" required>
-          <UInput
-            v-model="state.password"
-            type="password"
-            placeholder="请输入密码"
-            icon="i-heroicons-lock-closed"
-            size="lg"
-            :disabled="loading"
-          />
-        </UFormGroup>
+      <!-- 登录表单 -->
+      <form class="login-form" @submit.prevent="login">
+        <div class="form-field">
+          <label class="field-label">用户名</label>
+          <div class="input-wrap">
+            <span class="input-icon">👤</span>
+            <input
+              v-model="state.username"
+              class="field-input"
+              placeholder="请输入用户名"
+              :disabled="loading"
+              autocomplete="username"
+            />
+          </div>
+        </div>
 
-        <UButton
-          type="submit"
-          block
-          size="lg"
-          :loading="loading"
-          :disabled="!isFormValid"
-        >
-          登录
-        </UButton>
-      </UForm>
+        <div class="form-field">
+          <label class="field-label">密码</label>
+          <div class="input-wrap">
+            <span class="input-icon">🔒</span>
+            <input
+              v-model="state.password"
+              type="password"
+              class="field-input"
+              placeholder="请输入密码"
+              :disabled="loading"
+              autocomplete="current-password"
+            />
+          </div>
+        </div>
 
-    </UCard>
+        <button type="submit" class="login-btn" :disabled="!isFormValid || loading">
+          <span v-if="!loading">登 录</span>
+          <span v-else class="loading-dots">
+            <span></span><span></span><span></span>
+          </span>
+        </button>
+      </form>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
-import { useNuxtApp } from '#app';
 import { useTips } from '@/composables/useTips';
 
-definePageMeta({
-  layout: 'auth'
-});
+definePageMeta({ layout: 'auth' });
 
-const state = reactive({
-  username: '',
-  password: ''
-})
-
+const state = reactive({ username: '', password: '' });
 const error = ref('');
 const loading = ref(false);
 
-const router = useRouter(); 
+const router = useRouter();
 const route = useRoute();
-
 const authStore = useAuthStore();
-
 const tips = useTips();
 
-// 表单验证：支持密码或签名(ts+sig)
 const isFormValid = computed(() => {
   const hasUsername = !!state.username?.trim();
   const hasPwd = !!state.password?.trim();
@@ -77,146 +80,184 @@ const isFormValid = computed(() => {
 });
 
 const login = async () => {
+  if (loading.value) return;
+  const tsParam = typeof route.query.ts === 'string' ? route.query.ts : undefined;
+  const sigParam = typeof route.query.sig === 'string' ? route.query.sig : undefined;
+  if (!state.username || (!state.password && !(tsParam && sigParam))) {
+    tips.error('缺少登录凭据');
+    return;
+  }
+  loading.value = true;
   try {
-    // 防止重复提交
-    if (loading.value) {
-      console.log('登录进行中，忽略重复请求');
-      return;
-    }
-    
-    console.log('用户登录请求:', state);
-    
-    // 检查输入（允许签名免密）
-    const tsParam = typeof route.query.ts === 'string' ? route.query.ts : undefined;
-    const sigParam = typeof route.query.sig === 'string' ? route.query.sig : undefined;
-    if (!state.username || (!state.password && !(tsParam && sigParam))) {
-      const errorMsg = '缺少登录凭据（需要密码或签名）';
-      tips.error(errorMsg);
-      error.value = errorMsg;
-      return;
-    }
-
-    loading.value = true;
-
     const isResult = await authStore.logInUser(state.username, state.password, tsParam, sigParam);
-    console.log('✅ 用户登录结果:', isResult);
-    console.log('登录后状态:', authStore.isLoggedIn);
-
     if (isResult) {
-      console.log('✅ 用户登录成功，当前状态:', {
-        isLoggedIn: authStore.isLoggedIn,
-        isUser: authStore.isUser,
-        userInfo: authStore.userInfo
-      });
-      
       tips.success('登录成功');
-      
-      // 给一点时间让状态完全更新
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // 优先使用 URL 中的 redirect 参数
+      await new Promise(r => setTimeout(r, 500));
       const redirect = typeof route.query.redirect === 'string' && route.query.redirect ? route.query.redirect : '/user/home';
-      console.log('🚀 执行跳转到', redirect);
       await router.push(redirect);
-      console.log('✅ 跳转完成');
     } else {
-      const errorMsg = '登录失败，用户名或密码错误';
-      console.log('❌ 用户登录失败');
-      tips.error(errorMsg);
-      error.value = errorMsg;
-    } 
-  } catch (err) {
-    const errorMsg = '登录失败，无法连接到服务器';
-    console.error('用户登录异常:', err);
-    tips.error(errorMsg);
-    error.value = errorMsg;
+      tips.error('登录失败，用户名或密码错误');
+    }
+  } catch {
+    tips.error('登录失败，无法连接到服务器');
   } finally {
     loading.value = false;
   }
 };
 
-// 检查URL参数并自动填入登录信息
 const checkUrlParams = () => {
-  const urlParams = route.query;
-  
-  if (urlParams.username) {
-    state.username = urlParams.username;
-    console.log('从URL参数填入用户名:', urlParams.username);
-  }
-  
-  if (urlParams.password) {
-    state.password = urlParams.password;
-    console.log('从URL参数填入密码');
-  }
-  
-  // 如果设置了auto_login=true，自动执行登录
-  if (urlParams.auto_login === 'true' && state.username && (state.password || (urlParams.ts && urlParams.sig))) {
-    console.log('检测到自动登录参数，执行自动登录');
-    // 显示提示（useTips 仅支持 success/error）
+  const q = route.query;
+  if (q.username) state.username = q.username;
+  if (q.password) state.password = q.password;
+  if (q.auto_login === 'true' && state.username && (state.password || (q.ts && q.sig))) {
     tips.success('正在自动登录...');
-    
-    // 延迟一下让用户看到自动登录的提示
-    setTimeout(() => {
-      login();
-    }, 1000);
+    setTimeout(() => { login(); }, 1000);
   }
 };
 
-// 页面挂载时检查URL参数
-onMounted(() => {
-  checkUrlParams();
-});
+onMounted(() => { checkUrlParams(); });
 </script>
 
 <style scoped>
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.login-page {
   min-height: 100vh;
-  background: #f0f2f5;
+  background: #0d0f1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 20px;
+  position: relative;
+  overflow: hidden;
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
 }
 
-.login-card {
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+}
+.orb-1 {
+  width: 400px; height: 400px;
+  background: rgba(108,92,231,0.2);
+  top: -100px; left: -100px;
+}
+.orb-2 {
+  width: 300px; height: 300px;
+  background: rgba(0,206,201,0.15);
+  bottom: -50px; right: -50px;
+}
+.bg-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.login-box {
+  position: relative;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
+  background: #161929;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+  padding: 40px 36px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(108,92,231,0.15);
+}
+
+.login-logo {
+  text-align: center;
+  margin-bottom: 36px;
+}
+.logo-img {
+  width: 64px; height: 64px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 20px rgba(108,92,231,0.6));
+}
+.logo-title {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.logo-sub {
+  margin: 0;
+  font-size: 13px;
+  color: #8892b0;
+}
+
+.login-form { display: flex; flex-direction: column; gap: 20px; }
+
+.form-field { display: flex; flex-direction: column; gap: 8px; }
+.field-label { font-size: 13px; font-weight: 600; color: #8892b0; }
+
+.input-wrap {
+  display: flex; align-items: center;
+  background: #0d0f1a;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-wrap:focus-within {
+  border-color: rgba(108,92,231,0.6);
+  box-shadow: 0 0 0 3px rgba(108,92,231,0.15);
+}
+.input-icon {
+  padding: 0 12px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.field-input {
+  flex: 1;
+  padding: 14px 16px 14px 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e8eaf6;
+  font-size: 15px;
+}
+.field-input::placeholder { color: rgba(136,146,176,0.5); }
+.field-input:disabled { opacity: 0.5; }
+
+.login-btn {
+  margin-top: 8px;
+  padding: 16px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 8px 24px rgba(108,92,231,0.4);
+}
+.login-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(108,92,231,0.5);
+}
+.login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.loading-dots { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.loading-dots span {
+  width: 6px; height: 6px; border-radius: 50%;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  animation: dot-bounce 1.2s infinite;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
 }
 
-:deep(.login-card h2) {
-  margin: 0;
-}
-
-.error-message {
-  color: #dc2626;
-  text-align: center;
-  font-size: 14px;
-  padding: 16px 24px;
-  margin: 0;
-  border-top: 1px solid #f0f0f0;
-  background: #fef2f2;
-}
-
-.login-links {
-  text-align: center;
-  padding: 16px 24px;
-  font-size: 14px;
-  color: #666;
-  border-top: 1px solid #f0f0f0;
-}
-
-.login-links .link {
-  color: #2563eb;
-  text-decoration: none;
-  transition: all 0.3s;
-  font-weight: 500;
-}
-
-.login-links .link:hover {
-  color: #1d4ed8;
-  text-decoration: underline;
+@media (max-width: 480px) {
+  .login-box { padding: 32px 24px; border-radius: 20px; }
 }
 </style>
