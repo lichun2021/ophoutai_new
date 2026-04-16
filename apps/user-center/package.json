@@ -16,7 +16,6 @@
     "@pinia/nuxt": "^0.5.3",
     "@types/ioredis": "^5.0.0",
     "date-fns": "^2.30.0",
-    "grammy": "^1.38.4",
     "ioredis": "^5.6.1",
     "lru-cache": "^11.1.0",
     "mysql2": "^3.11.0",
@@ -29,6 +28,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@iconify-json/heroicons": "^1.2.2",
     "@types/qrcode": "^1.5.5",
     "@vue/runtime-core": "^3.4.38",
     "@vue/tsconfig": "^0.5.1"

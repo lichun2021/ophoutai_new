@@ -1,6 +1,0 @@
-{
-  "allowedUserIds": [],
-  "allowedGroupIds": [],
-  "comment": "Telegram Bot 权限配置。留空数组表示不限制。权限逻辑：满足用户白名单 OR 群组白名单任一即可。获取ID方法：发送 /myid 命令"
-}
-

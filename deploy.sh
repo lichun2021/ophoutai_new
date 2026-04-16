@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================
-# 三套应用一键构建 + 部署脚本
+# 三套应用一键构建 + 部署脚本 7wAvqMlFsNY3vT87
 # 用法:
 #   ./deploy.sh              # 部署全部三个应用
 #   ./deploy.sh user         # 只部署 user-center
@@ -10,7 +10,7 @@
 # =====================================================
 
 # ============ 服务器配置（按需修改）============
-SERVER_IP="27.124.6.93"
+SERVER_IP="27.124.40.42"
 USERNAME="root"
 SSH_PORT="22"
 
@@ -47,7 +47,7 @@ log_step()    { echo -e "\n${BOLD}${CYAN}>>> $1${NC}"; }
 START_TIME=$(date +%s)
 
 # =====================================================
-# 解析参数 → 确定要部署哪些应用
+# 解析参数 → 确定要部署哪些应用 7wAvqMlFsNY3vT87
 # =====================================================
 DEPLOY_USER=false
 DEPLOY_AGENT=false
@@ -157,11 +157,12 @@ deploy_app() {
 
   # --- 步骤5: 服务器上解压 ---
   log_info "[4/6] 服务器解压..."
+  # unzip：必须把选项放在压缩包名前；-o 与 -q 合并为 -oq；勿在包名后再写 -q（否则会被当成「要解压的文件名」）
   ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
     cd $REMOTE_PATH &&
     find . -type f ! -name '$ZIP_NAME' -delete 2>/dev/null;
     find . -mindepth 1 -type d -empty -delete 2>/dev/null;
-    unzip -o $ZIP_NAME -d . -q &&
+    unzip -oq $ZIP_NAME -d . &&
     rm -f $ZIP_NAME
   "
   if [ $? -ne 0 ]; then
