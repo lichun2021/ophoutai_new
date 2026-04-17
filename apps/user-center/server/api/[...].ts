@@ -18,7 +18,7 @@ const withLogging = (handler: Function, apiName: string) => {
     const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
     const method = getMethod(event);
     const url = getRequestURL(event);
-    
+
     let requestBody: any = {};
     let queryParams: any = {};
     try {
@@ -29,13 +29,13 @@ const withLogging = (handler: Function, apiName: string) => {
     } catch (e) {
       requestBody = {};
     }
-    
+
     console.log(`[API] ${method} ${url.pathname} | IP: ${ipAddress.split(',')[0]}`);
 
     let response: any = {};
     let error: any = null;
     let statusCode = 200;
-    
+
     try {
       try {
         const url = getRequestURL(event);
@@ -70,9 +70,9 @@ const withLogging = (handler: Function, apiName: string) => {
         message: e.statusMessage || e.message || "系统错误",
         data: null
       };
-      try { setResponseStatus(event, statusCode); } catch {}
+      try { setResponseStatus(event, statusCode); } catch { }
     }
-    
+
     if (error) {
       console.error(`[API] 错误: ${error.message}`);
     }
@@ -115,7 +115,7 @@ router.post('/user/login', defineEventHandler(async (event) => {
         'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax'
       ]);
     }
-  } catch {}
+  } catch { }
   return result;
 }));
 
@@ -262,8 +262,5 @@ router.get('/payment/user/:user_id', defineEventHandler(PaymentCtrl.getPaymentBy
 
 router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知'));
 router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知'));
-
-// 内部API：支付询单（供后台脚本调用，无需认证）
-router.post('/internal/payment/query', defineEventHandler(PaymentCtrl.queryPaymentOrder));
 
 export default useBase('/api', router.handler);
