@@ -2,7 +2,7 @@
   <div class="login-container">
     <UCard class="login-card">
       <template #header>
-        <h2>管理员登录V2</h2>
+        <h2>代理登录V2</h2>
       </template>
 
       <UForm @submit.prevent="login" :state="state" class="login-form">
@@ -113,7 +113,7 @@ const login = async () => {
     } 
   } catch (err) {
     const errorMsg = '登录失败，系统异常';
-    console.error('管理员登录异常:', err);
+    console.error('代理登录异常:', err);
     tips.error(errorMsg);
     error.value = errorMsg;
   } finally {

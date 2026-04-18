@@ -66,11 +66,11 @@ definePageMeta({
 const router = useRouter();
 const authStore = useAuthStore();
 
-// 退出登录并返回管理员登录页
+// 退出登录并返回代理登录页
 const logoutToAdminLogin = () => {
   // 清除登录状态
   authStore.logOut();
-  // 跳转到管理员登录页
+  // 跳转到代理登录页
   router.push('/admin/login');
 };
 
@@ -91,7 +91,7 @@ onMounted(() => {
         router.push('/home');
       }
     } else {
-      // 未登录用户默认跳转到管理员登录页
+      // 未登录用户默认跳转到代理登录页
       router.push('/admin/login');
     }
   }, 1500); // 最少显示1.5秒，让用户看到美化的界面

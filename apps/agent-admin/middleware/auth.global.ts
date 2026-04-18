@@ -47,13 +47,13 @@ export default defineNuxtRouteMiddleware((to, from) => {
     
     // 根据访问的路径判断应该跳转到哪个登录页
     if (to.path.startsWith('/admin')) {
-      // 访问管理员路径，跳转到管理员登录
+      // 访问管理员路径，跳转到代理登录
       return navigateTo('/admin/login');
     } else if (to.path.startsWith('/user/')) {
       // 访问用户路径（但不包括报表页面如 /user-register），跳转到用户登录
       return navigateTo('/user/login');
     } else {
-      // 其他路径，默认跳转到管理员登录（因为报表页面属于管理员功能）
+      // 其他路径，默认跳转到代理登录（因为报表页面属于管理员功能）
       return navigateTo('/admin/login');
     }
   }

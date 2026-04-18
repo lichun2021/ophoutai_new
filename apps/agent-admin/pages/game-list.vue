@@ -441,7 +441,7 @@ const loadAuthorizedGames = async () => {
   try {
     loading.value = true;
 
-    // 检查是否为管理员登录
+    // 检查是否为代理登录
     if (!authStore.isLoggedIn || authStore.isUser) {
       console.error('未登录或不是管理员账号');
       return;

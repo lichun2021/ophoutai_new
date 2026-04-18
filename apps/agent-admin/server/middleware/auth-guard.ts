@@ -129,7 +129,7 @@ export default defineEventHandler(async (event) => {
   // 4) 简单会话检查：读取前端已有的 localStorage 无法在服务端使用，这里从 Cookie 读取占位会话
   //    后续可改为登录成功后设置 HttpOnly Cookie: auth_logged_in=true; Path=/; Secure; SameSite=Lax
 
-  // 未登录：重定向到对应登录页（后台默认跳转管理员登录，用户页跳用户登录）
+  // 未登录：重定向到对应登录页（后台默认跳转代理登录，用户页跳用户登录）
   if (!logged) {
     const target = isAdminArea ? '/admin/login' : '/user/login';
     // SSR 环境用 302 跳转

@@ -130,7 +130,7 @@ export const useAuthStore = defineStore('auth', {
           body: { "name":username, "password":password, "google_code": googleCode }
         }) as any;
 
-        console.log("管理员登录response:", response)
+        console.log("代理登录response:", response)
         
         // 处理 2FA 校验需求
         if (response.code === 202 && response.data?.require_2fa) {
@@ -157,14 +157,14 @@ export const useAuthStore = defineStore('auth', {
             localStorage.setItem('auth_isUser', 'false');
             localStorage.removeItem('auth_userInfo');
             
-            console.log('管理员登录状态已设置:', this.isLoggedIn);
+            console.log('代理登录状态已设置:', this.isLoggedIn);
             this.resetTimeout();
             return true;
         } else {
           return false;
         }
       } catch (error: any) {
-        console.error('管理员登录失败:', error);
+        console.error('代理登录失败:', error);
         const errorMsg = error.data?.message || error.message || '登录失败';
         this.clearAuthState();
         return { error: errorMsg };
@@ -203,7 +203,7 @@ export const useAuthStore = defineStore('auth', {
       if (wasUser) {
         router.push('/user/login'); // 用户跳转到用户登录页
       } else {
-        router.push('/admin/login'); // 管理员跳转到管理员登录页
+        router.push('/admin/login'); // 管理员跳转到代理登录页
       }
     },
     resetTimeout() {
