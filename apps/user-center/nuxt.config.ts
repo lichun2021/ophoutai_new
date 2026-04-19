@@ -3,12 +3,12 @@
 export default defineNuxtConfig({
   app: {
     head: {
-      title: '量子发行 - 用户中心',
+      title: '用户中心',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no' },
-        { name: 'description', content: '量子发行 - 用户充值与礼包中心' },
-        { name: 'keywords', content: '量子发行,用户中心,游戏充值,礼包' }
+        { name: 'description', content: '用户充值与礼包中心' },
+        { name: 'keywords', content: '用户中心,游戏充值,礼包' }
       ],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/quantum-icon.svg' },
@@ -17,16 +17,16 @@ export default defineNuxtConfig({
       ]
     }
   },
-  
+
   nitro: {
     externals: {
       inline: ["lru-cache"]
     }
   },
-  
+
   runtimeConfig: {
     baseUrl: process.env.BASE_URL || 'http://localhost:3001',
-    
+
     public: {
       apiBaseURL: process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:3001',
       baseUrl: process.env.BASE_URL || 'http://localhost:3001',
@@ -36,8 +36,8 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2024-04-03',
 
-  devtools: { 
-    enabled: true 
+  devtools: {
+    enabled: true
   },
 
   modules: [
