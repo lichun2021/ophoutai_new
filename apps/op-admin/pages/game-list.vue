@@ -204,6 +204,10 @@
               <UInput v-model="gameForm.game_name" placeholder="请输入游戏名称" />
             </UFormGroup>
 
+            <UFormGroup label="游戏代码" required>
+              <UInput v-model="gameForm.game_code" placeholder="请输入游戏代码（如 hzwqh）" />
+            </UFormGroup>
+
 
 
             <UFormGroup label="支持设备" required>
@@ -268,6 +272,7 @@ const showAddModal = ref(false);
 const editingGame = ref(null);
 const gameForm = ref({
   game_name: '',
+  game_code: '',
   icon_url: '',
   supported_devices: '',
   register_url: '',
@@ -521,6 +526,7 @@ const editGame = (game) => {
   editingGame.value = game;
   gameForm.value = {
     game_name: game.game_name,
+    game_code: game.game_code || '',
     icon_url: game.icon_url || '',
     supported_devices: game.supported_devices,
     register_url: game.register_url || '',
@@ -716,6 +722,7 @@ const closeGameModal = () => {
   editingGame.value = null;
   gameForm.value = {
     game_name: '',
+    game_code: '',
     icon_url: '',
     supported_devices: '',
     register_url: '',

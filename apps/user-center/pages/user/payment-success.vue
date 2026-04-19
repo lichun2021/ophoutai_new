@@ -1,408 +1,212 @@
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-    <div class="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
-      
-      <!-- 加载中状态 -->
-      <div v-if="loading" class="text-center py-8">
-        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-blue-100 mb-4">
-          <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </div>
-        <h2 class="text-lg font-medium text-gray-900 mb-2">查询订单信息中...</h2>
-        <p class="text-gray-600">请稍候</p>
+  <div class="success-page">
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-grid"></div>
+
+    <div class="success-box">
+      <!-- 加载中 -->
+      <div v-if="loading" class="state-block">
+        <div class="state-icon loading-spin">⏳</div>
+        <h2 class="state-title">查询订单信息中...</h2>
+        <p class="state-sub">请稍候</p>
       </div>
 
       <!-- 订单不存在 -->
-      <div v-else-if="!paymentInfo" class="text-center py-8">
-        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
-          <svg class="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-        </div>
-        <h2 class="text-lg font-medium text-gray-900 mb-2">订单不存在</h2>
-        <p class="text-gray-600">未找到对应的订单信息</p>
+      <div v-else-if="!paymentInfo" class="state-block">
+        <div class="state-icon">❌</div>
+        <h2 class="state-title">订单不存在</h2>
+        <p class="state-sub">未找到对应的订单信息</p>
       </div>
 
-      <!-- 订单信息显示 -->
+      <!-- 订单信息 -->
       <div v-else>
-        <!-- 状态图标和标题 -->
-        <div class="text-center mb-6">
-          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4" :class="getStatusIconClass()">
-            <svg v-if="getPaymentStatus() === 'success'" class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>
-            <svg v-else-if="getPaymentStatus() === 'processing'" class="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <svg v-else class="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+        <div class="state-block">
+          <div class="state-icon" :class="'icon-' + getPaymentStatus()">
+            <span v-if="getPaymentStatus() === 'success'">✅</span>
+            <span v-else-if="getPaymentStatus() === 'processing'">⏳</span>
+            <span v-else>❌</span>
           </div>
-          <h1 class="text-2xl font-bold text-gray-900 mb-2">{{ getStatusTitle() }}</h1>
-          <p class="text-gray-600">{{ getStatusDescription() }}</p>
+          <h2 class="state-title">{{ getStatusTitle() }}</h2>
+          <p class="state-sub">{{ getStatusDescription() }}</p>
         </div>
 
-        <!-- 订单详情 -->
-        <div class="border-t border-gray-200 pt-6">
-          <dl class="space-y-4">
-            <div class="flex justify-between">
-                          <dt class="text-sm font-medium text-gray-500">商品名称</dt>
-            <dd class="text-sm text-gray-900">{{ paymentInfo.product_name || '-' }}</dd>
+        <!-- 订单明细 -->
+        <div class="detail-list">
+          <div class="detail-row">
+            <span class="detail-label">商品名称</span>
+            <span class="detail-value">{{ paymentInfo.product_name || '-' }}</span>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-sm font-medium text-gray-500">支付金额</dt>
-            <dd class="text-lg font-semibold" :class="getAmountClass()">¥{{ formatAmount(paymentInfo.amount) }}</dd>
+          <div class="detail-row">
+            <span class="detail-label">支付金额</span>
+            <span class="detail-value amount" :class="'text-' + getPaymentStatus()">¥{{ formatAmount(paymentInfo.amount) }}</span>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-sm font-medium text-gray-500">支付方式</dt>
-            <dd class="text-sm text-gray-900 flex items-center">
-              <span class="inline-flex items-center">
-                <img v-if="getPaymentIcon(paymentInfo.payment_way)" 
-                     :src="getPaymentIcon(paymentInfo.payment_way)" 
-                     :alt="paymentInfo.payment_way"
-                     class="w-5 h-5 mr-2">
-                <span>{{ getPaymentMethodName(paymentInfo.payment_way) }}</span>
-              </span>
-            </dd>
+          <div class="detail-row">
+            <span class="detail-label">支付方式</span>
+            <span class="detail-value">
+              <img v-if="getPaymentIcon(paymentInfo.payment_way)" :src="getPaymentIcon(paymentInfo.payment_way)" class="pay-icon" />
+              {{ getPaymentMethodName(paymentInfo.payment_way) }}
+            </span>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-sm font-medium text-gray-500">订单状态</dt>
-            <dd class="text-sm font-medium" :class="getStatusTextClass()">{{ getStatusText() }}</dd>
+          <div class="detail-row">
+            <span class="detail-label">订单状态</span>
+            <span class="detail-value" :class="'text-' + getPaymentStatus()">{{ getStatusText() }}</span>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-sm font-medium text-gray-500">交易号</dt>
-            <dd class="text-sm text-gray-900 font-mono break-all flex items-center">
+          <div class="detail-row">
+            <span class="detail-label">交易号</span>
+            <span class="detail-value mono">
               {{ paymentInfo.transaction_id }}
-              <button @click="copyTransactionId" class="ml-2 p-1 text-gray-500 hover:text-gray-700 transition-colors" title="复制交易号">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                </svg>
-              </button>
-            </dd>
+              <button class="copy-btn" @click="copyTransactionId" title="复制">📋</button>
+            </span>
           </div>
-          <div class="flex justify-between" v-if="paymentInfo.mch_order_id">
-            <dt class="text-sm font-medium text-gray-500">商户订单号</dt>
-            <dd class="text-sm text-gray-900 font-mono">{{ paymentInfo.mch_order_id }}</dd>
+          <div v-if="paymentInfo.mch_order_id" class="detail-row">
+            <span class="detail-label">商户订单号</span>
+            <span class="detail-value mono">{{ paymentInfo.mch_order_id }}</span>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-sm font-medium text-gray-500">创建时间</dt>
-            <dd class="text-sm text-gray-900">{{ formatTime(paymentInfo.created_at) }}</dd>
+          <div class="detail-row">
+            <span class="detail-label">创建时间</span>
+            <span class="detail-value">{{ formatTime(paymentInfo.created_at) }}</span>
           </div>
-          <div class="flex justify-between" v-if="paymentInfo.updated_at && paymentInfo.updated_at !== paymentInfo.created_at">
-            <dt class="text-sm font-medium text-gray-500">更新时间</dt>
-            <dd class="text-sm text-gray-900">{{ formatTime(paymentInfo.updated_at) }}</dd>
+          <div v-if="paymentInfo.updated_at && paymentInfo.updated_at !== paymentInfo.created_at" class="detail-row">
+            <span class="detail-label">更新时间</span>
+            <span class="detail-value">{{ formatTime(paymentInfo.updated_at) }}</span>
           </div>
-          </dl>
         </div>
 
-        <!-- 操作按钮 -->
-        <div class="mt-8">
-          <button @click="refreshOrder" 
-                  class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-            </svg>
-            刷新状态
-          </button>
-        </div>
+        <button class="action-btn" @click="refreshOrder">🔄 刷新状态</button>
       </div>
     </div>
 
-    <!-- 页脚提示 -->
-    <div class="mt-8 text-center text-sm text-gray-500">
-      <p>如有疑问，请联系客服</p>
-    </div>
+    <div class="footer-hint">如有疑问，请联系客服</div>
 
-    <!-- 复制成功提示 -->
-    <div v-if="showCopySuccess" class="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50">
-      复制成功！
-    </div>
+    <!-- 复制提示 -->
+    <div v-if="showCopySuccess" class="toast-msg">复制成功！</div>
   </div>
 </template>
 
 <script setup lang="ts">
-// 设置页面为独立布局，不需要认证
-definePageMeta({
-  layout: false,
-  auth: false
-})
+definePageMeta({ layout: false, auth: false });
 
-// 获取URL参数
-const route = useRoute()
+const route = useRoute();
+const loading = ref(true);
+const paymentInfo = ref<any>(null);
+const showCopySuccess = ref(false);
+const transactionId = computed(() => route.query.transaction_id as string || '');
 
-// 响应式数据
-const loading = ref(true)
-const paymentInfo = ref<any>(null)
-const showCopySuccess = ref(false)
-
-// 从URL获取交易ID
-const transactionId = computed(() => route.query.transaction_id as string || '')
-
-// 获取订单信息
 const fetchOrderInfo = async () => {
-  if (!transactionId.value) {
-    loading.value = false
-    return
-  }
-
+  if (!transactionId.value) { loading.value = false; return; }
   try {
-    loading.value = true
-    const response = await fetch(`/api/payment/trans/${transactionId.value}`)
-    
+    loading.value = true;
+    const response = await fetch(`/api/payment/trans/${transactionId.value}`);
     if (response.ok) {
-      const result = await response.json()
-      if (result.code === 200 && result.data) {
-        paymentInfo.value = result.data
-      } else {
-        paymentInfo.value = null
-      }
-    } else {
-      paymentInfo.value = null
-    }
-  } catch (error) {
-    console.error('查询订单失败:', error)
-    paymentInfo.value = null
-  } finally {
-    loading.value = false
-  }
-}
+      const result = await response.json();
+      paymentInfo.value = (result.code === 200 && result.data) ? result.data : null;
+    } else { paymentInfo.value = null; }
+  } catch { paymentInfo.value = null; }
+  finally { loading.value = false; }
+};
 
-// 获取支付状态
 const getPaymentStatus = () => {
-  if (!paymentInfo.value) return 'unknown'
-  
-  const status = paymentInfo.value.payment_status
-  switch (status) {
-    case 3:
-    case 4:
-      return 'success'
-    case 1:
-      return 'processing'
-    case 0:
-    case 2:
-    default:
-      return 'failed'
-  }
-}
+  if (!paymentInfo.value) return 'unknown';
+  const s = paymentInfo.value.payment_status;
+  if (s === 3 || s === 4) return 'success';
+  if (s === 1) return 'processing';
+  return 'failed';
+};
 
-// 获取状态图标样式
-const getStatusIconClass = () => {
-  const status = getPaymentStatus()
-  switch (status) {
-    case 'success':
-      return 'bg-green-100'
-    case 'processing':
-      return 'bg-yellow-100'
-    case 'failed':
-    default:
-      return 'bg-red-100'
-  }
-}
-
-// 获取状态标题
-const getStatusTitle = () => {
-  const status = getPaymentStatus()
-  switch (status) {
-    case 'success':
-      return '支付成功'
-    case 'processing':
-      return '支付处理中'
-    case 'failed':
-      return '支付失败'
-    default:
-      return '订单状态异常'
-  }
-}
-
-// 获取状态描述
-const getStatusDescription = () => {
-  const status = getPaymentStatus()
-  switch (status) {
-    case 'success':
-      return '您的支付已完成，感谢您的购买！'
-    case 'processing':
-      return '您的支付正在处理中，请稍候...'
-    case 'failed':
-      return '支付失败，请联系客服或重新尝试'
-    default:
-      return '订单状态异常，请联系客服'
-  }
-}
-
-// 获取状态文本
+const getStatusTitle = () => ({ success: '支付成功', processing: '支付处理中', failed: '支付失败' }[getPaymentStatus()] || '订单状态异常');
+const getStatusDescription = () => ({ success: '您的支付已完成，感谢您的购买！', processing: '您的支付正在处理中，请稍候...', failed: '支付失败，请联系客服或重新尝试' }[getPaymentStatus()] || '订单状态异常，请联系客服');
 const getStatusText = () => {
-  if (!paymentInfo.value) return '未知'
-  
-  const status = paymentInfo.value.payment_status
-  switch (status) {
-    case 0:
-      return '未完成'
-    case 1:
-      return '处理中'
-    case 2:
-      return '失败'
-    case 3:
-      return '支付成功'
-    case 4:
-      return '扣款成功'
-    default:
-      return '未知狀態'
-  }
-}
+  if (!paymentInfo.value) return '未知';
+  return { 0: '未完成', 1: '处理中', 2: '失败', 3: '支付成功', 4: '扣款成功' }[paymentInfo.value.payment_status] || '未知状态';
+};
 
-// 获取状态文本样式
-const getStatusTextClass = () => {
-  const status = getPaymentStatus()
-  switch (status) {
-    case 'success':
-      return 'text-green-600'
-    case 'processing':
-      return 'text-yellow-600'
-    case 'failed':
-    default:
-      return 'text-red-600'
-  }
-}
+const getPaymentMethodName = (m: string) => {
+  if (!m) return '未知';
+  return { '客服': '客服支付', '平台币': '平台币支付', '支付宝': '支付宝', '微信': '微信支付', 'zfb': '支付宝', 'wx': '微信支付', 'ptb': '平台币', 'kf': '客服', 'alipay': '支付宝', 'wechat': '微信支付' }[m] || m;
+};
 
-// 获取金额样式
-const getAmountClass = () => {
-  const status = getPaymentStatus()
-  switch (status) {
-    case 'success':
-      return 'text-green-600'
-    case 'processing':
-      return 'text-yellow-600'
-    case 'failed':
-    default:
-      return 'text-gray-600'
-  }
-}
+const getPaymentIcon = (m: string): string | undefined => {
+  if (!m) return undefined;
+  return { '客服': '/customer-service.png', '平台币': '/platform-coin.png', '支付宝': '/zfb.png', '微信': '/wx.png', 'zfb': '/zfb.png', 'alipay': '/zfb.png', 'wx': '/wx.png', 'wechat': '/wx.png', 'ptb': '/platform-coin.png', 'kf': '/customer-service.png' }[m];
+};
 
-// 获取支付方式名称
-const getPaymentMethodName = (method: string) => {
-  if (!method) return '未知'
-  
-  const methodMap: Record<string, string> = {
-    '客服': '客服支付',
-    '平台币': '平台币支付',
-    '支付宝': '支付宝',
-    '微信': '微信支付',
-    '银联': '银联支付',
-    'zfb': '支付寶',
-    'wx': '微信支付',
-    'ptb': '平台幣',
-    'kf': '客服',
-    'yl': '银联',
-    'alipay': '支付宝',
-    'wechat': '微信支付',
-    'unionpay': '银联'
-  }
-  return methodMap[method] || method
-}
+const formatAmount = (a: any) => (!a && a !== 0) ? '0.00' : parseFloat(a).toFixed(2);
+const formatTime = (t: string) => {
+  if (!t) return '-';
+  try { return new Date(t).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return t; }
+};
 
-// 获取支付方式图标
-const getPaymentIcon = (method: string): string | undefined => {
-  if (!method) return undefined
-  
-  const iconMap: Record<string, string> = {
-    '客服': '/customer-service.png',
-    '平台币': '/platform-coin.png',
-    '支付宝': '/zfb.png',
-    '微信': '/wx.png',
-    'zfb': '/zfb.png',
-    'alipay': '/zfb.png',
-    'wx': '/wx.png',
-    'wechat': '/wx.png',
-    'ptb': '/platform-coin.png',
-    'kf': '/customer-service.png',
-    'yl': '/unionpay.png',
-    'unionpay': '/unionpay.png'
-  }
-  return iconMap[method] || undefined
-}
-
-// 格式化金额
-const formatAmount = (amount: any) => {
-  if (!amount && amount !== 0) return '0.00'
-  return parseFloat(amount).toFixed(2)
-}
-
-// 格式化时间
-const formatTime = (timeString: string) => {
-  if (!timeString) return '-'
-  
-  try {
-    const time = new Date(timeString)
-    return time.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
-  } catch {
-    return timeString
-  }
-}
-
-// 刷新订单状态
-const refreshOrder = async () => {
-  await fetchOrderInfo()
-}
-
-// 复制交易号
+const refreshOrder = () => fetchOrderInfo();
 const copyTransactionId = async () => {
-  if (!paymentInfo.value?.transaction_id) return
-  
-  try {
-    await navigator.clipboard.writeText(paymentInfo.value.transaction_id)
-    showCopySuccess.value = true
-    setTimeout(() => {
-      showCopySuccess.value = false
-    }, 2000)
-  } catch (error) {
-    // 降级处理：使用旧的方法
-    const textArea = document.createElement('textarea')
-    textArea.value = paymentInfo.value.transaction_id
-    document.body.appendChild(textArea)
-    textArea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textArea)
-    
-    showCopySuccess.value = true
-    setTimeout(() => {
-      showCopySuccess.value = false
-    }, 2000)
-  }
-}
+  if (!paymentInfo.value?.transaction_id) return;
+  try { await navigator.clipboard.writeText(paymentInfo.value.transaction_id); } catch { const t = document.createElement('textarea'); t.value = paymentInfo.value.transaction_id; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
+  showCopySuccess.value = true;
+  setTimeout(() => { showCopySuccess.value = false; }, 2000);
+};
 
-// 页面加载时获取订单信息
-onMounted(() => {
-  fetchOrderInfo()
-})
-
-// 页面标题
-useHead({
-  title: '订单详情'
-})
+onMounted(() => { fetchOrderInfo(); });
+useHead({ title: '订单详情' });
 </script>
 
 <style scoped>
-/* 自定义样式 */
-.break-all {
-  word-break: break-all;
+.success-page {
+  min-height: 100vh; background: #0d0f1a;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  padding: 20px; position: relative; overflow: hidden;
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
+}
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
+.orb-1 { width: 400px; height: 400px; background: rgba(108,92,231,0.2); top: -100px; left: -100px; }
+.orb-2 { width: 300px; height: 300px; background: rgba(0,206,201,0.15); bottom: -50px; right: -50px; }
+.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
+
+.success-box {
+  position: relative; width: 100%; max-width: 440px;
+  background: #161929; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px; padding: 36px; box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(108,92,231,0.15);
 }
 
-/* 动画效果 */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+.state-block { text-align: center; margin-bottom: 24px; }
+.state-icon { font-size: 48px; margin-bottom: 12px; }
+.loading-spin { animation: spin 1.5s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-title { margin: 0 0 6px; font-size: 20px; font-weight: 700; color: #e8eaf6; }
+.state-sub { margin: 0; font-size: 13px; color: #8892b0; }
+
+.detail-list { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 20px; display: flex; flex-direction: column; gap: 14px; }
+.detail-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.detail-label { font-size: 13px; color: #8892b0; flex-shrink: 0; }
+.detail-value { font-size: 14px; color: #e8eaf6; text-align: right; word-break: break-all; display: flex; align-items: center; gap: 6px; }
+.detail-value.amount { font-size: 18px; font-weight: 700; }
+.detail-value.mono { font-family: 'Courier New', monospace; font-size: 12px; }
+.text-success { color: #55efc4; }
+.text-processing { color: #fdcb6e; }
+.text-failed { color: #e17055; }
+
+.pay-icon { width: 18px; height: 18px; }
+.copy-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px; opacity: 0.6; transition: opacity 0.2s; }
+.copy-btn:hover { opacity: 1; }
+
+.action-btn {
+  margin-top: 24px; width: 100%; padding: 14px;
+  border-radius: 14px; border: none;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: white; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+  box-shadow: 0 8px 24px rgba(108,92,231,0.3);
+}
+.action-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(108,92,231,0.5); }
+
+.footer-hint { margin-top: 24px; font-size: 12px; color: #8892b0; text-align: center; position: relative; }
+
+.toast-msg {
+  position: fixed; top: 20px; right: 20px;
+  background: linear-gradient(135deg, #00cec9, #55efc4);
+  color: #0d0f1a; padding: 10px 20px; border-radius: 10px;
+  font-size: 14px; font-weight: 600; z-index: 200;
+  box-shadow: 0 8px 24px rgba(0,206,201,0.4);
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
-}
-</style> 
+@media (max-width: 480px) { .success-box { padding: 28px 20px; border-radius: 20px; } }
+</style>

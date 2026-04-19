@@ -67,6 +67,9 @@ function buildSignBase(params: Record<string, any>) {
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
   const apiKey = config.public?.apiSignKey || 'fasdjhkfh2348!@#$!617';
+  // 【调试】启动时打印前端使用的 apiKey
+  console.log('[API_SIGN][FRONTEND_INIT] apiKey =', `"${apiKey}"`);
+  console.log('[API_SIGN][FRONTEND_INIT] config.public.apiSignKey =', config.public?.apiSignKey);
   // 全局记录已签名的请求（用 WeakSet 记录 options 对象，避免内存泄漏）
   const signedRequests = new WeakSet<any>();
 
@@ -75,7 +78,6 @@ export default defineNuxtPlugin((nuxtApp) => {
     onRequest({ request, options }) {
       // 内部标记：已签名则直接放行
       if (signedRequests.has(options)) {
-        // try { console.log('[API_SIGN][plugin]', { env: (typeof window === 'undefined') ? 'server' : 'client', path: typeof request === 'string' ? request : 'unknown', skipped: true }); } catch {}
         return;
       }
       if ((options as any).__api_signed) return;
@@ -96,7 +98,6 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (url.searchParams.has('__signed') || extraParams.__signed) {
         (options as any).headers = { ...(options?.headers as any || {}), 'x-signed': '1' } as any;
         (options as any).__api_signed = true;
-        // try { console.log('[API_SIGN][plugin]', { env: (typeof window === 'undefined') ? 'server' : 'client', path: pathname, reused: true }); } catch {}
         return;
       }
       const urlSigned = url.searchParams.has('ts') && url.searchParams.has('nonce') && url.searchParams.has('sign');
@@ -113,11 +114,8 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (urlSigned || bodySigned) {
         (options as any).headers = { ...(options?.headers as any || {}), 'x-signed': '1' } as any;
         (options as any).__api_signed = true;
-        // try { console.log('[API_SIGN][plugin]', { env: (typeof window === 'undefined') ? 'server' : 'client', path: pathname, reused: true }); } catch {}
         return;
       }
-
-      // extraParams 已在上面读取过了，这里直接使用
 
       // 生成 ts 与 nonce，并计算 sign
       const ts = Math.floor(Date.now() / 1000);
@@ -128,7 +126,16 @@ export default defineNuxtPlugin((nuxtApp) => {
       const payload = { ts: String(ts), nonce } as any;
       const sign = md5Hex(buildSignBase(payload) + token);
 
-      
+      // 【调试】打印签名计算过程
+      console.log('[API_SIGN][FRONTEND] ---- 签名生成 ----');
+      console.log('[API_SIGN][FRONTEND] path:', pathname, '| method:', methodUpper);
+      console.log('[API_SIGN][FRONTEND] apiKey:', `"${apiKey}"`);
+      console.log('[API_SIGN][FRONTEND] ts:', ts, '| nonce:', nonce);
+      console.log('[API_SIGN][FRONTEND] ymd:', ymd);
+      console.log('[API_SIGN][FRONTEND] md5Input for token:', `"${ymd}${apiKey}"`);
+      console.log('[API_SIGN][FRONTEND] token:', token);
+      console.log('[API_SIGN][FRONTEND] signBase:', `"${buildSignBase(payload)}"`);
+      console.log('[API_SIGN][FRONTEND] sign:', sign);
 
       // 生成签名
       const method2 = methodUpper;
@@ -166,18 +173,6 @@ export default defineNuxtPlugin((nuxtApp) => {
       (options as any).headers = { ...(options?.headers as any || {}), 'x-signed': '1' } as any;
       (options as any).__api_signed = true;
       signedRequests.add(options);
-
-        // console.log('[API_SIGN][plugin]', {
-        //   env: (typeof window === 'undefined') ? 'server' : 'client',
-        //   path: pathname,
-        //   ts,
-        //   nonce,
-        //   sign,
-        //   salt: apiKey,
-        //   token,
-        //   base: buildSignBase(payload),
-        //   ymd
-        // });
     }
   });
 

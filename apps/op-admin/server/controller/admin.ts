@@ -1476,6 +1476,7 @@ export const createGame = async(evt:H3Event) => {
         const body = await readBody(evt);
         const { 
             game_name, 
+            game_code,
             icon_url, 
             supported_devices, 
             register_url, 
@@ -1524,6 +1525,7 @@ export const createGame = async(evt:H3Event) => {
         // 创建游戏
         await GamesModel.insert({
             game_name,
+            game_code: game_code || '',
             icon_url: icon_url || '',
             supported_devices,
             register_url: register_url || '',

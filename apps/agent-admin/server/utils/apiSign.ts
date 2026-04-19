@@ -6,7 +6,8 @@ const DEFAULT_SKEW_SECONDS = parseInt(process.env.API_SIGN_SKEW_SEC || '60', 10)
 
 // 使用与前端完全一致的 MD5 实现
 function md5(input: string): string {
-  function toUtf8(str: string) { return decodeURIComponent(encodeURIComponent(str)); }
+  // 与前端保持一致：unescape(encodeURIComponent(str)) 将 Unicode 正确转为 UTF-8 字节
+  function toUtf8(str: string) { return unescape(encodeURIComponent(str)); }
   function rhex(n: number) {
     const hex = '0123456789abcdef';
     let s = '';

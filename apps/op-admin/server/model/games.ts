@@ -3,6 +3,7 @@ import {sql} from '../db';
 export type Game = {
     id?: number;
     game_name: string;
+    game_code: string;
     icon_url: string;
     supported_devices: 'H5' | 'iOS' | 'Android' | 'Dual' | 'All';
     register_url?: string;
@@ -117,9 +118,10 @@ export const count = async (is_active?: number, supported_devices?: string) => {
 
 export const insert = async (gameData: Omit<Game, 'id' | 'created_at' | 'updated_at'>) => {
     const result = await sql({
-        query: 'INSERT INTO Games (game_name, icon_url, supported_devices, register_url, ios_download_url, android_download_url, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        query: 'INSERT INTO Games (game_name, game_code, icon_url, supported_devices, register_url, ios_download_url, android_download_url, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         values: [
             gameData.game_name,
+            gameData.game_code || '',
             gameData.icon_url,
             gameData.supported_devices,
             gameData.register_url || '',

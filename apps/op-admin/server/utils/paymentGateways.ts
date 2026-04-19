@@ -541,8 +541,8 @@ const mimmmaProvider: PaymentProvider = {
 const ahqlhConfig = {
     baseUrl: 'https://zf.ahqlhkj.top/mapi.php',
     apiUrl: 'https://zf.ahqlhkj.top/api.php',
-    pid: '1178',
-    md5Key: 'WaA080Yn4KjJWZkUIIW8T0uQAviJuqY4'
+    pid: '1025',
+    md5Key: 'io24FF538Xv5TtlUx45okLXQQz6LLZ1w'
 };
 
 const ahqlhProvider: PaymentProvider = {
@@ -992,8 +992,8 @@ export const gatewayParamSets: Record<string, GatewayParamSet & { supportQuery?:
         credentials: {
             baseUrl: 'https://zf.ahqlhkj.top/mapi.php',
             apiUrl: 'https://zf.ahqlhkj.top/api.php',
-            pid: '1178',
-            md5Key: 'WaA080Yn4KjJWZkUIIW8T0uQAviJuqY4'
+            pid: '1025',
+            md5Key: 'io24FF538Xv5TtlUx45okLXQQz6LLZ1w'
         }
     },
     // payment=5 接入 sxjzszPay

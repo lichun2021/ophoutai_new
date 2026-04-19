@@ -1,510 +1,239 @@
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-    <div class="max-w-lg w-full bg-white rounded-lg shadow-lg p-6">
-      
-      <!-- 加载中状态 -->
-      <div v-if="loading" class="text-center py-8">
-        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-blue-100 mb-4">
-          <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </div>
-        <h2 class="text-lg font-medium text-gray-900 mb-2">生成二维码中...</h2>
-        <p class="text-gray-600">请稍候</p>
+  <div class="qr-page">
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-grid"></div>
+
+    <div class="qr-box">
+      <!-- 加载中 -->
+      <div v-if="loading" class="state-block">
+        <div class="state-icon loading-spin">⏳</div>
+        <h2 class="state-title">生成二维码中...</h2>
+        <p class="state-sub">请稍候</p>
       </div>
 
-      <!-- 错误状态 -->
-      <div v-else-if="error" class="text-center py-8">
-        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4">
-          <svg class="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-        </div>
-        <h2 class="text-lg font-medium text-gray-900 mb-2">二维码生成失败</h2>
-        <p class="text-gray-600">{{ error }}</p>
-        <button @click="retryGenerate" class="mt-4 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">
-          重试
-        </button>
+      <!-- 错误 -->
+      <div v-else-if="error" class="state-block">
+        <div class="state-icon">❌</div>
+        <h2 class="state-title">二维码生成失败</h2>
+        <p class="state-sub">{{ error }}</p>
+        <button class="action-btn mt-16" @click="retryGenerate">重试</button>
       </div>
 
-                      <!-- 二维码显示 -->
-        <div v-else-if="qrCodeUrl" class="landscape-layout">
-          <!-- 左侧：二维码 -->
-          <div class="landscape-qr text-center">
-            <!-- 标题 -->
-            <div class="mb-4">
-              <h1 class="text-xl font-bold text-gray-900 mb-1">请扫码支付</h1>
-              <p class="text-sm text-gray-600">使用微信或支付宝扫描二维码</p>
-            </div>
-
-            <!-- 二维码 -->
-            <div class="mb-4">
-              <div class="inline-block p-3 bg-white border-2 border-gray-200 rounded-lg">
-                <img 
-                  :src="qrCodeUrl" 
-                  :alt="paymentMethod" 
-                  class="w-48 h-48 sm:w-56 sm:h-56 lg:w-64 lg:h-64 object-contain"
-                  @error="handleImageError"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- 右侧：支付信息和操作 -->
-          <div class="landscape-info">
-            <!-- 支付信息 -->
-            <div class="mb-6">
-              <dl class="space-y-3">
-                <div class="flex justify-between">
-                  <dt class="text-sm font-medium text-gray-500">支付金额</dt>
-                  <dd class="text-lg font-semibold text-green-600">¥{{ formatAmount(amount) }}</dd>
-                </div>
-                <div class="flex justify-between">
-                  <dt class="text-sm font-medium text-gray-500">支付方式</dt>
-                  <dd class="text-sm text-gray-900 flex items-center">
-                    <span class="inline-flex items-center">
-                      <img v-if="getPaymentIcon(paymentMethod)" 
-                           :src="getPaymentIcon(paymentMethod)" 
-                           :alt="paymentMethod"
-                           class="w-5 h-5 mr-2">
-                      <span>{{ getPaymentMethodName(paymentMethod) }}</span>
-                    </span>
-                  </dd>
-                </div>
-                <div class="flex justify-between">
-                  <dt class="text-sm font-medium text-gray-500">商品名称</dt>
-                  <dd class="text-sm text-gray-900">{{ productName }}</dd>
-                </div>
-                <div class="flex justify-between">
-                  <dt class="text-sm font-medium text-gray-500">交易号</dt>
-                  <dd class="text-sm text-gray-900 font-mono break-all flex items-center">
-                    {{ transactionId }}
-                    <button @click="copyTransactionId" class="ml-2 p-1 text-gray-500 hover:text-gray-700 transition-colors" title="复制交易号">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                      </svg>
-                    </button>
-                  </dd>
-                </div>
-              </dl>
-            </div>
-
-            <!-- 操作按钮 -->
-            <div class="space-y-2">
-              <button @click="checkPaymentStatus" 
-                      class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center text-sm">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
-                检查支付状态
-              </button>
-              
-
-              
-              <button v-if="qrCodeText" @click="copyQRCodeText" 
-                      class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors flex items-center justify-center text-sm">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                </svg>
-                复制支付链接
-              </button>
-            </div>
+      <!-- 二维码显示 -->
+      <div v-else-if="qrCodeUrl" class="qr-content">
+        <!-- 左侧：二维码 -->
+        <div class="qr-left">
+          <h1 class="qr-heading">请扫码支付</h1>
+          <p class="qr-heading-sub">使用微信或支付宝扫描二维码</p>
+          <div class="qr-img-wrap">
+            <img :src="qrCodeUrl" :alt="paymentMethod" class="qr-img" @error="handleImageError" />
           </div>
         </div>
 
-      <!-- 无二维码状态 -->
-      <div v-else class="text-center py-8">
-        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
-          <svg class="h-8 w-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-          </svg>
+        <!-- 右侧：支付信息 -->
+        <div class="qr-right">
+          <div class="detail-list">
+            <div class="detail-row">
+              <span class="detail-label">支付金额</span>
+              <span class="detail-value amount text-success">¥{{ formatAmount(amount) }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">支付方式</span>
+              <span class="detail-value">
+                <img v-if="getPaymentIcon(paymentMethod)" :src="getPaymentIcon(paymentMethod)" class="pay-icon" />
+                {{ getPaymentMethodName(paymentMethod) }}
+              </span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">商品名称</span>
+              <span class="detail-value">{{ productName }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">交易号</span>
+              <span class="detail-value mono">
+                {{ transactionId }}
+                <button class="copy-btn" @click="copyTransactionId">📋</button>
+              </span>
+            </div>
+          </div>
+
+          <div class="qr-actions">
+            <button class="action-btn" @click="checkPaymentStatus">🔄 检查支付状态</button>
+            <button v-if="qrCodeText" class="action-btn-outline" @click="copyQRCodeText">📋 复制支付链接</button>
+          </div>
         </div>
-        <h2 class="text-lg font-medium text-gray-900 mb-2">未找到二维码</h2>
-        <p class="text-gray-600">请检查URL参数是否正确</p>
+      </div>
+
+      <!-- 无二维码 -->
+      <div v-else class="state-block">
+        <div class="state-icon">📄</div>
+        <h2 class="state-title">未找到二维码</h2>
+        <p class="state-sub">请检查URL参数是否正确</p>
       </div>
     </div>
 
-    <!-- 页脚提示 -->
-    <div class="mt-8 text-center text-sm text-gray-500">
-      <p>支付完成后请点击"检查支付状态"按钮</p>
-      <p class="mt-1">如有疑问，请联系客服</p>
-    </div>
+    <div class="footer-hint">支付完成后请点击"检查支付状态"按钮</div>
 
-    <!-- 复制成功提示 -->
-    <div v-if="showCopySuccess" class="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50">
-      {{ copySuccessMessage }}
-    </div>
-
-    <!-- 支付状态检查结果 -->
-    <div v-if="paymentStatusResult" class="fixed top-4 right-4 px-4 py-2 rounded-md shadow-lg z-50" 
-         :class="paymentStatusResult.success ? 'bg-green-500 text-white' : 'bg-yellow-500 text-white'">
-      {{ paymentStatusResult.message }}
-    </div>
+    <div v-if="showCopySuccess" class="toast-msg">{{ copySuccessMessage }}</div>
+    <div v-if="paymentStatusResult" class="toast-msg" :class="paymentStatusResult.success ? '' : 'toast-warn'">{{ paymentStatusResult.message }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import QRCode from 'qrcode'
 
-// 设置页面为独立布局，需要认证
-definePageMeta({
-  layout: false,
-  auth: false
-})
+definePageMeta({ layout: false, auth: false })
 
-// 获取URL参数
 const route = useRoute()
-
-// 响应式数据
 const loading = ref(true)
 const error = ref('')
 const qrCodeUrl = ref('')
-const qrCodeText = ref('') // 存储二维码文本内容
+const qrCodeText = ref('')
 const showCopySuccess = ref(false)
 const copySuccessMessage = ref('复制成功！')
 const paymentStatusResult = ref<any>(null)
-
-// 从URL获取参数
 const transactionId = computed(() => route.query.transaction_id as string || '')
 const qrcode = computed(() => route.query.qrcode as string || '')
-
-// 支付信息（从URL参数或API获取）
 const amount = ref(0)
 const paymentMethod = ref('')
 const productName = ref('')
 
-// 获取支付方式图标
-const getPaymentIcon = (method: string) => {
-  const icons: { [key: string]: string } = {
-    '支付宝': '/zfb.png',
-    '微信': '/wx.png',
-    'alipay': '/zfb.png',
-    'wxpay': '/wx.png'
-  }
-  return icons[method] || ''
-}
+const getPaymentIcon = (m: string) => ({ '支付宝': '/zfb.png', '微信': '/wx.png', 'alipay': '/zfb.png', 'wxpay': '/wx.png' }[m] || '')
+const getPaymentMethodName = (m: string) => ({ '支付宝': '支付宝', '微信': '微信支付', 'alipay': '支付宝', 'wxpay': '微信支付' }[m] || m)
+const formatAmount = (a: number) => a.toFixed(2)
 
-// 获取支付方式名称
-const getPaymentMethodName = (method: string) => {
-  const names: { [key: string]: string } = {
-    '支付宝': '支付宝',
-    '微信': '微信支付',
-    'alipay': '支付宝',
-    'wxpay': '微信支付'
-  }
-  return names[method] || method
-}
-
-// 格式化金额
-const formatAmount = (amount: number) => {
-  return amount.toFixed(2)
-}
-
-// 复制交易号
 const copyTransactionId = async () => {
-  try {
-    await navigator.clipboard.writeText(transactionId.value)
-    copySuccessMessage.value = '交易号复制成功！'
-    showCopySuccess.value = true
-    setTimeout(() => {
-      showCopySuccess.value = false
-    }, 2000)
-  } catch (err) {
-    console.error('复制失败:', err)
-  }
+  try { await navigator.clipboard.writeText(transactionId.value) } catch { const t = document.createElement('textarea'); t.value = transactionId.value; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
+  copySuccessMessage.value = '交易号复制成功！'; showCopySuccess.value = true; setTimeout(() => { showCopySuccess.value = false }, 2000)
 }
-
-// 复制二维码文本
 const copyQRCodeText = async () => {
-  try {
-    await navigator.clipboard.writeText(qrCodeText.value)
-    copySuccessMessage.value = '支付链接复制成功！'
-    showCopySuccess.value = true
-    setTimeout(() => {
-      showCopySuccess.value = false
-    }, 2000)
-  } catch (err) {
-    console.error('复制失败:', err)
-  }
+  try { await navigator.clipboard.writeText(qrCodeText.value) } catch { const t = document.createElement('textarea'); t.value = qrCodeText.value; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
+  copySuccessMessage.value = '支付链接复制成功！'; showCopySuccess.value = true; setTimeout(() => { showCopySuccess.value = false }, 2000)
 }
+const handleImageError = () => { error.value = '二维码图片加载失败' }
 
-// 处理图片加载错误
-const handleImageError = () => {
-  error.value = '二维码图片加载失败'
-}
-
-// 检查支付状态
 const checkPaymentStatus = async () => {
-  if (!transactionId.value) {
-    paymentStatusResult.value = {
-      success: false,
-      message: '交易号不存在'
-    }
-    return
-  }
-
+  if (!transactionId.value) { paymentStatusResult.value = { success: false, message: '交易号不存在' }; return }
   try {
     const response = await fetch(`/api/payment/trans/${transactionId.value}`)
-    
     if (response.ok) {
       const result = await response.json()
       if (result.code === 200 && result.data) {
         const status = result.data.payment_status
-        if (status === 3 || status === 4) {
-          // 支付成功，跳转到成功页面
-          await navigateTo(`/user/payment-success?transaction_id=${transactionId.value}`)
-          return
-        } else if (status === 1) {
-          paymentStatusResult.value = {
-            success: false,
-            message: '支付处理中，请稍后再试'
-          }
-        } else {
-          paymentStatusResult.value = {
-            success: false,
-            message: '支付未完成，请继续扫码支付'
-          }
-        }
-      } else {
-        paymentStatusResult.value = {
-          success: false,
-          message: '订单不存在'
-        }
-      }
-    } else {
-      paymentStatusResult.value = {
-        success: false,
-        message: '查询失败，请稍后再试'
-      }
-    }
-  } catch (err) {
-    paymentStatusResult.value = {
-      success: false,
-      message: '网络错误，请稍后再试'
-    }
-  }
-
-  // 3秒后隐藏提示
-  setTimeout(() => {
-    paymentStatusResult.value = null
-  }, 3000)
+        if (status === 3 || status === 4) { await navigateTo(`/user/payment-success?transaction_id=${transactionId.value}`); return }
+        paymentStatusResult.value = { success: false, message: status === 1 ? '支付处理中，请稍后再试' : '支付未完成，请继续扫码支付' }
+      } else { paymentStatusResult.value = { success: false, message: '订单不存在' } }
+    } else { paymentStatusResult.value = { success: false, message: '查询失败，请稍后再试' } }
+  } catch { paymentStatusResult.value = { success: false, message: '网络错误，请稍后再试' } }
+  setTimeout(() => { paymentStatusResult.value = null }, 3000)
 }
 
-// 刷新二维码
-const refreshQRCode = async () => {
-  if (qrCodeText.value) {
-    // 重新生成二维码
-    await generateQRCode(qrCodeText.value)
-  } else if (transactionId.value) {
-    // 重新请求支付接口获取新的二维码
-    window.location.reload()
-  }
-}
-
-// 重试生成
-const retryGenerate = async () => {
-  error.value = ''
-  loading.value = true
-  await initPage()
-}
-
-// 生成二维码
 const generateQRCode = async (text: string) => {
-  try {
-    // 生成二维码数据URL
-    const dataUrl = await QRCode.toDataURL(text, {
-      width: 200,
-      margin: 2,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      }
-    })
-    qrCodeUrl.value = dataUrl
-    qrCodeText.value = text
-  } catch (err) {
-    console.error('生成二维码失败:', err)
-    error.value = '二维码生成失败'
-  }
+  try { qrCodeUrl.value = await QRCode.toDataURL(text, { width: 200, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } }); qrCodeText.value = text }
+  catch { error.value = '二维码生成失败' }
 }
 
-// 初始化页面
 const initPage = async () => {
   try {
-    loading.value = true
-    error.value = ''
-
-    // 如果有二维码文本内容，生成二维码
+    loading.value = true; error.value = ''
     if (qrcode.value) {
-      const qrCodeText = decodeURIComponent(qrcode.value)
-      await generateQRCode(qrCodeText)
-      
-      // 如果有交易号，获取订单信息
+      await generateQRCode(decodeURIComponent(qrcode.value))
       if (transactionId.value) {
-        try {
-          const response = await fetch(`/api/payment/trans/${transactionId.value}`)
-          if (response.ok) {
-            const result = await response.json()
-            if (result.code === 200 && result.data) {
-              amount.value = parseFloat(result.data.amount) || 0
-              paymentMethod.value = result.data.payment_way || ''
-              productName.value = result.data.product_name || ''
-            }
-          }
-        } catch (err) {
-          console.error('获取订单信息失败:', err)
-        }
+        try { const r = await fetch(`/api/payment/trans/${transactionId.value}`); if (r.ok) { const res = await r.json(); if (res.code === 200 && res.data) { amount.value = parseFloat(res.data.amount) || 0; paymentMethod.value = res.data.payment_way || ''; productName.value = res.data.product_name || '' } } } catch {}
       }
     } else if (transactionId.value) {
-      // 只有交易号，尝试从订单信息中获取二维码
-      try {
-        const response = await fetch(`/api/payment/trans/${transactionId.value}`)
-        if (response.ok) {
-          const result = await response.json()
-          if (result.code === 200 && result.data) {
-            const orderData = result.data
-            amount.value = parseFloat(orderData.amount) || 0
-            paymentMethod.value = orderData.payment_way || ''
-            productName.value = orderData.product_name || ''
-            
-            // 这里可以添加从订单中获取二维码的逻辑
-            // 如果订单中有二维码URL的话
-          }
-        }
-      } catch (err) {
-        console.error('获取订单信息失败:', err)
-      }
-    } else {
-      error.value = '缺少必要的参数'
-    }
-  } catch (err) {
-    console.error('初始化页面失败:', err)
-    error.value = '页面初始化失败'
-  } finally {
-    loading.value = false
-  }
+      try { const r = await fetch(`/api/payment/trans/${transactionId.value}`); if (r.ok) { const res = await r.json(); if (res.code === 200 && res.data) { amount.value = parseFloat(res.data.amount) || 0; paymentMethod.value = res.data.payment_way || ''; productName.value = res.data.product_name || '' } } } catch {}
+    } else { error.value = '缺少必要的参数' }
+  } catch { error.value = '页面初始化失败' }
+  finally { loading.value = false }
 }
 
-// 页面加载时初始化
-onMounted(async () => {
-  await initPage()
-})
+const retryGenerate = async () => { error.value = ''; loading.value = true; await initPage() }
 
-// 监听URL参数变化
-watch([transactionId, qrcode], async () => {
-  await initPage()
-})
+onMounted(async () => { await initPage() })
+watch([transactionId, qrcode], async () => { await initPage() })
 </script>
 
 <style scoped>
-/* 默认竖屏布局 */
-.landscape-layout {
-  text-align: center;
+.qr-page {
+  min-height: 100vh; background: #0d0f1a;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  padding: 20px; position: relative; overflow: hidden;
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
+}
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
+.orb-1 { width: 400px; height: 400px; background: rgba(108,92,231,0.2); top: -100px; left: -100px; }
+.orb-2 { width: 300px; height: 300px; background: rgba(0,206,201,0.15); bottom: -50px; right: -50px; }
+.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
+
+.qr-box {
+  position: relative; width: 100%; max-width: 500px;
+  background: #161929; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px; padding: 36px; box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(108,92,231,0.15);
 }
 
-.landscape-qr {
-  margin-bottom: 1.5rem;
-}
+.state-block { text-align: center; padding: 20px 0; }
+.state-icon { font-size: 48px; margin-bottom: 12px; }
+.loading-spin { animation: spin 1.5s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-title { margin: 0 0 6px; font-size: 20px; font-weight: 700; color: #e8eaf6; }
+.state-sub { margin: 0; font-size: 13px; color: #8892b0; }
+.mt-16 { margin-top: 16px; }
 
-.landscape-info {
-  text-align: center;
+.qr-content { text-align: center; }
+.qr-heading { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #e8eaf6; }
+.qr-heading-sub { margin: 0 0 16px; font-size: 13px; color: #8892b0; }
+.qr-img-wrap {
+  display: inline-block; padding: 12px;
+  background: white; border-radius: 12px; margin-bottom: 24px;
 }
+.qr-img { width: 200px; height: 200px; object-fit: contain; }
 
-/* 横屏适配 */
-@media (orientation: landscape) {
-  .min-h-screen {
-    min-height: 100vh;
-    padding: 0.5rem;
-  }
-  
-  .max-w-lg {
-    max-width: 95vw;
-  }
-  
-  /* 横屏时二维码和信息并排显示 */
-  .landscape-layout {
-    display: flex;
-    align-items: center;
-    gap: 2rem;
-    text-align: left;
-  }
-  
-  .landscape-qr {
-    flex-shrink: 0;
-    margin-bottom: 0;
-    text-align: center;
-  }
-  
-  .landscape-info {
-    flex: 1;
-    text-align: left;
-  }
-}
+.detail-list { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 20px; display: flex; flex-direction: column; gap: 14px; }
+.detail-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.detail-label { font-size: 13px; color: #8892b0; flex-shrink: 0; }
+.detail-value { font-size: 14px; color: #e8eaf6; text-align: right; word-break: break-all; display: flex; align-items: center; gap: 6px; }
+.detail-value.amount { font-size: 18px; font-weight: 700; }
+.detail-value.mono { font-family: 'Courier New', monospace; font-size: 12px; }
+.text-success { color: #55efc4; }
+.pay-icon { width: 18px; height: 18px; }
+.copy-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px; opacity: 0.6; transition: opacity 0.2s; }
+.copy-btn:hover { opacity: 1; }
 
-/* 小屏幕横屏优化 */
-@media (orientation: landscape) and (max-height: 500px) {
-  .landscape-layout {
-    gap: 1rem;
-  }
-  
-  .landscape-qr h1 {
-    font-size: 1.125rem;
-  }
-  
-  .landscape-qr p {
-    font-size: 0.875rem;
-  }
-  
-  .w-48.h-48 {
-    width: 10rem;
-    height: 10rem;
-  }
+.qr-actions { margin-top: 24px; display: flex; flex-direction: column; gap: 10px; }
+.action-btn {
+  width: 100%; padding: 14px; border-radius: 14px; border: none;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: white; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; box-shadow: 0 8px 24px rgba(108,92,231,0.3);
 }
+.action-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(108,92,231,0.5); }
+.action-btn-outline {
+  width: 100%; padding: 14px; border-radius: 14px;
+  background: rgba(0,206,201,0.1); border: 1px solid rgba(0,206,201,0.3);
+  color: #55efc4; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.action-btn-outline:hover { background: rgba(0,206,201,0.2); }
 
-/* 移动端横屏优化 */
-@media (orientation: landscape) and (max-width: 768px) {
-  .max-w-lg {
-    max-width: 98vw;
-  }
-  
-  .landscape-layout {
-    gap: 1rem;
-  }
-  
-  .w-48.h-48 {
-    width: 8rem;
-    height: 8rem;
-  }
-  
-  .landscape-info .space-y-2 > * {
-    margin-bottom: 0.5rem;
-  }
-  
-  .landscape-info button {
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-  }
+.footer-hint { margin-top: 24px; font-size: 12px; color: #8892b0; text-align: center; position: relative; }
+.toast-msg {
+  position: fixed; top: 20px; right: 20px;
+  background: linear-gradient(135deg, #00cec9, #55efc4);
+  color: #0d0f1a; padding: 10px 20px; border-radius: 10px;
+  font-size: 14px; font-weight: 600; z-index: 200;
+  box-shadow: 0 8px 24px rgba(0,206,201,0.4);
 }
+.toast-warn { background: linear-gradient(135deg, #e17055, #fdcb6e); }
 
-/* 超小屏幕横屏 */
-@media (orientation: landscape) and (max-width: 480px) {
-  .landscape-layout {
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .landscape-qr {
-    margin-bottom: 0;
-  }
-  
-  .landscape-info {
-    text-align: center;
-  }
-  
-  .w-48.h-48 {
-    width: 6rem;
-    height: 6rem;
-  }
+@media (max-width: 480px) { .qr-box { padding: 28px 20px; border-radius: 20px; } .qr-img { width: 180px; height: 180px; } }
+
+@media (orientation: landscape) and (min-width: 600px) {
+  .qr-box { max-width: 700px; }
+  .qr-content { display: flex; gap: 28px; text-align: left; align-items: flex-start; }
+  .qr-left { flex-shrink: 0; text-align: center; }
+  .qr-right { flex: 1; }
+  .detail-list { border-top: none; padding-top: 0; }
 }
-</style> 
+</style>

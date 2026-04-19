@@ -4,9 +4,16 @@ import { getRedisCluster } from './redis-cluster';
 const DEFAULT_SALT = process.env.API_SIGN_KEY || 'fasdjhkfh2348!@#$!617';
 const DEFAULT_SKEW_SECONDS = parseInt(process.env.API_SIGN_SKEW_SEC || '60', 10); // 1 分钟
 
+// 启动时打印一次，确认运行时使用的 salt 值
+console.log('[API_SIGN][INIT] ================================');
+console.log('[API_SIGN][INIT] process.env.API_SIGN_KEY =', process.env.API_SIGN_KEY ? `"${process.env.API_SIGN_KEY}"` : '(未设置，使用默认值)');
+console.log('[API_SIGN][INIT] DEFAULT_SALT =', `"${DEFAULT_SALT}"`);
+console.log('[API_SIGN][INIT] ================================');
+
 // 使用与前端完全一致的 MD5 实现
 function md5(input: string): string {
-  function toUtf8(str: string) { return decodeURIComponent(encodeURIComponent(str)); }
+  // 与前端保持一致：unescape(encodeURIComponent(str)) 将 Unicode 正确转为 UTF-8 字节
+  function toUtf8(str: string) { return unescape(encodeURIComponent(str)); }
   function rhex(n: number) {
     const hex = '0123456789abcdef';
     let s = '';
@@ -112,46 +119,79 @@ export async function verifyApiSignature(
   const skew = options?.skewSeconds ?? DEFAULT_SKEW_SECONDS;
   const salt = options?.salt ?? DEFAULT_SALT;
 
+  // 【调试】打印原始输入
+  console.log('[API_SIGN][DEBUG] ---- 签名验证开始 ----');
+  console.log('[API_SIGN][DEBUG] pathname:', pathname, '| method:', method);
+  console.log('[API_SIGN][DEBUG] salt:', `"${salt}"`);
+  console.log('[API_SIGN][DEBUG] queryParams:', JSON.stringify(queryParams));
+  console.log('[API_SIGN][DEBUG] requestBody keys:', requestBody ? Object.keys(requestBody) : 'null');
+  console.log('[API_SIGN][DEBUG] requestBody.ts:', requestBody?.ts, '| type:', typeof requestBody?.ts);
+  console.log('[API_SIGN][DEBUG] requestBody.nonce:', requestBody?.nonce);
+  console.log('[API_SIGN][DEBUG] requestBody.sign:', requestBody?.sign);
+  console.log('[API_SIGN][DEBUG] queryParams.ts:', queryParams?.ts, '| queryParams.sign:', queryParams?.sign);
+
   const params: Record<string, any> = {
     ...(queryParams || {}),
     ...(['POST', 'PUT', 'PATCH', 'DELETE'].includes((method || 'GET').toUpperCase()) ? (requestBody || {}) : {})
   };
 
+  console.log('[API_SIGN][DEBUG] 合并后 params.ts:', params.ts, '| type:', typeof params.ts);
+  console.log('[API_SIGN][DEBUG] 合并后 params.nonce:', params.nonce);
+  console.log('[API_SIGN][DEBUG] 合并后 params.sign:', params.sign);
+
   const ts = normalizeTs(params.ts);
   const providedSign = String(params.sign || '');
   const nonce = String(params.nonce || '');
 
+  console.log('[API_SIGN][DEBUG] normalizeTs 结果:', ts, '| providedSign:', providedSign, '| nonce:', nonce);
+
   if (!ts || !providedSign) {
+    console.error('[API_SIGN][FAIL] 缺少 ts 或 sign!', { ts, providedSign });
     throw createError({ statusCode: 401, statusMessage: 'missing_ts_or_sign' });
   }
   if (!nonce) {
+    console.error('[API_SIGN][FAIL] 缺少 nonce!');
     throw createError({ statusCode: 401, statusMessage: 'missing_nonce' });
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
-  if (Math.abs(nowSec - ts) > skew) {
+  const skewDiff = Math.abs(nowSec - ts);
+  console.log('[API_SIGN][DEBUG] 时间验证: nowSec=', nowSec, '| ts=', ts, '| diff=', skewDiff, '| 允许=', skew);
+  if (skewDiff > skew) {
+    console.error('[API_SIGN][FAIL] 时间偏差过大!', { nowSec, ts, diff: skewDiff, skew });
     throw createError({ statusCode: 401, statusMessage: 'ts_skew' });
   }
 
   const dateForToken = new Date(ts * 1000);
+  const ymdForLog = formatYmd(dateForToken);
   const token = calcDailyToken(dateForToken, salt);
+  const baseForLog = buildSignBase({ ts, nonce });
   // 仅使用固定参数参与签名：ts 与 nonce
   const expected = calcSign({ ts, nonce }, token);
+
+  console.log('[API_SIGN][DEBUG] ymd:', ymdForLog);
+  console.log('[API_SIGN][DEBUG] md5Input for token:', `"${ymdForLog}${salt}"`);
+  console.log('[API_SIGN][DEBUG] token:', token);
+  console.log('[API_SIGN][DEBUG] signBase:', `"${baseForLog}"`);
+  console.log('[API_SIGN][DEBUG] md5Input for sign:', `"${baseForLog}${token}"`);
+  console.log('[API_SIGN][DEBUG] expected:', expected);
+  console.log('[API_SIGN][DEBUG] provided:', providedSign);
+  console.log('[API_SIGN][DEBUG] match:', expected === providedSign);
   if (expected !== providedSign) {
-    // const base = buildSignBase({ ts, nonce });
-    // const ymd = formatYmd(dateForToken);
-    // console.warn('[API_SIGN][server] invalid_sign', {
-    //   path: pathname,
-    //   method,
-    //   ts,
-    //   salt,
-    //   nonce,
-    //   expected,
-    //   provided: providedSign,
-    //   token,
-    //   base,
-    //   ymd
-    // });
+    const base = buildSignBase({ ts, nonce });
+    const ymd = formatYmd(dateForToken);
+    console.warn('[API_SIGN][server] invalid_sign', {
+      path: pathname,
+      method,
+      ts,
+      salt,
+      nonce,
+      expected,
+      provided: providedSign,
+      token,
+      base,
+      ymd
+    });
     throw createError({ statusCode: 401, statusMessage: 'invalid_sign' });
   }
 
