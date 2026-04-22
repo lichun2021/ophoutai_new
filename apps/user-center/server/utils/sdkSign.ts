@@ -15,7 +15,7 @@ export function computeSdkSign(params: Record<string, any>, secret: string): str
   // 过滤空值与 sign
   const filtered: Record<string, string> = {};
   Object.keys(params || {}).forEach((key) => {
-    if (key === 'sign') return;
+    if (key === 'sign' || key === '__signed') return;
     const value = (params as any)[key];
     if (value === null || value === undefined) return;
     const str = String(value).trim();

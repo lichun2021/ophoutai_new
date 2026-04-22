@@ -241,7 +241,7 @@ router.post('/user/setRole', withSignAndLogging(UserCtrl.reportRole, '角色上�
  * @body {各种支付参数}
  * @returns {Object} 支付结果或支付链接
  */
-router.post('/Unipay/pay', withSignAndLogging(PaymentCtrl.doPayment, '支付请求接口'));
+router.post('/Unipay/pay', withLogging(PaymentCtrl.doPayment, '支付请求接口(代理)'));
 
 /**
  * 游戏订单查询接口
