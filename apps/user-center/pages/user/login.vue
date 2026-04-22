@@ -7,7 +7,6 @@
     <div class="login-box">
       <!-- Logo -->
       <div class="login-logo">
-        <img src="/logo-warm.svg" alt="logo" class="logo-img" />
         <h1 class="logo-title">会员中心</h1>
         <p class="logo-sub">登录以管理您的账户</p>
       </div>

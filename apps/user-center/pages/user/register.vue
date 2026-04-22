@@ -8,7 +8,8 @@
     <div class="register-box">
       <!-- Logo -->
       <div class="register-logo">
-        <img src="/logo-warm.svg" alt="logo" class="logo-img" />
+        <!-- logo removed -->
+
         <h1 class="logo-title">用户注册</h1>
         <p class="logo-sub">创建您的账户</p>
       </div>
