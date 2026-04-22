@@ -11,12 +11,14 @@ export default defineNuxtConfig({
         { name: 'keywords', content: '用户中心,游戏充值,礼包' }
       ],
       link: [
-        { rel: 'icon', type: 'image/svg+xml', href: '/quantum-icon.svg' },
+        { rel: 'icon', type: 'image/svg+xml', href: '/logo-warm.svg' },
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
-        { rel: 'apple-touch-icon', href: '/quantum-icon.svg' }
+        { rel: 'apple-touch-icon', href: '/logo-warm.svg' }
       ]
     }
   },
+
+  css: ['~/assets/css/design-tokens.css'],
 
   nitro: {
     externals: {

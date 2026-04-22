@@ -9,7 +9,7 @@
           <p class="hero-greeting">欢迎回来 👋</p>
           <h2 class="hero-username">{{ authStore.userInfo?.username || '用户' }}</h2>
           <div class="hero-balance">
-            <img src="/platform-coin.svg" alt="coin" class="hero-coin" />
+            <img src="/logo-warm.svg" alt="coin" class="hero-coin" />
             <span class="hero-amount">{{ formatBalance(authStore.userInfo?.platform_coins) }}</span>
             <span class="hero-unit">平台币</span>
           </div>
@@ -41,7 +41,7 @@
     <!-- 统计卡片 -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-icon-wrap" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe);">
+        <div class="stat-icon-wrap" style="background: linear-gradient(135deg, var(--primary), var(--primary-container));">
           <span>💰</span>
         </div>
         <div class="stat-body">
@@ -50,7 +50,7 @@
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon-wrap" style="background: linear-gradient(135deg, #00b894, #00cec9);">
+        <div class="stat-icon-wrap" style="background: linear-gradient(135deg, var(--secondary-dim), var(--secondary));">
           <span>🛒</span>
         </div>
         <div class="stat-body">
@@ -75,7 +75,7 @@
             <span class="order-badge" :class="order.status">{{ getOrderStatusText(order.status) }}</span>
           </div>
           <div class="order-right">
-            <img src="/platform-coin.svg" alt="coin" class="order-coin" />
+            <img src="/logo-warm.svg" alt="coin" class="order-coin" />
             <span class="order-amount">{{ formatBalance(order.amount) }}</span>
           </div>
         </div>
@@ -160,12 +160,12 @@ onMounted(async () => {
 /* ============ Hero 卡片 ============ */
 .hero-card {
   position: relative;
-  background: linear-gradient(135deg, #1e1b4b 0%, #1e2235 60%, #0d2a4a 100%);
-  border: 1px solid rgba(108,92,231,0.3);
-  border-radius: 20px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
+  border-radius: var(--radius-lg);
   padding: 28px 24px 20px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(108,92,231,0.2);
+  box-shadow: 0 8px 32px rgba(168,50,6,0.25);
+  color: var(--on-primary);
 }
 
 .hero-bg-orb {
@@ -173,7 +173,7 @@ onMounted(async () => {
   right: -40px; top: -40px;
   width: 200px; height: 200px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(108,92,231,0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(168,50,6,0.3), transparent 70%);
   pointer-events: none;
 }
 
@@ -185,23 +185,23 @@ onMounted(async () => {
   position: relative;
 }
 
-.hero-greeting { margin: 0 0 4px; font-size: 13px; color: #a29bfe; font-weight: 500; }
-.hero-username { margin: 0 0 14px; font-size: 22px; font-weight: 800; color: #e8eaf6; }
+.hero-greeting { margin: 0 0 4px; font-size: 13px; color: rgba(255,255,255,0.8); font-weight: 500; }
+.hero-username { margin: 0 0 14px; font-size: 22px; font-weight: 800; color: #fff; }
 .hero-balance { display: flex; align-items: baseline; gap: 6px; }
 .hero-coin { width: 28px; height: 28px; }
-.hero-amount { font-size: 40px; font-weight: 900; color: #fdcb6e; line-height: 1; }
-.hero-unit { font-size: 14px; color: rgba(253,203,110,0.7); }
+.hero-amount { font-size: 40px; font-weight: 900; color: #fff; line-height: 1; }
+.hero-unit { font-size: 14px; color: rgba(255,255,255,0.7); }
 
 .refresh-btn {
   padding: 8px;
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.25);
   border-radius: 10px;
-  color: #a29bfe;
+  color: #fff;
   cursor: pointer;
   transition: all 0.2s;
 }
-.refresh-btn:hover { background: rgba(108,92,231,0.3); }
+.refresh-btn:hover { background: rgba(255,255,255,0.3); }
 .refresh-btn.spinning :deep(svg) { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -215,19 +215,19 @@ onMounted(async () => {
   flex: 1;
   display: flex; align-items: center; justify-content: center; gap: 6px;
   padding: 12px 8px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 14px;
-  color: #e8eaf6;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: var(--radius-md);
+  color: #fff;
   font-size: 13px; font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
-.qa-btn:hover { background: rgba(255,255,255,0.14); transform: translateY(-1px); }
+.qa-btn:hover { background: rgba(255,255,255,0.28); transform: translateY(-1px); }
 .qa-btn.primary {
-  background: linear-gradient(135deg, rgba(108,92,231,0.5), rgba(108,92,231,0.3));
-  border-color: rgba(108,92,231,0.5);
-  color: #a29bfe;
+  background: rgba(255,255,255,0.3);
+  border-color: rgba(255,255,255,0.4);
+  color: #fff;
 }
 .qa-icon { font-size: 18px; }
 
@@ -239,8 +239,8 @@ onMounted(async () => {
 }
 
 .stat-card {
-  background: #1e2235;
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-container);
+  /* no-line rule */;
   border-radius: 16px;
   padding: 18px;
   display: flex;
@@ -249,23 +249,23 @@ onMounted(async () => {
 }
 
 .stat-icon-wrap {
-  width: 46px; height: 46px; border-radius: 12px;
+  width: 46px; height: 46px; border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
   font-size: 22px; flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-.stat-label { margin: 0 0 4px; font-size: 12px; color: #8892b0; }
+.stat-label { margin: 0 0 4px; font-size: 12px; color: var(--on-surface-variant); }
 .stat-value {
-  margin: 0; font-size: 22px; font-weight: 800; color: #e8eaf6;
+  margin: 0; font-size: 22px; font-weight: 800; color: var(--on-surface);
 }
-.stat-value small { font-size: 13px; font-weight: 500; color: #8892b0; margin-left: 2px; }
+.stat-value small { font-size: 13px; font-weight: 500; color: var(--on-surface-variant); margin-left: 2px; }
 
 /* ============ 订单区 ============ */
 .section-card {
-  background: #1e2235;
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 20px;
+  background: var(--surface-container);
+  /* no-line rule */;
+  border-radius: var(--radius-lg);
   padding: 20px;
 }
 
@@ -273,11 +273,11 @@ onMounted(async () => {
   display: flex; align-items: center; gap: 10px;
   margin-bottom: 16px;
 }
-.section-title { margin: 0; font-size: 16px; font-weight: 700; color: #e8eaf6; }
+.section-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--on-surface); }
 .section-hint {
-  font-size: 11px; color: #8892b0;
-  background: rgba(255,255,255,0.06);
-  padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; color: var(--on-surface-variant);
+  background: var(--outline-variant);
+  padding: 2px 8px; border-radius: var(--radius-lg);
 }
 
 .order-list { display: flex; flex-direction: column; }
@@ -285,49 +285,49 @@ onMounted(async () => {
 .order-item {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--outline-variant);
 }
 .order-item:last-child { border-bottom: none; }
 
-.order-name { margin: 0 0 4px; font-size: 15px; color: #e8eaf6; font-weight: 600; }
-.order-date { margin: 0 0 6px; font-size: 12px; color: #8892b0; }
+.order-name { margin: 0 0 4px; font-size: 15px; color: var(--on-surface); font-weight: 600; }
+.order-date { margin: 0 0 6px; font-size: 12px; color: var(--on-surface-variant); }
 
 .order-badge {
-  font-size: 11px; padding: 2px 10px; border-radius: 20px; font-weight: 600;
+  font-size: 11px; padding: 2px 10px; border-radius: var(--radius-lg); font-weight: 600;
 }
-.order-badge.completed { background: rgba(0,206,201,0.15); color: #00cec9; }
-.order-badge.pending { background: rgba(253,203,110,0.15); color: #fdcb6e; }
-.order-badge.paid { background: rgba(0,184,148,0.15); color: #00b894; }
-.order-badge.cancelled, .order-badge.failed { background: rgba(255,71,87,0.15); color: #ff4757; }
+.order-badge.completed { background: rgba(127,230,219,0.15); color: var(--secondary); }
+.order-badge.pending { background: rgba(168,50,6,0.15); color: var(--primary); }
+.order-badge.paid { background: rgba(0,184,148,0.15); color: var(--secondary-dim); }
+.order-badge.cancelled, .order-badge.failed { background: rgba(186,26,26,0.15); color: var(--error); }
 
 .order-right { display: flex; align-items: center; gap: 4px; }
 .order-coin { width: 16px; height: 16px; }
-.order-amount { font-size: 16px; font-weight: 700; color: #fdcb6e; }
+.order-amount { font-size: 16px; font-weight: 700; color: var(--primary); }
 
 .empty-block {
   display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 32px 0; text-align: center;
 }
 .empty-emoji { font-size: 40px; }
-.empty-block p { margin: 0; color: #8892b0; font-size: 14px; }
+.empty-block p { margin: 0; color: var(--on-surface-variant); font-size: 14px; }
 .mini-btn {
   padding: 8px 20px;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
-  border: none; border-radius: 20px;
-  color: white; font-size: 13px; font-weight: 600;
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  border: none; border-radius: var(--radius-lg);
+  color: var(--on-primary); font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all 0.2s;
 }
-.mini-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(108,92,231,0.4); }
+.mini-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(168,50,6,0.4); }
 
 .view-all-btn {
   width: 100%; margin-top: 14px; padding: 12px;
-  background: rgba(108,92,231,0.1);
-  border: 1px solid rgba(108,92,231,0.25);
-  border-radius: 12px;
-  color: #a29bfe; font-size: 13px; font-weight: 600;
+  background: rgba(168,50,6,0.1);
+  border: 1px solid rgba(168,50,6,0.25);
+  border-radius: var(--radius-sm);
+  color: var(--primary-container); font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all 0.2s;
 }
-.view-all-btn:hover { background: rgba(108,92,231,0.18); }
+.view-all-btn:hover { background: rgba(168,50,6,0.18); }
 
 @media (max-width: 480px) {
   .hero-amount { font-size: 36px; }

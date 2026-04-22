@@ -3,14 +3,14 @@
     <!-- 顶部统计 -->
     <div class="stats-row">
       <div class="stat-card">
-        <div class="stat-icon" style="background: linear-gradient(135deg,#6c5ce7,#a29bfe)">💰</div>
+        <div class="stat-icon" style="background: linear-gradient(135deg,var(--primary),var(--primary-container))">💰</div>
         <div>
           <p class="stat-label">累计充值</p>
           <p class="stat-value">¥{{ formatBalance(totalRecharge) }}</p>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon" style="background: linear-gradient(135deg,#00b894,#00cec9)">📊</div>
+        <div class="stat-icon" style="background: linear-gradient(135deg,var(--secondary-dim),var(--secondary))">📊</div>
         <div>
           <p class="stat-label">充值次数</p>
           <p class="stat-value">{{ rechargeCount }}<small>次</small></p>
@@ -37,7 +37,7 @@
     <!-- 记录列表 -->
     <div class="record-area">
       <div v-if="loading" class="center-box">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin" style="color:#a29bfe" />
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin" style="color:var(--primary-container)" />
         <p>加载中...</p>
       </div>
       <div v-else-if="filteredRecords.length === 0" class="center-box">
@@ -228,94 +228,94 @@ onUnmounted(() => {
 .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .stat-card {
-  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-container); /* no-line rule */;
   border-radius: 16px; padding: 18px;
   display: flex; align-items: center; gap: 14px;
 }
 .stat-icon {
-  width: 46px; height: 46px; border-radius: 12px;
+  width: 46px; height: 46px; border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
   font-size: 22px; flex-shrink: 0;
 }
-.stat-label { margin: 0 0 4px; font-size: 12px; color: #8892b0; }
-.stat-value { margin: 0; font-size: 22px; font-weight: 800; color: #e8eaf6; }
-.stat-value small { font-size: 13px; font-weight: 500; color: #8892b0; margin-left: 2px; }
+.stat-label { margin: 0 0 4px; font-size: 12px; color: var(--on-surface-variant); }
+.stat-value { margin: 0; font-size: 22px; font-weight: 800; color: var(--on-surface); }
+.stat-value small { font-size: 13px; font-weight: 500; color: var(--on-surface-variant); margin-left: 2px; }
 
 .filter-bar {
-  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-container); /* no-line rule */;
   border-radius: 16px; padding: 16px 20px;
   display: flex; gap: 20px; flex-wrap: wrap;
 }
 .filter-group { display: flex; align-items: center; gap: 10px; }
-.filter-label { font-size: 13px; color: #8892b0; font-weight: 500; white-space: nowrap; }
+.filter-label { font-size: 13px; color: var(--on-surface-variant); font-weight: 500; white-space: nowrap; }
 .filter-select { min-width: 140px; }
 
 .record-area { display: flex; flex-direction: column; gap: 12px; }
 
 .center-box {
-  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 20px; padding: 60px 24px;
+  background: var(--surface-container); /* no-line rule */;
+  border-radius: var(--radius-lg); padding: 60px 24px;
   display: flex; flex-direction: column; align-items: center;
-  gap: 12px; text-align: center; color: #8892b0;
+  gap: 12px; text-align: center; color: var(--on-surface-variant);
 }
 .center-box p { margin: 0; }
 
 .mini-btn {
   padding: 8px 24px;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
-  border: none; border-radius: 20px;
-  color: white; font-size: 13px; font-weight: 600;
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  border: none; border-radius: var(--radius-lg);
+  color: var(--on-primary); font-size: 13px; font-weight: 600;
   cursor: pointer; margin-top: 4px;
 }
 
 .record-list { display: flex; flex-direction: column; gap: 12px; }
 
 .record-card {
-  background: #1e2235; border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-container); /* no-line rule */;
   border-radius: 16px; padding: 18px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.record-card:hover { border-color: rgba(108,92,231,0.3); box-shadow: 0 4px 20px rgba(108,92,231,0.1); }
+.record-card:hover { border-color: rgba(168,50,6,0.3); box-shadow: 0 4px 20px rgba(168,50,6,0.1); }
 
 .rc-top {
   display: flex; justify-content: space-between; align-items: flex-start;
   margin-bottom: 14px; padding-bottom: 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--outline-variant);
 }
-.rc-name { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: #e8eaf6; }
-.rc-id { margin: 0; font-size: 11px; color: #8892b0; font-family: monospace; word-break: break-all; }
+.rc-name { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--on-surface); }
+.rc-id { margin: 0; font-size: 11px; color: var(--on-surface-variant); font-family: monospace; word-break: break-all; }
 
 .status-badge {
-  font-size: 11px; padding: 4px 12px; border-radius: 20px;
+  font-size: 11px; padding: 4px 12px; border-radius: var(--radius-lg);
   font-weight: 700; flex-shrink: 0; margin-left: 8px;
 }
-.status-badge.completed { background: rgba(0,206,201,0.15); color: #00cec9; }
-.status-badge.processing { background: rgba(253,203,110,0.15); color: #fdcb6e; }
-.status-badge.pending { background: rgba(162,155,254,0.15); color: #a29bfe; }
-.status-badge.failed { background: rgba(255,71,87,0.15); color: #ff4757; }
-.status-badge.unknown { background: rgba(255,255,255,0.06); color: #8892b0; }
+.status-badge.completed { background: rgba(127,230,219,0.15); color: var(--secondary); }
+.status-badge.processing { background: rgba(168,50,6,0.15); color: var(--primary); }
+.status-badge.pending { background: rgba(162,155,254,0.15); color: var(--primary-container); }
+.status-badge.failed { background: rgba(186,26,26,0.15); color: var(--error); }
+.status-badge.unknown { background: var(--outline-variant); color: var(--on-surface-variant); }
 
 .rc-details { display: flex; flex-direction: column; gap: 10px; }
 .rc-row { display: flex; justify-content: space-between; align-items: center; }
-.rc-key { font-size: 13px; color: #8892b0; }
-.rc-val { font-size: 13px; color: #e8eaf6; font-weight: 500; }
-.rc-val.amount { font-size: 16px; font-weight: 800; color: #00b894; }
+.rc-key { font-size: 13px; color: var(--on-surface-variant); }
+.rc-val { font-size: 13px; color: var(--on-surface); font-weight: 500; }
+.rc-val.amount { font-size: 16px; font-weight: 800; color: var(--secondary-dim); }
 
 .rc-action {
   margin-top: 14px; padding-top: 14px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--outline-variant);
   display: flex; justify-content: flex-end;
 }
 .query-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 9px 20px;
-  background: rgba(108,92,231,0.15);
-  border: 1px solid rgba(108,92,231,0.3);
+  background: rgba(168,50,6,0.15);
+  border: 1px solid rgba(168,50,6,0.3);
   border-radius: 10px;
-  color: #a29bfe; font-size: 13px; font-weight: 600;
+  color: var(--primary-container); font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all 0.2s;
 }
-.query-btn:hover:not(:disabled) { background: rgba(108,92,231,0.25); }
+.query-btn:hover:not(:disabled) { background: rgba(168,50,6,0.25); }
 .query-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 480px) {

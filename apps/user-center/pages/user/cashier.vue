@@ -5,7 +5,7 @@
         <div class="balance-info">
           <span class="balance-label">当前平台币余额</span>
           <div class="balance-amount">
-            <img src="/platform-coin.svg" alt="平台币" class="coin-icon" />
+            <img src="/logo-warm.svg" alt="平台币" class="coin-icon" />
             <span class="amount">{{ formatBalance(currentBalance) }}</span>
           </div>
         </div>
@@ -26,7 +26,7 @@
           >
             <div class="preset-amount">¥{{ preset.value }}</div>
             <div class="preset-coins">
-              <img src="/platform-coin.svg" alt="平台币" class="preset-coin-icon" />
+              <img src="/logo-warm.svg" alt="平台币" class="preset-coin-icon" />
               {{ Math.floor(preset.value * ptbRate) }}
             </div>
             <div v-if="preset.bonus" class="preset-bonus">{{ preset.bonus }}</div>
@@ -70,7 +70,7 @@
           <div class="exchange-item highlight">
             <span class="label">可获得平台币：</span>
             <span class="value">
-              <img src="/platform-coin.svg" alt="平台币" class="preview-coin-icon" />
+              <img src="/logo-warm.svg" alt="平台币" class="preview-coin-icon" />
               {{ Math.floor(finalAmount * ptbRate) }}
             </span>
           </div>
@@ -370,12 +370,12 @@ onMounted(async () => {
   margin: 0 0 8px;
   font-size: 24px;
   font-weight: 700;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .page-header p {
   margin: 0;
-  color: #718096;
+  color: var(--on-surface-variant);
   font-size: 14px;
 }
 
@@ -383,11 +383,11 @@ onMounted(async () => {
 
 /* 余额显示 */
 .balance-display {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
+  border-radius: var(--radius-sm);
   padding: 20px;
   margin-bottom: 32px;
-  color: white;
+  color: var(--on-primary);
   margin-top: 16px;
 }
 
@@ -428,7 +428,7 @@ onMounted(async () => {
   margin: 0 0 16px;
   font-size: 18px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .preset-amounts {
@@ -439,9 +439,9 @@ onMounted(async () => {
 }
 
 .preset-item {
-  background: #f7fafc;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
+  background: var(--surface);
+  border: 2px solid var(--surface-container-high);
+  border-radius: var(--radius-sm);
   padding: 16px 12px;
   text-align: center;
   cursor: pointer;
@@ -450,19 +450,19 @@ onMounted(async () => {
 }
 
 .preset-item:hover {
-  border-color: #667eea;
+  border-color: var(--primary);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
 }
 
 .preset-item.active {
-  border-color: #667eea;
-  background: #eef2ff;
+  border-color: var(--primary);
+  background: var(--surface-container-low);
 }
 
 .preset-amount {
   font-size: 18px;
   font-weight: 700;
-  color: #2d3748;
+  color: var(--on-surface);
   margin-bottom: 4px;
 }
 
@@ -472,7 +472,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 4px;
   font-size: 14px;
-  color: #4a5568;
+  color: var(--on-surface);
   margin-bottom: 4px;
 }
 
@@ -482,8 +482,8 @@ onMounted(async () => {
 }
 
 .preset-bonus {
-  background: #38a169;
-  color: white;
+  background: var(--secondary-dim);
+  color: var(--on-primary);
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 8px;
@@ -497,7 +497,7 @@ onMounted(async () => {
   margin: 0 0 12px;
   font-size: 16px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .amount-input-group {
@@ -511,15 +511,15 @@ onMounted(async () => {
 .tip-text {
   margin: 0;
   font-size: 12px;
-  color: #718096;
+  color: var(--on-surface-variant);
 }
 
 /* 兑换预览 */
 .exchange-preview {
-  background: #f7fafc;
+  background: var(--surface);
   border-radius: 8px;
   padding: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--surface-container-high);
 }
 
 .exchange-item {
@@ -534,7 +534,7 @@ onMounted(async () => {
 }
 
 .exchange-item.highlight {
-  background: #eef2ff;
+  background: var(--surface-container-low);
   padding: 8px 12px;
   border-radius: 6px;
   margin: 12px -12px -12px;
@@ -542,13 +542,13 @@ onMounted(async () => {
 
 .exchange-item .label {
   font-size: 14px;
-  color: #4a5568;
+  color: var(--on-surface);
 }
 
 .exchange-item .value {
   font-size: 14px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--on-surface);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -568,7 +568,7 @@ onMounted(async () => {
   margin: 0 0 16px;
   font-size: 18px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .payment-methods {
@@ -582,27 +582,27 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: #f7fafc;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
+  background: var(--surface);
+  border: 2px solid var(--surface-container-high);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .payment-method-item:hover {
-  border-color: #667eea;
+  border-color: var(--primary);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
 }
 
 .payment-method-item.active {
-  border-color: #667eea;
-  background: #eef2ff;
+  border-color: var(--primary);
+  background: var(--surface-container-low);
 }
 
 .method-icon {
   width: 24px;
   height: 24px;
-  color: #4a5568;
+  color: var(--on-surface);
 }
 
 .method-info {
@@ -615,18 +615,18 @@ onMounted(async () => {
 .method-name {
   font-size: 16px;
   font-weight: 500;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .method-balance {
   font-size: 12px;
-  color: #718096;
+  color: var(--on-surface-variant);
 }
 
 .check-icon {
   width: 20px;
   height: 20px;
-  color: #667eea;
+  color: var(--primary);
   opacity: 0;
   transition: opacity 0.3s;
 }
@@ -654,12 +654,12 @@ onMounted(async () => {
 .terms-text p {
   margin: 0;
   font-size: 12px;
-  color: #718096;
+  color: var(--on-surface-variant);
   line-height: 1.5;
 }
 
 .terms-link {
-  color: #667eea;
+  color: var(--primary);
   text-decoration: none;
 }
 
@@ -669,8 +669,8 @@ onMounted(async () => {
 
 /* 充值说明 */
 .info-section {
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
@@ -679,7 +679,7 @@ onMounted(async () => {
   margin: 0 0 16px;
   font-size: 16px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .info-list {
@@ -691,13 +691,13 @@ onMounted(async () => {
 .info-list li {
   margin-bottom: 8px;
   font-size: 14px;
-  color: #4a5568;
+  color: var(--on-surface);
   position: relative;
 }
 
 .info-list li:before {
   content: '•';
-  color: #667eea;
+  color: var(--primary);
   font-weight: bold;
   position: absolute;
   left: -16px;
@@ -715,7 +715,7 @@ onMounted(async () => {
   
   .cashier-card {
     padding: 20px;
-    border-radius: 12px;
+    border-radius: var(--radius-sm);
   }
   
   .preset-amounts {

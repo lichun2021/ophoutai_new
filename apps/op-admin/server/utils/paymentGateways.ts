@@ -210,14 +210,14 @@ const uzepayV2Provider: PaymentProvider = {
     async query(req: QueryOrderRequest, creds?: Record<string, any>): Promise<QueryOrderResponse> {
         const cfg = { ...uzepayV2Config, ...(creds || {}) };
         const timestamp = Math.floor(Date.now() / 1000).toString();
-        
+
         // 构建询单参数
         const params: Record<string, any> = {
             pid: cfg.pid,
             timestamp,
             sign_type: 'MD5'
         };
-        
+
         // 至少需要一个订单号
         if (req.trade_no) {
             params.trade_no = req.trade_no;
@@ -225,12 +225,12 @@ const uzepayV2Provider: PaymentProvider = {
         if (req.out_trade_no) {
             params.out_trade_no = req.out_trade_no;
         }
-        
+
         // 生成签名
         const signString = buildSignString(params) + (cfg.md5Key || '');
         params.sign = crypto.createHash('md5').update(signString).digest('hex');
-        
-        
+
+
         // 发送询单请求
         const response = await fetch('https://pay.uzepay.com/api/pay/query', {
             method: 'POST',
@@ -238,13 +238,13 @@ const uzepayV2Provider: PaymentProvider = {
             body: new URLSearchParams(params).toString(),
             signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(30000) : undefined
         });
-        
+
         if (!response.ok) {
             return { code: -1, msg: `HTTP错误: ${response.status}` };
         }
-        
+
         const result: any = await response.json().catch(() => ({}));
-        
+
         // 处理响应 - code=0表示成功
         if (Number(result.code) === 0) {
             return {
@@ -259,7 +259,7 @@ const uzepayV2Provider: PaymentProvider = {
                 endtime: result.endtime || ''
             };
         }
-        
+
         return { code: result.code || -1, msg: result.msg || '询单失败' };
     }
 };
@@ -324,7 +324,7 @@ const yxinpayProvider: PaymentProvider = {
             console.log('[Pay][yxinpayV1] URL:', cfg.baseUrl);
             console.log('[Pay][yxinpayV1] PID:', cfg.pid);
             console.log('[Pay][yxinpayV1] Params:', params);
-        } catch {}
+        } catch { }
 
         const result: any = await response.json().catch(() => ({}));
         const successCode = Number(result.code);
@@ -334,28 +334,28 @@ const yxinpayProvider: PaymentProvider = {
                 msg: result.msg || 'success',
                 trade_no: result.trade_no || ''
             };
-            
+
             // 根据 pay_type 判断如何处理 pay_info
             const payType = result.pay_type || '';
             const payInfo = result.payurl || result.pay_info || result.cashurl || null;
-            
+
             // 除了 qrcode 类型，其他所有类型的 pay_info 都只赋值给 payurl
             if (payInfo) normalized.payurl = payInfo;
-            
+
             if (payType === 'qrcode') {
                 // 只有 qrcode 类型时，pay_info 才可能是二维码链接
                 if (result.qrcode) normalized.qrcode = result.qrcode;
                 else if (!normalized.qrcode && result.pay_info) normalized.qrcode = result.pay_info;
             }
-            
+
             if (result.cashurl && !normalized.payurl) normalized.payurl = result.cashurl;
             if (result.html) normalized.html = result.html;
             if (result.urlscheme) normalized.urlscheme = result.urlscheme;
-            
+
             try {
                 console.log('[Pay][yxinpayV1] Normalized:', normalized);
-            } catch {}
-            
+            } catch { }
+
             return normalized;
         }
         return { code: -1, msg: result.msg || '第三方返回失败', thirdParty: true };
@@ -367,12 +367,12 @@ const yxinpayProvider: PaymentProvider = {
         // console.log('[Pay][yxinpayV1] 签名类型:', signType);
         // console.log('[Pay][yxinpayV1] 配置的签名类型:', cfg.signType);
         // console.log('[Pay][yxinpayV1] 回调参数:', JSON.stringify(params, null, 2));
-        
+
         const base = { ...params };
         delete (base as any).sign; delete (base as any).sign_type;
         const signSource = buildSignString(base);
         // console.log('[Pay][yxinpayV1] 签名字符串:', signSource);
-        
+
         if (signType === 'RSA') {
             // 验签使用平台公钥
             const platformPublicKey = cfg.rsaPlatformPublicKey;
@@ -403,7 +403,7 @@ const yxinpayProvider: PaymentProvider = {
     },
     async query(req: QueryOrderRequest, creds?: Record<string, any>): Promise<QueryOrderResponse> {
         const cfg = { ...yxinpayConfig, ...(creds || {}) };
-        const queryUrl = cfg.queryUrl ;
+        const queryUrl = cfg.queryUrl;
         const timestamp = Math.floor(Date.now() / 1000).toString();
         const signType = String(cfg.signType || 'MD5').toUpperCase();
         const params: Record<string, any> = {
@@ -498,7 +498,7 @@ const mimmmaProvider: PaymentProvider = {
         try {
             console.log('[Pay][mimmmaV1] URL:', cfg.baseUrl);
             console.log('[Pay][mimmmaV1] Params:', params);
-        } catch {}
+        } catch { }
 
         const response = await fetch(cfg.baseUrl, {
             method: 'POST',
@@ -539,8 +539,8 @@ const mimmmaProvider: PaymentProvider = {
 };
 
 const ahqlhConfig = {
-    baseUrl: 'https://zf.ahqlhkj.top/mapi.php',
-    apiUrl: 'https://zf.ahqlhkj.top/api.php',
+    baseUrl: 'https://twwzf.ahqlhkj.top/mapi.php',
+    apiUrl: 'https://twwzf.ahqlhkj.top/api.php',
     pid: '1025',
     md5Key: 'io24FF538Xv5TtlUx45okLXQQz6LLZ1w'
 };
@@ -549,7 +549,7 @@ const ahqlhProvider: PaymentProvider = {
     key: 'ahqlhV1',
     async execute(req: ThirdPartyRequest, creds?: Record<string, any>): Promise<NormalizedPayResponse> {
         const cfg = { ...ahqlhConfig, ...(creds || {}) };
-        
+
         // 转换支付类型为该网关要求的格式
         let payType = req.type || 'alipay';
         if (payType === 'zfb') payType = 'alipay';
@@ -575,7 +575,7 @@ const ahqlhProvider: PaymentProvider = {
         try {
             console.log('[Pay][ahqlhV1] URL:', cfg.baseUrl);
             console.log('[Pay][ahqlhV1] Params:', params);
-        } catch {}
+        } catch { }
 
         const response = await fetch(cfg.baseUrl, {
             method: 'POST',
@@ -616,7 +616,7 @@ const ahqlhProvider: PaymentProvider = {
     },
     async query(req: QueryOrderRequest, creds?: Record<string, any>): Promise<QueryOrderResponse> {
         const cfg = { ...ahqlhConfig, ...(creds || {}) };
-        
+
         // 构建查询参数
         const params: Record<string, any> = {
             act: 'order',
@@ -679,7 +679,7 @@ const meidaProvider: PaymentProvider = {
     key: 'meidaV1',
     async execute(req: ThirdPartyRequest, creds?: Record<string, any>): Promise<NormalizedPayResponse> {
         const cfg = { ...meidaConfig, ...(creds || {}) };
-        
+
         let payType = req.type || 'alipay';
         if (payType === 'zfb') payType = 'alipay';
         if (payType === 'wx' || payType === 'weixin') payType = 'wxpay';
@@ -705,14 +705,14 @@ const meidaProvider: PaymentProvider = {
             .sort()
             .forEach(k => { filtered[k] = params[k]; });
         const signSource = Object.keys(filtered).map(k => `${k}=${filtered[k]}`).join('&');
-        
+
         const signStr = signSource + (cfg.md5Key || '');
         params.sign = crypto.createHash('md5').update(signStr).digest('hex');
 
         try {
             console.log('[Pay][meidaV1] URL:', cfg.baseUrl);
             console.log('[Pay][meidaV1] Params:', params);
-        } catch {}
+        } catch { }
 
         const response = await fetch(cfg.baseUrl, {
             method: 'POST',
@@ -746,7 +746,7 @@ const meidaProvider: PaymentProvider = {
         const base = { ...params };
         delete (base as any).sign;
         delete (base as any).sign_type;
-        
+
         // 校验签名也需要遵循：值为空或0时不参与签名
         const filtered: Record<string, any> = {};
         Object.keys(base)
@@ -762,7 +762,7 @@ const meidaProvider: PaymentProvider = {
     },
     async query(req: QueryOrderRequest, creds?: Record<string, any>): Promise<QueryOrderResponse> {
         const cfg = { ...meidaConfig, ...(creds || {}) };
-        
+
         const params: Record<string, any> = {
             act: 'order',
             pid: cfg.pid,
@@ -782,7 +782,7 @@ const meidaProvider: PaymentProvider = {
             .sort()
             .forEach(k => { filtered[k] = params[k]; });
         const signSource = Object.keys(filtered).map(k => `${k}=${filtered[k]}`).join('&');
-        
+
         const signStr = signSource + (cfg.md5Key || '');
         params.sign = crypto.createHash('md5').update(signStr).digest('hex');
 
@@ -802,11 +802,11 @@ const meidaProvider: PaymentProvider = {
 
             if (Number(result.code) === 1) {
                 return {
-                    code: 0, 
+                    code: 0,
                     msg: result.msg || 'success',
                     trade_no: result.trade_no || '',
                     out_trade_no: result.out_trade_no || '',
-                    status: Number(result.status), 
+                    status: Number(result.status),
                     money: result.money || '',
                     name: result.name || '',
                     addtime: result.addtime || '',
@@ -835,7 +835,7 @@ const sxjzszProvider: PaymentProvider = {
     async execute(req: ThirdPartyRequest, creds?: Record<string, any>): Promise<NormalizedPayResponse> {
         const cfg = { ...sxjzszConfig, ...(creds || {}) };
         const timestamp = Math.floor(Date.now() / 1000).toString();
-        
+
         let payType = req.type || 'alipay';
         if (payType === 'zfb' || payType === 'alipay') payType = 'alipay';
         if (payType === 'wx' || payType === 'weixin' || payType === 'wxpay') payType = 'wxpay';
@@ -860,7 +860,7 @@ const sxjzszProvider: PaymentProvider = {
         try {
             console.log('[Pay][sxjzszV1] URL:', cfg.baseUrl);
             console.log('[Pay][sxjzszV1] Params:', params);
-        } catch {}
+        } catch { }
 
         const response = await fetch(cfg.baseUrl, {
             method: 'POST',
@@ -986,12 +986,12 @@ export const gatewayParamSets: Record<string, GatewayParamSet & { supportQuery?:
     // payment=4 接入 ahqlhPay
     '4': {
         providerKey: 'ahqlhV1',
-        name: '老许强盛支付5%',  
+        name: '老许强盛支付5%',
         supportQuery: true,
         isOpen: true,
         credentials: {
-            baseUrl: 'https://zf.ahqlhkj.top/mapi.php',
-            apiUrl: 'https://zf.ahqlhkj.top/api.php',
+            baseUrl: 'https://twwzf.ahqlhkj.top/mapi.php',
+            apiUrl: 'https://twwzf.ahqlhkj.top/api.php',
             pid: '1025',
             md5Key: 'io24FF538Xv5TtlUx45okLXQQz6LLZ1w'
         }
@@ -1062,7 +1062,7 @@ export async function selectPaymentChannelByRules(amount: number, paymentMethod?
 
         const rules = await getActiveRules();
         console.log(`[Payment Routing] 获取到 ${rules.length} 条激活规则`);
-        
+
         // 找到第一个匹配的规则（金额、时间、额度、支付方式）
         let matchedRule = null;
         for (const rule of rules) {
@@ -1080,7 +1080,7 @@ export async function selectPaymentChannelByRules(amount: number, paymentMethod?
         }
 
         console.log(`[Payment Routing] 最终匹配到规则: ${matchedRule.rule_name || '未命名'}, 目标渠道: ${matchedRule.payment_channel}`);
-        
+
         // 将订单与规则的映射关系存入 Redis（有效期 24h），供后续回调成功时增加额度
         if (transactionId && matchedRule.id) {
             await saveOrderRuleMapping(transactionId, matchedRule.id);
@@ -1100,13 +1100,13 @@ export async function selectPaymentChannelByRules(amount: number, paymentMethod?
 // 辅助函数：检查规则条件（金额、时间、额度、支付方式）
 async function matchRuleConditions(rule: any, amount: number, paymentMethod?: string): Promise<boolean> {
     const { checkAndUpdateQuota } = await import('../model/paymentRouting');
-    
+
     // 0. 检查支付方式是否允许
     if (paymentMethod) {
         const method = paymentMethod.toLowerCase();
         const isZfb = method.includes('zfb') || method.includes('ali');
         const isWx = method.includes('wx') || method.includes('weixin') || method.includes('wechat');
-        
+
         if (isZfb && rule.allow_zfb === 0) return false;
         if (isWx && rule.allow_wx === 0) return false;
     }
@@ -1123,7 +1123,7 @@ async function matchRuleConditions(rule: any, amount: number, paymentMethod?: st
     if (rule.time_start && rule.time_end) {
         const now = new Date();
         const currentTime = now.toTimeString().slice(0, 8);
-        
+
         if (rule.time_start < rule.time_end) {
             // 正常时间段
             if (currentTime < rule.time_start || currentTime > rule.time_end) {
@@ -1146,18 +1146,19 @@ async function matchRuleConditions(rule: any, amount: number, paymentMethod?: st
     return true;
 }
 
-export async function selectProviderBySystemParam(amount?: number, paymentMethod?: string, transactionId?: string): Promise<{ 
-    provider: PaymentProvider; 
+export async function selectProviderBySystemParam(amount?: number, paymentMethod?: string, transactionId?: string): Promise<{
+    provider: PaymentProvider;
     credentials: Record<string, any>;
     channelId: string;
-}>{
+}> {
     // 1. 优先获取开关状态和系统配置的默认渠道
     const routingEnabled = await getSystemParam('payment_routing_enabled', 'false');
     const defaultChannel = await getSystemParam('payment', '1');
+    console.log(`[Payment Gateway] 入参: amount=${amount}, paymentMethod=${paymentMethod}, transactionId=${transactionId}`);
     console.log(`[Payment Gateway] 当前路由状态: ${routingEnabled}, 系统默认渠道: ${defaultChannel}`);
-    
+
     let key: string;
-    
+
     // 2. 严格策略：只有当路由开启且金额有效时才进入匹配，否则唯一的渠道就是 defaultChannel
     if (routingEnabled === 'true' && amount !== undefined && amount > 0) {
         key = await selectPaymentChannelByRules(amount, paymentMethod, transactionId);
@@ -1165,13 +1166,14 @@ export async function selectProviderBySystemParam(amount?: number, paymentMethod
         key = defaultChannel;
         console.log(`[Payment Gateway] 路由已关闭或条件不足，严格使用系统唯一默认渠道: ${key}`);
     }
-    
+
     // 如果返回的渠道 ID 不在我们的 JS 配置中，尝试回退到默认渠道 1
     const set = gatewayParamSets[key] || gatewayParamSets['1'];
     const provider = providers[set.providerKey] || uzepayV2Provider;
-    
-    console.log(`[Payment Gateway] 最终使用渠道 ID: ${key} (提供商: ${set.providerKey})`);
-    
+
+    console.log(`[Payment Gateway] ★ 最终选择: 渠道ID=${key}, 提供商=${set.providerKey}, 名称=${set.name || '未命名'}`);
+
+
     return { provider, credentials: set.credentials, channelId: key };
 }
 
@@ -1212,7 +1214,7 @@ export async function isSupportQueryBySystemParam(): Promise<boolean> {
 export async function executeQueryBySystemParam(req: QueryOrderRequest): Promise<QueryOrderResponse> {
     const key = await getSystemParam('payment', '1');
     const set = gatewayParamSets[key] || gatewayParamSets['1'];
-    
+
     // 检查是否支持询单
     if (!set.supportQuery) {
         return {
@@ -1220,9 +1222,9 @@ export async function executeQueryBySystemParam(req: QueryOrderRequest): Promise
             msg: '当前支付渠道不支持询单功能'
         };
     }
-    
+
     const provider = providers[set.providerKey] || uzepayV2Provider;
-    
+
     // 检查provider是否实现了query方法
     if (!provider.query) {
         return {
@@ -1230,6 +1232,6 @@ export async function executeQueryBySystemParam(req: QueryOrderRequest): Promise
             msg: '当前支付渠道未实现询单接口'
         };
     }
-    
+
     return provider.query(req, set.credentials);
 }

@@ -69,7 +69,7 @@ const handleClose = () => {
 }
 
 .close-button:hover {
-  background-color: #f0f0f0;
+  background-color: var(--surface-container);
 }
 
 .modal-body {
@@ -95,14 +95,14 @@ form input, form select {
 }
 
 form input:focus, form select:focus {
-  border-color: #007BFF;
+  border-color: var(--primary);
   outline: none;
 }
 
 form button {
   width: 100%;
   padding: 10px;
-  background-color: #2a9d8f;
+  background-color: var(--secondary-dim);
   color: white;
   border: none;
   border-radius: 5px;
@@ -112,6 +112,6 @@ form button {
 }
 
 form button:hover {
-  background-color: #21867a;
+  background-color: var(--secondary-dim);
 }
 </style>

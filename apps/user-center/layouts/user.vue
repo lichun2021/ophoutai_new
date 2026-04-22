@@ -1,11 +1,11 @@
-<!-- layouts/user.vue - 深色游戏风格布局 -->
+<!-- layouts/user.vue - DESIGN.md 暖色风格布局 -->
 <template>
   <div class="user-layout">
     <!-- PC端侧边栏 -->
     <aside class="pc-sidebar">
       <div class="sidebar-brand">
         <div class="brand-logo">
-          <img src="/platform-coin.svg" alt="logo" class="brand-icon" />
+          <img src="/logo-warm.svg" alt="logo" class="brand-icon" />
         </div>
         <span class="brand-name">会员中心</span>
       </div>
@@ -16,7 +16,7 @@
         <div class="user-meta">
           <p class="user-name">{{ userDisplayName }}</p>
           <div class="user-balance-row">
-            <img src="/platform-coin.svg" alt="coin" class="coin-sm" />
+            <img src="/logo-warm.svg" alt="coin" class="coin-sm" />
             <span class="user-coins">{{ formatBalance(userBalance) }}</span>
           </div>
         </div>
@@ -55,7 +55,7 @@
 
     <!-- 主容器 -->
     <div class="main-wrap">
-      <!-- 顶部栏（PC端） -->
+      <!-- 顶部栏 -->
       <header class="top-bar">
         <div class="top-bar-left">
           <button class="mobile-menu-btn" @click="toggleMobileMenu">
@@ -65,7 +65,7 @@
         </div>
         <div class="top-bar-right">
           <div class="balance-chip">
-            <img src="/platform-coin.svg" alt="coin" class="chip-coin" />
+            <img src="/logo-warm.svg" alt="coin" class="chip-coin" />
             <span>{{ formatBalance(userBalance) }}</span>
           </div>
           <div class="top-avatar">{{ userInitial }}</div>
@@ -112,7 +112,7 @@
               <div>
                 <p class="drawer-name">{{ userDisplayName }}</p>
                 <div class="drawer-coins">
-                  <img src="/platform-coin.svg" alt="coin" class="coin-sm" />
+                  <img src="/logo-warm.svg" alt="coin" class="coin-sm" />
                   <span>{{ formatBalance(userBalance) }}</span>
                 </div>
               </div>
@@ -180,37 +180,21 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
 </script>
 
 <style scoped>
-/* ============ 全局变量 ============ */
-:root {
-  --c-bg: #0d0f1a;
-  --c-surface: #161929;
-  --c-card: #1e2235;
-  --c-border: rgba(255,255,255,0.08);
-  --c-primary: #6c5ce7;
-  --c-primary-glow: rgba(108,92,231,0.35);
-  --c-accent: #00cec9;
-  --c-gold: #fdcb6e;
-  --c-text: #e8eaf6;
-  --c-muted: #8892b0;
-  --c-danger: #ff4757;
-}
-
 /* ============ 基础布局 ============ */
 .user-layout {
   display: flex;
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--c-bg);
-  color: var(--c-text);
-  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-family);
 }
 
 /* ============ PC 侧边栏 ============ */
 .pc-sidebar {
   width: 240px;
   min-height: 100vh;
-  background: var(--c-surface);
-  border-right: 1px solid var(--c-border);
+  background: var(--surface-container-low);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -223,41 +207,37 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
   align-items: center;
   gap: 10px;
   padding: 24px 20px 20px;
-  border-bottom: 1px solid var(--c-border);
 }
 
 .brand-icon { width: 32px; height: 32px; }
 .brand-name {
   font-size: 18px;
   font-weight: 700;
-  background: linear-gradient(135deg, #a29bfe, #6c5ce7);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--primary);
 }
 
 .sidebar-user-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 16px 12px;
+  margin: 8px 12px 16px;
   padding: 14px;
-  background: var(--c-card);
-  border-radius: 14px;
-  border: 1px solid var(--c-border);
+  background: var(--surface-container);
+  border-radius: var(--radius-md);
 }
 
 .user-avatar {
   width: 42px; height: 42px; border-radius: 50%;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: 700; color: white;
+  font-size: 18px; font-weight: 700; color: var(--on-primary);
   flex-shrink: 0;
 }
 
-.user-name { font-size: 14px; font-weight: 600; color: var(--c-text); margin: 0 0 4px; }
+.user-name { font-size: 14px; font-weight: 600; color: var(--on-surface); margin: 0 0 4px; }
 .user-balance-row { display: flex; align-items: center; gap: 4px; }
 .coin-sm { width: 14px; height: 14px; }
-.user-coins { font-size: 13px; color: var(--c-gold); font-weight: 600; }
+.user-coins { font-size: 13px; color: var(--primary); font-weight: 600; }
 
 .sidebar-nav {
   flex: 1;
@@ -270,31 +250,32 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
 .sn-item {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
-  border-radius: 12px;
-  color: var(--c-muted);
+  border-radius: var(--radius-sm);
+  color: var(--on-surface-variant);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.2s;
+  transition: all var(--transition);
 }
-.sn-item:hover { background: rgba(108,92,231,0.12); color: var(--c-text); }
+.sn-item:hover { background: var(--surface-container); color: var(--on-surface); }
 .sn-item.active {
-  background: linear-gradient(135deg, rgba(108,92,231,0.25), rgba(108,92,231,0.1));
-  color: #a29bfe;
-  border: 1px solid rgba(108,92,231,0.3);
+  background: var(--primary-container);
+  color: var(--primary);
+  font-weight: 600;
 }
 .sn-icon { font-size: 18px; }
 
-.sidebar-bottom { padding: 12px; border-top: 1px solid var(--c-border); }
+.sidebar-bottom { padding: 12px; }
 .logout-btn {
   width: 100%; display: flex; align-items: center; gap: 10px;
-  padding: 11px 16px; border-radius: 12px;
-  background: transparent; color: var(--c-danger);
-  border: 1px solid rgba(255,71,87,0.2);
+  padding: 11px 16px; border-radius: var(--radius-sm);
+  background: transparent; color: var(--error);
+  border: none;
   font-size: 14px; cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition);
+  font-family: var(--font-family);
 }
-.logout-btn:hover { background: rgba(255,71,87,0.12); }
+.logout-btn:hover { background: var(--error-container); }
 
 /* ============ 主区域 ============ */
 .main-wrap {
@@ -309,37 +290,36 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 24px;
   height: 64px;
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border);
+  background: var(--surface-container-low);
+  box-shadow: 0 1px 0 var(--outline-variant);
   position: sticky; top: 0; z-index: 20;
 }
 
 .top-bar-left { display: flex; align-items: center; gap: 12px; }
 .mobile-menu-btn {
   display: none;
-  background: none; border: none; color: var(--c-text);
+  background: none; border: none; color: var(--on-surface);
   cursor: pointer; padding: 6px;
   border-radius: 8px;
 }
-.top-title { font-size: 16px; font-weight: 600; color: var(--c-text); }
+.top-title { font-size: 16px; font-weight: 600; color: var(--on-surface); }
 
 .top-bar-right { display: flex; align-items: center; gap: 12px; }
 
 .balance-chip {
   display: flex; align-items: center; gap: 6px;
-  background: var(--c-card);
-  border: 1px solid rgba(253,203,110,0.3);
-  border-radius: 20px;
+  background: var(--surface-container);
+  border-radius: var(--radius-xl);
   padding: 6px 14px;
-  font-size: 14px; font-weight: 600; color: var(--c-gold);
+  font-size: 14px; font-weight: 600; color: var(--primary);
 }
 .chip-coin { width: 16px; height: 16px; }
 
 .top-avatar {
   width: 36px; height: 36px; border-radius: 50%;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 700; color: white;
+  font-size: 14px; font-weight: 700; color: var(--on-primary);
 }
 
 .main-content {
@@ -355,11 +335,10 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
   display: none;
   position: fixed; bottom: 0; left: 0; right: 0;
   height: 68px;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border);
+  background: var(--surface-container-low);
+  box-shadow: 0 -1px 0 var(--outline-variant);
   z-index: 40;
   padding-bottom: env(safe-area-inset-bottom);
-  backdrop-filter: blur(20px);
   align-items: center;
   justify-content: space-around;
 }
@@ -368,12 +347,12 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
   display: flex; flex-direction: column; align-items: center;
   gap: 2px; padding: 6px 12px;
   text-decoration: none;
-  color: var(--c-muted);
-  transition: all 0.2s;
-  border-radius: 12px;
+  color: var(--on-surface-variant);
+  transition: all var(--transition);
+  border-radius: var(--radius-sm);
   flex: 1;
 }
-.bn-item.active { color: #a29bfe; }
+.bn-item.active { color: var(--primary); }
 .bn-icon { font-size: 20px; }
 .bn-label { font-size: 10px; font-weight: 500; }
 
@@ -383,18 +362,18 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
 }
 .bn-icon-center {
   font-size: 22px;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
   width: 44px; height: 44px;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 16px var(--c-primary-glow);
+  box-shadow: 0 4px 16px rgba(168,50,6,0.25);
   margin-top: -16px;
 }
 
 /* ============ 抽屉 ============ */
 .drawer-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(78,33,32,0.3);
   backdrop-filter: blur(4px);
   z-index: 50;
   display: flex;
@@ -402,31 +381,30 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
 
 .drawer {
   width: 280px;
-  background: var(--c-surface);
+  background: var(--surface-container-low);
   height: 100%;
   display: flex; flex-direction: column;
-  border-right: 1px solid var(--c-border);
 }
 
 .drawer-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 20px 16px;
-  border-bottom: 1px solid var(--c-border);
 }
 
 .drawer-user { display: flex; align-items: center; gap: 12px; }
 .drawer-avatar {
   width: 44px; height: 44px; border-radius: 50%;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: 700; color: white;
+  font-size: 18px; font-weight: 700; color: var(--on-primary);
 }
 
 .drawer-name { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
-.drawer-coins { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--c-gold); font-weight: 600; }
+.drawer-coins { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--primary); font-weight: 600; }
 .drawer-close {
-  background: var(--c-card); border: 1px solid var(--c-border);
-  border-radius: 8px; padding: 6px; color: var(--c-muted);
+  background: var(--surface-container);
+  border: none;
+  border-radius: 8px; padding: 6px; color: var(--on-surface-variant);
   cursor: pointer;
 }
 
@@ -434,18 +412,19 @@ const handleLogout = () => { authStore.logOut(); closeMobileMenu(); };
 
 .drawer-item {
   display: flex; align-items: center; gap: 12px;
-  padding: 13px 16px; border-radius: 12px;
-  color: var(--c-muted); text-decoration: none;
+  padding: 13px 16px; border-radius: var(--radius-sm);
+  color: var(--on-surface-variant); text-decoration: none;
   font-size: 15px; font-weight: 500;
-  transition: all 0.2s;
+  transition: all var(--transition);
   width: 100%; background: none; border: none; cursor: pointer;
   margin-bottom: 4px;
+  font-family: var(--font-family);
 }
-.drawer-item:hover { background: rgba(255,255,255,0.06); color: var(--c-text); }
-.drawer-item.active { background: rgba(108,92,231,0.15); color: #a29bfe; }
-.drawer-item.danger { color: var(--c-danger); }
-.drawer-item.danger:hover { background: rgba(255,71,87,0.1); }
-.drawer-sep { height: 1px; background: var(--c-border); margin: 8px 0; }
+.drawer-item:hover { background: var(--surface-container); color: var(--on-surface); }
+.drawer-item.active { background: var(--primary-container); color: var(--primary); }
+.drawer-item.danger { color: var(--error); }
+.drawer-item.danger:hover { background: var(--error-container); }
+.drawer-sep { height: 0; margin: 12px 0; }
 
 /* ============ 动画 ============ */
 .drawer-enter-active, .drawer-leave-active { transition: opacity 0.25s; }

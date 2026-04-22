@@ -3,12 +3,12 @@
     <!-- 背景装饰 -->
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
-    <div class="bg-grid"></div>
+
 
     <div class="register-box">
       <!-- Logo -->
       <div class="register-logo">
-        <img src="/platform-coin.svg" alt="logo" class="logo-img" />
+        <img src="/logo-warm.svg" alt="logo" class="logo-img" />
         <h1 class="logo-title">用户注册</h1>
         <p class="logo-sub">创建您的账户</p>
       </div>
@@ -307,227 +307,49 @@ const handleModalClose = () => {
   }
 };
 </script>
-
 <style scoped>
-.register-page {
-  min-height: 100vh;
-  background: #0d0f1a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  position: relative;
-  overflow: hidden;
-  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
-}
-
-.bg-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  pointer-events: none;
-}
-.orb-1 {
-  width: 400px; height: 400px;
-  background: rgba(108,92,231,0.2);
-  top: -100px; left: -100px;
-}
-.orb-2 {
-  width: 300px; height: 300px;
-  background: rgba(0,206,201,0.15);
-  bottom: -50px; right: -50px;
-}
-.bg-grid {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-}
-
-.register-box {
-  position: relative;
-  width: 100%;
-  max-width: 420px;
-  background: #161929;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 24px;
-  padding: 40px 36px;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(108,92,231,0.15);
-}
-
-.register-logo {
-  text-align: center;
-  margin-bottom: 28px;
-}
-.logo-img {
-  width: 56px; height: 56px;
-  margin-bottom: 10px;
-  filter: drop-shadow(0 0 20px rgba(108,92,231,0.6));
-}
-.logo-title {
-  margin: 0 0 6px;
-  font-size: 24px;
-  font-weight: 800;
-  background: linear-gradient(135deg, #a29bfe, #6c5ce7);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.logo-sub {
-  margin: 0;
-  font-size: 13px;
-  color: #8892b0;
-}
-
-/* 状态条 */
-.status-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 13px;
-  margin-bottom: 20px;
-}
-.status-loading {
-  background: rgba(108,92,231,0.1);
-  border: 1px solid rgba(108,92,231,0.25);
-  color: #a29bfe;
-}
-.status-error {
-  background: rgba(225,112,85,0.1);
-  border: 1px solid rgba(225,112,85,0.25);
-  color: #e17055;
-}
+.register-page { min-height: 100vh; background: #fff4f3 !important; display: flex; align-items: center; justify-content: center; padding: 20px; position: relative; overflow: hidden; font-family: var(--font-family); }
+.bg-orb { position: absolute; border-radius: 50%; filter: blur(100px); pointer-events: none; }
+.orb-1 { width: 420px; height: 420px; background: rgba(168,50,6,0.1); top: -120px; left: -120px; }
+.orb-2 { width: 340px; height: 340px; background: rgba(127,230,219,0.12); bottom: -80px; right: -80px; }
+.register-box { position: relative; width: 100%; max-width: 420px; background: var(--surface-container-low); border-radius: var(--radius-lg); padding: 40px 36px; box-shadow: 0 40px 60px -5px var(--shadow-ambient); }
+.register-logo { text-align: center; margin-bottom: 28px; }
+.logo-img { width: 56px; height: 56px; margin-bottom: 10px; filter: drop-shadow(0 4px 12px rgba(168,50,6,0.25)); }
+.logo-title { margin: 0 0 6px; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--primary); }
+.logo-sub { margin: 0; font-size: 13px; color: var(--on-surface-variant); }
+.status-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 20px; }
+.status-loading { background: var(--surface-container); color: var(--primary); }
+.status-error { background: var(--error-container); color: var(--error); }
 .status-icon { font-size: 15px; }
-
-/* 表单 */
 .register-form { display: flex; flex-direction: column; gap: 18px; }
 .form-field { display: flex; flex-direction: column; gap: 7px; }
-.field-label { font-size: 13px; font-weight: 600; color: #8892b0; }
-
-.input-wrap {
-  display: flex; align-items: center;
-  background: #0d0f1a;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.input-wrap:focus-within {
-  border-color: rgba(108,92,231,0.6);
-  box-shadow: 0 0 0 3px rgba(108,92,231,0.15);
-}
-.input-icon {
-  padding: 0 12px;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-.field-input {
-  flex: 1;
-  padding: 13px 16px 13px 0;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #e8eaf6;
-  font-size: 15px;
-}
-.field-input::placeholder { color: rgba(136,146,176,0.5); }
+.field-label { font-size: 13px; font-weight: 600; color: var(--on-surface-variant); }
+.input-wrap { display: flex; align-items: center; background: var(--surface-container); border-radius: var(--radius-sm); overflow: hidden; transition: box-shadow var(--transition); border-bottom: 3px solid transparent; }
+.input-wrap:focus-within { border-bottom-color: var(--secondary); box-shadow: 0 2px 12px rgba(127,230,219,0.15); }
+.input-icon { padding: 0 12px; font-size: 16px; flex-shrink: 0; }
+.field-input { flex: 1; padding: 13px 16px 13px 0; background: transparent; border: none; outline: none; color: var(--on-surface); font-size: 15px; font-family: var(--font-family); }
+.field-input::placeholder { color: var(--on-surface-variant); opacity: 0.5; }
 .field-input:disabled { opacity: 0.4; }
-
-.register-btn {
-  margin-top: 6px;
-  padding: 15px;
-  border-radius: 14px;
-  border: none;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
-  color: white;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 8px 24px rgba(108,92,231,0.4);
-}
-.register-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(108,92,231,0.5);
-}
+.register-btn { margin-top: 6px; padding: 15px; border-radius: var(--radius-xl); border: none; background: linear-gradient(135deg, var(--primary), var(--primary-container)); color: var(--on-primary); font-size: 16px; font-weight: 700; letter-spacing: 4px; cursor: pointer; transition: all var(--transition); box-shadow: 0 8px 24px rgba(168,50,6,0.3); font-family: var(--font-family); }
+.register-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(168,50,6,0.4); }
+.register-btn:active:not(:disabled) { transform: translateY(0); box-shadow: inset 0 2px 6px rgba(0,0,0,0.15); }
 .register-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
 .loading-dots { display: flex; align-items: center; justify-content: center; gap: 4px; }
-.loading-dots span {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: white;
-  animation: dot-bounce 1.2s infinite;
-}
+.loading-dots span { width: 6px; height: 6px; border-radius: 50%; background: white; animation: dot-bounce 1.2s infinite; }
 .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
 .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes dot-bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
-  40% { transform: scale(1); opacity: 1; }
-}
-
-/* 模态框 */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 20px;
-}
-.modal-box {
-  background: #161929;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 20px;
-  padding: 32px;
-  max-width: 360px;
-  width: 100%;
-  text-align: center;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
-}
-.modal-icon-wrap {
-  font-size: 40px;
-  margin-bottom: 16px;
-}
-.modal-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 8px;
-}
-.text-success { color: #55efc4; }
-.text-danger { color: #e17055; }
-.modal-message {
-  font-size: 14px;
-  color: #8892b0;
-  margin: 0 0 24px;
-  line-height: 1.5;
-}
-.modal-btn {
-  padding: 12px 32px;
-  border-radius: 12px;
-  border: none;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-success {
-  background: linear-gradient(135deg, #00cec9, #55efc4);
-  color: #0d0f1a;
-}
-.btn-success:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,206,201,0.4); }
-.btn-gray {
-  background: rgba(255,255,255,0.1);
-  color: #e8eaf6;
-}
-.btn-gray:hover { background: rgba(255,255,255,0.15); }
-
-@media (max-width: 480px) {
-  .register-box { padding: 32px 24px; border-radius: 20px; }
-}
+@keyframes dot-bounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
+.modal-overlay { position: fixed; inset: 0; background: rgba(78,33,32,0.3); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal-box { background: var(--surface-container-low); border-radius: var(--radius-lg); padding: 32px; max-width: 360px; width: 100%; text-align: center; box-shadow: 0 40px 60px -5px var(--shadow-ambient); }
+.modal-icon-wrap { font-size: 40px; margin-bottom: 16px; }
+.modal-title { font-size: 18px; font-weight: 700; margin: 0 0 8px; }
+.text-success { color: var(--secondary-dim); }
+.text-danger { color: var(--error); }
+.modal-message { font-size: 14px; color: var(--on-surface-variant); margin: 0 0 24px; line-height: 1.5; }
+.modal-btn { padding: 12px 32px; border-radius: var(--radius-xl); border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--transition); font-family: var(--font-family); }
+.btn-success { background: linear-gradient(135deg, var(--secondary), var(--secondary-fixed)); color: var(--on-secondary); }
+.btn-success:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(127,230,219,0.3); }
+.btn-gray { background: var(--surface-container); color: var(--on-surface); }
+.btn-gray:hover { background: var(--surface-container-highest); }
+@media (max-width: 480px) { .register-box { padding: 32px 24px; border-radius: 20px; } }
 </style>

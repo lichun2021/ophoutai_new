@@ -25,6 +25,6 @@ onMounted(() => {
 <style scoped>
 .index-redirect {
   min-height: 100vh;
-  background: #0d0f1a;
+  background: var(--surface);
 }
 </style>

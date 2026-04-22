@@ -15,7 +15,7 @@
                   <div class="stat-content">
             <h3>累计消费(平台币)</h3>
             <p class="stat-value">
-              <img src="/platform-coin.svg" alt="平台币" class="stat-coin-icon" />
+              <img src="/logo-warm.svg" alt="平台币" class="stat-coin-icon" />
               {{ formatCoins(totalSpent) }}
             </p>
           </div>
@@ -132,10 +132,10 @@
                 <div class="meta-item">
                   <span class="label">消费金额：</span>
                   <span class="value price-value">
-                    <img src="/platform-coin.svg" alt="平台币" class="coin-icon-small" />
+                    <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                     {{ formatCoins(order.amount) }}
                   </span>
-                  <span v-if="order.role_name" class="value" style="margin-left: 12px; color: #6b7280; font-size: 0.875rem;">
+                  <span v-if="order.role_name" class="value" style="margin-left: 12px; color: var(--on-surface-variant); font-size: 0.875rem;">
                     · {{ order.role_name }}
                   </span>
                 </div>
@@ -392,12 +392,12 @@ onMounted(() => {
   margin: 0 0 8px;
   font-size: 28px;
   font-weight: 700;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .page-header p {
   margin: 0;
-  color: #718096;
+  color: var(--on-surface-variant);
   font-size: 16px;
 }
 
@@ -409,8 +409,8 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
@@ -421,12 +421,12 @@ onMounted(() => {
 .stat-icon {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--on-primary);
   font-size: 20px;
   flex-shrink: 0;
 }
@@ -434,7 +434,7 @@ onMounted(() => {
 .stat-content h3 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #718096;
+  color: var(--on-surface-variant);
   font-weight: 500;
 }
 
@@ -442,7 +442,7 @@ onMounted(() => {
   margin: 0;
   font-size: 24px;
   font-weight: 700;
-  color: #2d3748;
+  color: var(--on-surface);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -455,8 +455,8 @@ onMounted(() => {
 }
 
 .filters {
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
   padding: 24px;
   margin-bottom: 24px;
   display: flex;
@@ -472,7 +472,7 @@ onMounted(() => {
 
 .filter-group label {
   font-weight: 500;
-  color: #4a5568;
+  color: var(--on-surface);
   white-space: nowrap;
 }
 
@@ -502,13 +502,13 @@ onMounted(() => {
 .empty-state {
   text-align: center;
   padding: 64px 24px;
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
 }
 
 .loading-state UIcon {
   font-size: 32px;
-  color: #667eea;
+  color: var(--primary);
   margin-bottom: 16px;
 }
 
@@ -519,27 +519,27 @@ onMounted(() => {
 
 .empty-icon {
   font-size: 64px;
-  color: #cbd5e0;
+  color: var(--on-surface-variant);
   margin-bottom: 24px;
 }
 
 .empty-state h3 {
   margin: 0 0 12px;
   font-size: 24px;
-  color: #2d3748;
+  color: var(--on-surface);
   font-weight: 600;
 }
 
 .empty-state p {
   margin: 0 0 32px;
-  color: #718096;
+  color: var(--on-surface-variant);
   font-size: 16px;
 }
 
 /* 购买引导样式 */
 .purchase-guide {
-  background: #f7fafc;
-  border-radius: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
   padding: 24px;
   margin-bottom: 32px;
   text-align: left;
@@ -548,7 +548,7 @@ onMounted(() => {
 .purchase-guide h4 {
   margin: 0 0 16px;
   font-size: 18px;
-  color: #2d3748;
+  color: var(--on-surface);
   font-weight: 600;
 }
 
@@ -566,8 +566,8 @@ onMounted(() => {
 .step-number {
   width: 24px;
   height: 24px;
-  background: #667eea;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -578,7 +578,7 @@ onMounted(() => {
 }
 
 .step-text {
-  color: #4a5568;
+  color: var(--on-surface);
   font-size: 14px;
 }
 
@@ -590,7 +590,7 @@ onMounted(() => {
 .recommend-actions h4 {
   margin: 0 0 16px;
   font-size: 18px;
-  color: #2d3748;
+  color: var(--on-surface);
   font-weight: 600;
 }
 
@@ -603,8 +603,8 @@ onMounted(() => {
 
 /* 购买说明样式 */
 .purchase-info {
-  background: #edf2f7;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
   padding: 24px;
   text-align: left;
 }
@@ -612,14 +612,14 @@ onMounted(() => {
 .purchase-info h4 {
   margin: 0 0 16px;
   font-size: 18px;
-  color: #2d3748;
+  color: var(--on-surface);
   font-weight: 600;
 }
 
 .info-list {
   margin: 0;
   padding-left: 20px;
-  color: #4a5568;
+  color: var(--on-surface);
 }
 
 .info-list li {
@@ -640,8 +640,8 @@ onMounted(() => {
 .orders-pagination {
   margin-top: 24px;
   padding: 16px;
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -651,16 +651,16 @@ onMounted(() => {
 
 .pagination-info {
   font-size: 14px;
-  color: #64748b;
+  color: var(--on-surface-variant);
 }
 
 .order-card {
-  background: white;
+  background: var(--surface-container-low);
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--surface-container-low);
   position: relative;
   overflow: hidden;
 }
@@ -672,14 +672,14 @@ onMounted(() => {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, var(--primary) 0%, var(--primary-dim) 100%);
   opacity: 0;
   transition: opacity 0.3s;
 }
 
 .order-card:hover {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border-color: #e2e8f0;
+  border-color: var(--surface-container-high);
   transform: translateY(-2px);
 }
 
@@ -693,35 +693,35 @@ onMounted(() => {
   align-items: flex-start;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 2px solid #f7fafc;
+  border-bottom: 2px solid var(--surface);
 }
 
 .order-info h4 {
   margin: 0 0 8px;
   font-size: 18px;
   font-weight: 700;
-  color: #1a202c;
+  color: var(--on-surface);
   letter-spacing: -0.01em;
 }
 
 .order-id {
   margin: 0 0 6px;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--on-surface-variant);
   font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
 }
 
 .order-hint {
   margin: 0;
   font-size: 12px;
-  color: #f59e0b;
+  color: var(--primary);
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: #fffbeb;
+  background: var(--primary-container);
   border-radius: 6px;
-  border-left: 3px solid #f59e0b;
+  border-left: 3px solid var(--primary);
   margin-top: 8px;
 }
 
@@ -733,39 +733,39 @@ onMounted(() => {
 
 .status-badge {
   padding: 6px 14px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 
 .status-badge.completed {
-  background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%);
-  color: #166534;
+  background: linear-gradient(135deg, var(--secondary-fixed) 0%, var(--secondary) 100%);
+  color: var(--on-secondary);
   box-shadow: 0 2px 8px rgba(56, 161, 105, 0.2);
 }
 
 .status-badge.processing {
-  background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
-  color: #92400e;
+  background: linear-gradient(135deg, #ffeaa7 0%, var(--primary) 100%);
+  color: var(--primary-dim);
   box-shadow: 0 2px 8px rgba(214, 158, 46, 0.2);
 }
 
 .status-badge.failed {
-  background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
+  background: linear-gradient(135deg, var(--error-container) 0%, var(--error) 100%);
   color: #fff;
   box-shadow: 0 2px 8px rgba(229, 62, 62, 0.2);
 }
 
 .status-badge.pending {
-  background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
+  background: linear-gradient(135deg, var(--primary-container) 0%, var(--primary) 100%);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.2);
+  box-shadow: 0 2px 8px rgba(168,50,6, 0.2);
 }
 
 .status-badge.unknown {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
 }
 
 .order-content {
@@ -779,16 +779,16 @@ onMounted(() => {
 .order-description {
   margin: 0 0 16px;
   font-size: 14px;
-  color: #64748b;
+  color: var(--on-surface-variant);
   line-height: 1.6;
 }
 
 .order-meta {
   display: grid;
   gap: 12px;
-  background: #f8fafc;
+  background: var(--surface);
   padding: 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
 }
 
 .meta-item {
@@ -799,13 +799,13 @@ onMounted(() => {
 
 .meta-item .label {
   font-size: 13px;
-  color: #64748b;
+  color: var(--on-surface-variant);
   font-weight: 500;
 }
 
 .meta-item .value {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--on-surface);
   font-size: 14px;
 }
 
@@ -813,7 +813,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #667eea !important;
+  color: var(--primary) !important;
   font-weight: 700;
   font-size: 16px;
 }
@@ -902,7 +902,7 @@ onMounted(() => {
 
   .order-card {
     padding: 16px;
-    border-radius: 12px;
+    border-radius: var(--radius-sm);
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   }
   

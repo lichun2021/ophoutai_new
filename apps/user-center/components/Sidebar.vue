@@ -125,8 +125,8 @@ const handleNavClick = () => {
   flex-direction: column;
   width: 256px;
   height: 100vh;
-  background: linear-gradient(180deg, #1e1b4b 0%, #312e81 60%, #4c1d95 100%);
-  color: #e0e7ff;
+  background: linear-gradient(180deg, var(--surface-container-low) 0%, var(--surface-container) 60%, var(--surface-container-high) 100%);
+  color: var(--on-surface);
   overflow: hidden;
   transition: width 0.2s ease-in-out;
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
@@ -160,7 +160,7 @@ const handleNavClick = () => {
   font-weight: 700;
   letter-spacing: 0.5px;
   white-space: nowrap;
-  background: linear-gradient(90deg, #a5b4fc, #e0e7ff);
+  background: linear-gradient(90deg, var(--primary-container), var(--on-surface));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -238,7 +238,7 @@ const handleNavClick = () => {
 
 .sidebar__item:hover {
   background: rgba(255, 255, 255, 0.07);
-  color: #e0e7ff;
+  color: var(--on-surface);
 }
 
 .sidebar__item--active {
@@ -248,7 +248,7 @@ const handleNavClick = () => {
 }
 
 .sidebar__item--active::before {
-  background: #818cf8;
+  background: var(--primary);
 }
 
 /* ── Icon ── */

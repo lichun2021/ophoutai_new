@@ -161,28 +161,28 @@ useHead({ title: '客服支付 - 订单详情' });
 
 <style scoped>
 .cs-page {
-  min-height: 100vh; background: #0d0f1a;
+  min-height: 100vh; background: var(--surface);
   display: flex; align-items: center; justify-content: center; flex-direction: column;
   padding: 20px; position: relative; overflow: hidden;
-  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-family);
 }
 .bg-orb { position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
-.orb-1 { width: 400px; height: 400px; background: rgba(108,92,231,0.2); top: -100px; left: -100px; }
-.orb-2 { width: 300px; height: 300px; background: rgba(0,206,201,0.15); bottom: -50px; right: -50px; }
-.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
+.orb-1 { width: 400px; height: 400px; background: rgba(168,50,6,0.2); top: -100px; left: -100px; }
+.orb-2 { width: 300px; height: 300px; background: rgba(127,230,219,0.15); bottom: -50px; right: -50px; }
+.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(var(--outline-variant) 1px, transparent 1px), linear-gradient(90deg, var(--outline-variant) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
 
 .cs-box {
   position: relative; width: 100%; max-width: 460px;
-  background: #161929; border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 24px; padding: 36px; box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(108,92,231,0.15);
+  background: var(--surface-container-low); /* no-line rule */;
+  border-radius: var(--radius-lg); padding: 36px; box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(168,50,6,0.15);
 }
 
 .state-block { text-align: center; margin-bottom: 24px; }
 .state-icon { font-size: 48px; margin-bottom: 12px; }
 .loading-spin { animation: spin 1.5s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.state-title { margin: 0 0 6px; font-size: 22px; font-weight: 700; color: #e8eaf6; }
-.state-sub { margin: 0; font-size: 13px; color: #8892b0; }
+.state-title { margin: 0 0 6px; font-size: 22px; font-weight: 700; color: var(--on-surface); }
+.state-sub { margin: 0; font-size: 13px; color: var(--on-surface-variant); }
 
 /* LINE 区域 */
 .line-section {
@@ -195,29 +195,29 @@ useHead({ title: '客服支付 - 订单详情' });
   display: flex; align-items: center; justify-content: center;
   margin: 0 auto 12px;
 }
-.line-svg { width: 28px; height: 28px; color: #00b450; }
-.line-title { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: #e8eaf6; }
-.line-sub { margin: 0 0 16px; font-size: 13px; color: #8892b0; }
+.line-svg { width: 28px; height: 28px; color: var(--secondary-dim); }
+.line-title { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--on-surface); }
+.line-sub { margin: 0 0 16px; font-size: 13px; color: var(--on-surface-variant); }
 .line-btns { display: flex; flex-direction: column; gap: 10px; }
 .line-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 13px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
+  padding: 13px 16px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600;
   cursor: pointer; transition: all 0.2s; text-decoration: none; border: none;
 }
-.line-btn-primary { background: #00b450; color: white; }
-.line-btn-primary:hover { background: #009940; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,180,80,0.4); }
-.line-btn-outline { background: rgba(0,180,80,0.1); color: #55efc4; border: 1px solid rgba(0,180,80,0.3); }
+.line-btn-primary { background: var(--secondary-dim); color: var(--on-primary); }
+.line-btn-primary:hover { background: var(--secondary-dim); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,180,80,0.4); }
+.line-btn-outline { background: rgba(0,180,80,0.1); color: var(--secondary-fixed); border: 1px solid rgba(0,180,80,0.3); }
 .line-btn-outline:hover { background: rgba(0,180,80,0.2); }
 .btn-icon { width: 18px; height: 18px; }
 
 /* 订单详情 */
-.detail-list { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 20px; display: flex; flex-direction: column; gap: 14px; }
+.detail-list { border-top: 1px solid var(--outline-variant); padding-top: 20px; display: flex; flex-direction: column; gap: 14px; }
 .detail-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.detail-label { font-size: 13px; color: #8892b0; flex-shrink: 0; }
-.detail-value { font-size: 14px; color: #e8eaf6; text-align: right; word-break: break-all; display: flex; align-items: center; gap: 6px; }
-.detail-value.amount { font-size: 18px; font-weight: 700; color: #a29bfe; }
+.detail-label { font-size: 13px; color: var(--on-surface-variant); flex-shrink: 0; }
+.detail-value { font-size: 14px; color: var(--on-surface); text-align: right; word-break: break-all; display: flex; align-items: center; gap: 6px; }
+.detail-value.amount { font-size: 18px; font-weight: 700; color: var(--primary-container); }
 .detail-value.mono { font-family: 'Courier New', monospace; font-size: 12px; }
-.text-processing { color: #fdcb6e; }
+.text-processing { color: var(--primary); }
 .pay-icon { width: 18px; height: 18px; }
 .copy-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px; opacity: 0.6; transition: opacity 0.2s; }
 .copy-btn:hover { opacity: 1; }
@@ -225,28 +225,28 @@ useHead({ title: '客服支付 - 订单详情' });
 /* 步骤说明 */
 .steps-box {
   margin-top: 20px; padding: 16px;
-  background: rgba(108,92,231,0.08); border: 1px solid rgba(108,92,231,0.2);
-  border-radius: 12px;
+  background: rgba(168,50,6,0.08); border: 1px solid rgba(168,50,6,0.2);
+  border-radius: var(--radius-sm);
 }
-.steps-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #a29bfe; }
-.steps-list { margin: 0; padding-left: 18px; font-size: 13px; color: #8892b0; line-height: 1.8; }
+.steps-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--primary-container); }
+.steps-list { margin: 0; padding-left: 18px; font-size: 13px; color: var(--on-surface-variant); line-height: 1.8; }
 
 .action-btn {
   margin-top: 24px; width: 100%; padding: 14px;
-  border-radius: 14px; border: none;
-  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
-  color: white; font-size: 15px; font-weight: 600;
-  cursor: pointer; transition: all 0.2s; box-shadow: 0 8px 24px rgba(108,92,231,0.3);
+  border-radius: var(--radius-md); border: none;
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  color: var(--on-primary); font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; box-shadow: 0 8px 24px rgba(168,50,6,0.3);
 }
-.action-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(108,92,231,0.5); }
+.action-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(168,50,6,0.5); }
 
 .toast-msg {
   position: fixed; top: 20px; right: 20px;
-  background: linear-gradient(135deg, #00cec9, #55efc4);
-  color: #0d0f1a; padding: 10px 20px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--secondary), var(--secondary-fixed));
+  color: var(--surface); padding: 10px 20px; border-radius: 10px;
   font-size: 14px; font-weight: 600; z-index: 200;
-  box-shadow: 0 8px 24px rgba(0,206,201,0.4);
+  box-shadow: 0 8px 24px rgba(127,230,219,0.4);
 }
 
-@media (max-width: 480px) { .cs-box { padding: 28px 20px; border-radius: 20px; } }
+@media (max-width: 480px) { .cs-box { padding: 28px 20px; border-radius: var(--radius-lg); } }
 </style>

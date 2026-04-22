@@ -117,7 +117,7 @@
               <!-- 自动发放礼包显示提示信息，不显示购买按钮 -->
               <div v-if="isAutoGrantCategory(product.category)" class="auto-gift-group">
                 <div class="auto-gift-price">
-                  <img src="/platform-coin.svg" alt="平台币" class="coin-icon-auto" />
+                  <img src="/logo-warm.svg" alt="平台币" class="coin-icon-auto" />
                   <span>{{ formatCoins(product.price_platform_coins) }}</span>
                 </div>
                 <div class="auto-gift-notice">
@@ -140,7 +140,7 @@
                 <div class="button-content">
                   <div class="button-price">
                     <template v-if="product.price_platform_coins > 0">
-                      <img src="/platform-coin.svg" alt="平台币" class="coin-icon-button" />
+                      <img src="/logo-warm.svg" alt="平台币" class="coin-icon-button" />
                       <span>{{ formatCoins(product.price_platform_coins) }}</span>
                     </template>
                     <template v-else-if="product.price_real_money > 0">
@@ -248,7 +248,7 @@
             <div class="detail-row">
               <span>商品价格：</span>
               <span v-if="selectedPaymentMethod === 'ptb'" class="price-with-icon">
-                <img src="/platform-coin.svg" alt="平台币" class="coin-icon-small" />
+                <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                 {{ formatCoins(selectedProduct.price_platform_coins) }}
               </span>
               <span v-else class="price-with-icon rmb">
@@ -260,7 +260,7 @@
             <div v-if="selectedPaymentMethod === 'ptb'" class="detail-row">
               <span>当前余额：</span>
               <span class="balance price-with-icon">
-                <img src="/platform-coin.svg" alt="平台币" class="coin-icon-small" />
+                <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                 {{ formatCoins(authStore.userInfo?.platform_coins || 0) }}
               </span>
             </div>
@@ -877,12 +877,12 @@ onUnmounted(() => {
   margin: 0 0 8px;
   font-size: 28px;
   font-weight: 700;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .page-header p {
   margin: 0;
-  color: #718096;
+  color: var(--on-surface-variant);
   font-size: 16px;
 }
 
@@ -895,8 +895,8 @@ onUnmounted(() => {
 }
 
 .stat-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
@@ -908,11 +908,11 @@ onUnmounted(() => {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: var(--on-primary);
   font-size: 18px;
   flex-shrink: 0;
 }
@@ -920,7 +920,7 @@ onUnmounted(() => {
 .stat-content h4 {
   margin: 0 0 6px;
   font-size: 12px;
-  color: #718096;
+  color: var(--on-surface-variant);
   font-weight: 500;
 }
 
@@ -928,7 +928,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 /* 分类页签样式 */
@@ -953,12 +953,12 @@ onUnmounted(() => {
 .tab-button {
   flex-shrink: 0;
   padding: 12px 20px;
-  border: 2px solid #e2e8f0;
-  background: white;
-  border-radius: 24px;
+  border: 2px solid var(--surface-container-high);
+  background: var(--surface-container-low);
+  border-radius: var(--radius-lg);
   font-size: 14px;
   font-weight: 500;
-  color: #718096;
+  color: var(--on-surface-variant);
   cursor: pointer;
   transition: all 0.3s ease;
   white-space: nowrap;
@@ -967,16 +967,16 @@ onUnmounted(() => {
 }
 
 .tab-button:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: var(--primary);
+  color: var(--primary);
   background: rgba(102, 126, 234, 0.05);
   transform: translateY(-1px);
 }
 
 .tab-button.active {
-  border-color: #667eea;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  border-color: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
+  color: var(--on-primary);
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
@@ -1000,31 +1000,31 @@ onUnmounted(() => {
 .empty-state {
   text-align: center;
   padding: 64px 24px;
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
 }
 
 .loading-state UIcon {
   font-size: 32px;
-  color: #667eea;
+  color: var(--primary);
   margin-bottom: 16px;
 }
 
 .empty-state UIcon {
   font-size: 64px;
-  color: #cbd5e0;
+  color: var(--on-surface-variant);
   margin-bottom: 24px;
 }
 
 .empty-state h3 {
   margin: 0 0 12px;
   font-size: 20px;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .empty-state p {
   margin: 0;
-  color: #718096;
+  color: var(--on-surface-variant);
 }
 
 .products-grid {
@@ -1034,8 +1034,8 @@ onUnmounted(() => {
 }
 
 .product-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 0.3s;
@@ -1068,7 +1068,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   font-size: 13px;
   font-weight: 600;
   backdrop-filter: blur(10px);
@@ -1084,14 +1084,14 @@ onUnmounted(() => {
 /* 限时礼包标签（红色主题） */
 .limited-badge {
   background: linear-gradient(135deg, rgba(239, 68, 68, 0.95) 0%, rgba(220, 38, 38, 0.95) 100%);
-  color: white;
+  color: var(--on-primary);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* 限期礼包标签（紫色主题） */
 .scheduled-badge {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.95) 0%, rgba(124, 58, 237, 0.95) 100%);
-  color: white;
+  color: var(--on-primary);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
@@ -1113,7 +1113,7 @@ onUnmounted(() => {
   margin: 0 0 8px;
   font-size: 18px;
   font-weight: 600;
-  color: #2d3748;
+  color: var(--on-surface);
 }
 
 .description-container {
@@ -1133,7 +1133,7 @@ onUnmounted(() => {
 .product-description {
   margin: 0;
   font-size: 14px;
-  color: #718096;
+  color: var(--on-surface-variant);
   line-height: 1.2;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1178,7 +1178,7 @@ onUnmounted(() => {
 .modal-description-text {
   margin: 0;
   font-size: 14px;
-  color: #64748b;
+  color: var(--on-surface-variant);
   line-height: 1.5;
   word-wrap: break-word;
 }
@@ -1192,13 +1192,13 @@ onUnmounted(() => {
 
 .gift-name-label {
   font-size: 14px;
-  color: #64748b;
+  color: var(--on-surface-variant);
   font-weight: 500;
 }
 
 .gift-name-text {
   font-size: 18px;
-  color: #1e293b;
+  color: var(--on-surface);
   font-weight: 700;
   flex: 1;
 }
@@ -1206,16 +1206,16 @@ onUnmounted(() => {
 .gift-items {
   margin: 10px 0 20px;
   padding: 18px 22px;
-  background: #f8faff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--surface-container-high);
+  border-radius: var(--radius-md);
 }
 
 .gift-items h5 {
   margin: 0 0 12px;
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--on-surface);
 }
 
 .items-list {
@@ -1232,9 +1232,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 12px 18px;
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #edf2f7;
+  background: var(--surface-container-low);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-container-low);
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
 }
 
@@ -1242,11 +1242,11 @@ onUnmounted(() => {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #eef2ff, #e0f2ff);
+  background: linear-gradient(135deg, var(--surface-container-low), #e0f2ff);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6366f1;
+  color: var(--primary);
   font-weight: 600;
   font-size: 13px;
 }
@@ -1256,13 +1256,13 @@ onUnmounted(() => {
   min-width: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--on-surface);
 }
 
 .item-qty {
   font-size: 14px;
   font-weight: 700;
-  color: #5b21b6;
+  color: var(--primary-dim);
 }
 
 
@@ -1277,7 +1277,7 @@ onUnmounted(() => {
 .current-price {
   font-size: 20px;
   font-weight: 700;
-  color: #667eea;
+  color: var(--primary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1302,7 +1302,7 @@ onUnmounted(() => {
 }
 
 .price-with-icon.rmb {
-  color: #2d3748;
+  color: var(--on-surface);
   font-weight: 600;
 }
 
@@ -1350,10 +1350,10 @@ onUnmounted(() => {
   justify-content: center;
   gap: 8px;
   padding: 12px;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 1px solid #0ea5e9;
+  background: linear-gradient(135deg, var(--surface-container-low) 0%, var(--surface-container) 100%);
+  border: 1px solid var(--secondary-dim);
   border-radius: 8px;
-  color: #0369a1;
+  color: var(--on-secondary);
   font-size: 14px;
   font-weight: 500;
 }
@@ -1372,7 +1372,7 @@ onUnmounted(() => {
   gap: 6px;
   font-size: 16px;
   font-weight: 700;
-  color: #ffb200;
+  color: var(--primary);
 }
 
 .coin-icon-auto {
@@ -1388,11 +1388,11 @@ onUnmounted(() => {
   gap: 4px;
   padding: 6px 12px;
   margin-bottom: 8px;
-  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-  border: 1px solid #f87171;
+  background: linear-gradient(135deg, var(--error-container) 0%, var(--surface-container-high) 100%);
+  border: 1px solid var(--error);
   border-radius: 6px;
   font-size: 12px;
-  color: #991b1b;
+  color: var(--error);
   font-weight: 600;
 }
 
@@ -1400,7 +1400,7 @@ onUnmounted(() => {
 .purchase-limit-badge svg {
   width: 14px;
   height: 14px;
-  color: #dc2626;
+  color: var(--error);
   flex-shrink: 0;
 }
 
@@ -1420,12 +1420,12 @@ onUnmounted(() => {
 .character-empty {
   margin-top: 4px;
   font-size: 12px;
-  color: #ef4444;
+  color: var(--error);
 }
 
 /* 必填标记 */
 .required-mark {
-  color: #e53e3e;
+  color: var(--error);
   font-weight: bold;
   margin-left: 2px;
   font-size: 16px;
@@ -1437,8 +1437,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
-  border: 2px solid #fc8181;
+  background: linear-gradient(135deg, #fff5f5 0%, var(--error-container) 100%);
+  border: 2px solid var(--error);
   border-radius: 8px;
   margin: 12px 0;
   box-shadow: 0 2px 8px rgba(229, 62, 62, 0.15);
@@ -1447,21 +1447,21 @@ onUnmounted(() => {
 
 @keyframes pulse-warning {
   0%, 100% {
-    border-color: #fc8181;
+    border-color: var(--error);
   }
   50% {
-    border-color: #e53e3e;
+    border-color: var(--error);
   }
 }
 
 .character-warning .warning-icon {
-  color: #e53e3e;
+  color: var(--error);
   font-size: 20px;
   flex-shrink: 0;
 }
 
 .character-warning .warning-text {
-  color: #c53030;
+  color: var(--error);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
@@ -1498,14 +1498,14 @@ onUnmounted(() => {
 .modal-product-info p {
   margin: 0;
   font-size: 14px;
-  color: #718096;
+  color: var(--on-surface-variant);
   line-height: 1.5;
 }
 
 .modal-price {
   font-size: 20px;
   font-weight: 700;
-  color: #667eea;
+  color: var(--primary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1522,7 +1522,7 @@ onUnmounted(() => {
 }
 
 .detail-row.total {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--surface-container-high);
   margin-top: 8px;
   padding-top: 16px;
   font-weight: 600;
@@ -1540,9 +1540,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--surface-container-high);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface-container-low);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -1553,27 +1553,27 @@ onUnmounted(() => {
 }
 
 .payment-method-button:hover {
-  border-color: #667eea;
+  border-color: var(--primary);
 }
 
 .payment-method-button.active {
-  border-color: #667eea;
+  border-color: var(--primary);
   background: rgba(102, 126, 234, 0.08);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.18);
 }
 
 .payment-warning {
   margin-top: 8px;
-  color: #e53e3e;
+  color: var(--error);
   font-size: 13px;
 }
 
 .balance {
-  color: #38a169;
+  color: var(--secondary-dim);
 }
 
 .total-amount {
-  color: #667eea;
+  color: var(--primary);
   font-size: 18px;
 }
 
@@ -1582,9 +1582,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background: #fed7d7;
+  background: var(--error-container);
   border-radius: 8px;
-  color: #e53e3e;
+  color: var(--error);
   margin-bottom: 16px;
 }
 
@@ -1601,7 +1601,7 @@ onUnmounted(() => {
   padding: 8px;
   cursor: pointer;
   border-radius: 6px;
-  color: #718096;
+  color: var(--on-surface-variant);
   font-size: 20px;
   transition: all 0.3s ease;
   display: flex;
@@ -1612,8 +1612,8 @@ onUnmounted(() => {
 }
 
 .close-button:hover {
-  background-color: #f7fafc;
-  color: #e53e3e;
+  background-color: var(--surface);
+  color: var(--error);
   transform: scale(1.1);
 }
 
@@ -1678,7 +1678,7 @@ onUnmounted(() => {
   .tab-button {
     padding: 8px 16px;
     font-size: 13px;
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
   }
   
   /* 商品网格移动端优化 */
