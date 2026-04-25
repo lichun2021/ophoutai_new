@@ -1,7 +1,7 @@
 export default defineAppConfig({
   ui: {
     primary: 'orange',
-    gray: 'warm-gray',
+    gray: 'stone',
     
     // 按钮使用暖色调
     button: {

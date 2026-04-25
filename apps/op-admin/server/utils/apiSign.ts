@@ -119,31 +119,16 @@ export async function verifyApiSignature(
   const skew = options?.skewSeconds ?? DEFAULT_SKEW_SECONDS;
   const salt = options?.salt ?? DEFAULT_SALT;
 
-  // 【调试】打印原始输入
-  console.log('[API_SIGN][DEBUG] ---- 签名验证开始 ----');
-  console.log('[API_SIGN][DEBUG] pathname:', pathname, '| method:', method);
-  console.log('[API_SIGN][DEBUG] salt:', `"${salt}"`);
-  console.log('[API_SIGN][DEBUG] queryParams:', JSON.stringify(queryParams));
-  console.log('[API_SIGN][DEBUG] requestBody keys:', requestBody ? Object.keys(requestBody) : 'null');
-  console.log('[API_SIGN][DEBUG] requestBody.ts:', requestBody?.ts, '| type:', typeof requestBody?.ts);
-  console.log('[API_SIGN][DEBUG] requestBody.nonce:', requestBody?.nonce);
-  console.log('[API_SIGN][DEBUG] requestBody.sign:', requestBody?.sign);
-  console.log('[API_SIGN][DEBUG] queryParams.ts:', queryParams?.ts, '| queryParams.sign:', queryParams?.sign);
-
   const params: Record<string, any> = {
     ...(queryParams || {}),
     ...(['POST', 'PUT', 'PATCH', 'DELETE'].includes((method || 'GET').toUpperCase()) ? (requestBody || {}) : {})
   };
 
-  console.log('[API_SIGN][DEBUG] 合并后 params.ts:', params.ts, '| type:', typeof params.ts);
-  console.log('[API_SIGN][DEBUG] 合并后 params.nonce:', params.nonce);
-  console.log('[API_SIGN][DEBUG] 合并后 params.sign:', params.sign);
 
   const ts = normalizeTs(params.ts);
   const providedSign = String(params.sign || '');
   const nonce = String(params.nonce || '');
 
-  console.log('[API_SIGN][DEBUG] normalizeTs 结果:', ts, '| providedSign:', providedSign, '| nonce:', nonce);
 
   if (!ts || !providedSign) {
     console.error('[API_SIGN][FAIL] 缺少 ts 或 sign!', { ts, providedSign });
@@ -156,7 +141,6 @@ export async function verifyApiSignature(
 
   const nowSec = Math.floor(Date.now() / 1000);
   const skewDiff = Math.abs(nowSec - ts);
-  console.log('[API_SIGN][DEBUG] 时间验证: nowSec=', nowSec, '| ts=', ts, '| diff=', skewDiff, '| 允许=', skew);
   if (skewDiff > skew) {
     console.error('[API_SIGN][FAIL] 时间偏差过大!', { nowSec, ts, diff: skewDiff, skew });
     throw createError({ statusCode: 401, statusMessage: 'ts_skew' });
@@ -169,14 +153,6 @@ export async function verifyApiSignature(
   // 仅使用固定参数参与签名：ts 与 nonce
   const expected = calcSign({ ts, nonce }, token);
 
-  console.log('[API_SIGN][DEBUG] ymd:', ymdForLog);
-  console.log('[API_SIGN][DEBUG] md5Input for token:', `"${ymdForLog}${salt}"`);
-  console.log('[API_SIGN][DEBUG] token:', token);
-  console.log('[API_SIGN][DEBUG] signBase:', `"${baseForLog}"`);
-  console.log('[API_SIGN][DEBUG] md5Input for sign:', `"${baseForLog}${token}"`);
-  console.log('[API_SIGN][DEBUG] expected:', expected);
-  console.log('[API_SIGN][DEBUG] provided:', providedSign);
-  console.log('[API_SIGN][DEBUG] match:', expected === providedSign);
   if (expected !== providedSign) {
     const base = buildSignBase({ ts, nonce });
     const ymd = formatYmd(dateForToken);
