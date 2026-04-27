@@ -66,7 +66,7 @@ function buildSignBase(params: Record<string, any>) {
 
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
-  const apiKey = config.public?.apiSignKey || 'fasdjhkfh2348!@#$!617';
+  const apiKey = config.public?.apiSignKey || 'q12eiedu24fi3rf434g34g';
   // 全局记录已签名的请求（用 WeakSet 记录 options 对象，避免内存泄漏）
   const signedRequests = new WeakSet<any>();
 
@@ -85,7 +85,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       const url = new URL(request, baseOrigin);
       const pathname = url.pathname || '';
       if (!pathname.startsWith('/api')) return;
-      
+
       // 跳过用户登录接口（已有自己的签名机制：ts+sig）
       if (pathname === '/api/user/login') return;
 
@@ -128,7 +128,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       const payload = { ts: String(ts), nonce } as any;
       const sign = md5Hex(buildSignBase(payload) + token);
 
-      
+
 
       // 生成签名
       const method2 = methodUpper;
@@ -167,23 +167,23 @@ export default defineNuxtPlugin((nuxtApp) => {
       (options as any).__api_signed = true;
       signedRequests.add(options);
 
-        // console.log('[API_SIGN][plugin]', {
-        //   env: (typeof window === 'undefined') ? 'server' : 'client',
-        //   path: pathname,
-        //   ts,
-        //   nonce,
-        //   sign,
-        //   salt: apiKey,
-        //   token,
-        //   base: buildSignBase(payload),
-        //   ymd
-        // });
+      // console.log('[API_SIGN][plugin]', {
+      //   env: (typeof window === 'undefined') ? 'server' : 'client',
+      //   path: pathname,
+      //   ts,
+      //   nonce,
+      //   sign,
+      //   salt: apiKey,
+      //   token,
+      //   base: buildSignBase(payload),
+      //   ymd
+      // });
     }
   });
 
   // 将带签名的 fetch 暴露为全局与 nuxt 实例的 $fetch
-  try { (globalThis as any).$fetch = signedFetch as any; } catch {}
-  try { (nuxtApp as any).$fetch = signedFetch as any; } catch {}
+  try { (globalThis as any).$fetch = signedFetch as any; } catch { }
+  try { (nuxtApp as any).$fetch = signedFetch as any; } catch { }
 
   // 兜底：拦截原生 fetch（仅处理未被 $fetch 签名的请求）
   if (typeof window !== 'undefined' && typeof (globalThis as any).fetch === 'function') {
@@ -196,7 +196,7 @@ export default defineNuxtPlugin((nuxtApp) => {
         const pathname = url.pathname || '';
         const sameOrigin = url.origin === baseOrigin;
         if (!sameOrigin || !pathname.startsWith('/api')) return originalFetch(input as any, init as any);
-        
+
         // 跳过用户登录接口（已有自己的签名机制：ts+sig）
         if (pathname === '/api/user/login') return originalFetch(input as any, init as any);
 
@@ -220,18 +220,18 @@ export default defineNuxtPlugin((nuxtApp) => {
               if (parsed && parsed.__signed === '1') {
                 return originalFetch(url.toString(), newInit);
               }
-            } catch {}
+            } catch { }
           }
         }
 
         // 生成签名
-    const ts = Math.floor(Date.now() / 1000);
-    const nonce = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const ts = Math.floor(Date.now() / 1000);
+        const nonce = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         const dateForToken = new Date(ts * 1000);
         const ymd = formatYmd(dateForToken);
         const token = calcDailyToken(dateForToken, apiKey);
         const base = buildSignBase({ ts: String(ts), nonce });
-    const sign = md5Hex(base + token);
+        const sign = md5Hex(base + token);
 
         const existingHeaders = (init?.headers as any) || {};
         const newHeaders = { ...existingHeaders, 'x-signed': '1' };

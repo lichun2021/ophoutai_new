@@ -1,4 +1,4 @@
-import * as PaymentModel from '../model/payment';
+﻿import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
@@ -262,7 +262,7 @@ export const paymentNewReps = async (evt: H3Event) => {
 
                 if (existingRecord.user_id) {
                     const userResult = await sql({
-                        query: 'SELECT channel_code, game_code FROM Users WHERE id = ?',
+                        query: 'SELECT channel_code, game_code FROM users WHERE id = ?',
                         values: [existingRecord.user_id],
                     }) as any[];
 
@@ -311,7 +311,7 @@ export const paymentNewReps = async (evt: H3Event) => {
 
         if (body.uid) {
             const subUserResult = await sql({
-                query: 'SELECT id, parent_user_id FROM SubUsers WHERE wuid = ?',
+                query: 'SELECT id, parent_user_id FROM subusers WHERE wuid = ?',
                 values: [body.uid],
             }) as any[];
 
@@ -323,7 +323,7 @@ export const paymentNewReps = async (evt: H3Event) => {
                 // 获取用户的 channel_code 和 game_code
                 if (realUserId) {
                     const userResult = await sql({
-                        query: 'SELECT channel_code, game_code FROM Users WHERE id = ?',
+                        query: 'SELECT channel_code, game_code FROM users WHERE id = ?',
                         values: [realUserId],
                     }) as any[];
 
@@ -516,7 +516,7 @@ export async function generateUserLoginUrl(userId: number, redirectPath: string 
     try {
         // 获取用户信息
         const userResult = await sql({
-            query: 'SELECT username, password FROM Users WHERE id = ?',
+            query: 'SELECT username, password FROM users WHERE id = ?',
             values: [userId],
         }) as any[];
 
@@ -579,7 +579,7 @@ async function deductPlatformCoinsForPayment(
     try {
         // 🔒 第一步：读取用户余额（不加锁，快速检查）
         const userResult = await sql({
-            query: 'SELECT platform_coins FROM Users WHERE id = ?',
+            query: 'SELECT platform_coins FROM users WHERE id = ?',
             values: [userId],
         }) as any[];
 
@@ -637,7 +637,7 @@ async function deductPlatformCoinsForPayment(
         try {
             const lastOrder = await sql({
                 query: `SELECT ptb_after, transaction_id, created_at, ptb_change 
-                        FROM PaymentRecords 
+                        FROM paymentrecords 
                         WHERE user_id = ? 
                         AND payment_status = 3 
                         AND ptb_after IS NOT NULL
@@ -659,7 +659,7 @@ async function deductPlatformCoinsForPayment(
                     // 🔍 进一步检查：如果余额不一致，但数据库里已经没有任何“平台币消费”记录了，
                     // 说明可能是手动清理了消费记录，这种情况下允许通过。
                     const hasAnyPtbConsumption = await sql({
-                        query: `SELECT id FROM PaymentRecords 
+                        query: `SELECT id FROM paymentrecords 
                                 WHERE user_id = ? 
                                 AND payment_status = 3 
                                 AND payment_way LIKE '%平台币%'
@@ -1344,7 +1344,7 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                 
                 // 获取用户当前平台币余额
                 const user = await sql({
-                    query: 'SELECT id, platform_coins FROM Users WHERE id = ?',
+                    query: 'SELECT id, platform_coins FROM users WHERE id = ?',
                     values: [orderDetail.user_id],
                 }) as any[];
                 
@@ -1375,7 +1375,7 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                 
                 // 更新订单状态为支付成功(3)，并记录平台币变化
                 await sql({
-                    query: `UPDATE PaymentRecords 
+                    query: `UPDATE paymentrecords 
                             SET payment_status = 3, 
                                 notify_at = ?,
                                 ptb_before = ?,
@@ -1811,7 +1811,7 @@ export const doPayment = async (evt: H3Event) => {
 
         // 验证用户是否存在 - 支持主用户名或子用户名查询，同时获取channel_code和game_code
         const user = await sql({
-            query: 'SELECT id, platform_coins, game_code, channel_code FROM Users WHERE username = ? OR thirdparty_uid = ?',
+            query: 'SELECT id, platform_coins, game_code, channel_code FROM users WHERE username = ? OR thirdparty_uid = ?',
             values: [username, username],
         }) as any[];
 
@@ -1834,7 +1834,7 @@ export const doPayment = async (evt: H3Event) => {
         if (dailyLimitedProducts.has(productDesc)) {
             const limitRows = await sql({
                 query: `SELECT COUNT(*) AS cnt
-                        FROM PaymentRecords
+                        FROM paymentrecords
                         WHERE wuid = ?
                           AND product_des = ?
                           AND payment_status = 3
@@ -1862,7 +1862,7 @@ export const doPayment = async (evt: H3Event) => {
             if (!isNaN(subUserIdNum)) {
                 // 验证这个子用户ID是否存在并且属于当前主用户
                 const subUser = await sql({
-                    query: 'SELECT id FROM SubUsers WHERE id = ? AND parent_user_id = ?',
+                    query: 'SELECT id FROM subusers WHERE id = ? AND parent_user_id = ?',
                     values: [subUserIdNum, userId],
                 }) as any[];
 
@@ -2034,7 +2034,7 @@ export const doPayment = async (evt: H3Event) => {
             //         let currentPtbBalance = 0;
             //         try {
             //             const userBalance = await sql({
-            //                 query: 'SELECT platform_coins FROM Users WHERE id = ?',
+            //                 query: 'SELECT platform_coins FROM users WHERE id = ?',
             //                 values: [userId]
             //             }) as any[];
             //             if (userBalance.length > 0) {
@@ -2083,7 +2083,7 @@ export const doPayment = async (evt: H3Event) => {
             // let currentPtbBalance = 0;
             // try {
             //     const userBalance = await sql({
-            //         query: 'SELECT platform_coins FROM Users WHERE id = ?',
+            //         query: 'SELECT platform_coins FROM users WHERE id = ?',
             //         values: [userId]
             //     }) as any[];
             //     if (userBalance.length > 0) {
@@ -2206,7 +2206,7 @@ export const doPayment = async (evt: H3Event) => {
             {
                 // 先查询用户当前余额
                 const userBalanceResult = await sql({
-                    query: 'SELECT platform_coins FROM Users WHERE id = ?',
+                    query: 'SELECT platform_coins FROM users WHERE id = ?',
                     values: [userId]
                 }) as any[];
                 const currentPtbBalance = userBalanceResult.length > 0 ? parseFloat(userBalanceResult[0].platform_coins) || 0 : 0;
@@ -2277,7 +2277,7 @@ export const doPayment = async (evt: H3Event) => {
             //         let currentPtbBalance = 0;
             //         try {
             //             const userBalance = await sql({
-            //                 query: 'SELECT platform_coins FROM Users WHERE id = ?',
+            //                 query: 'SELECT platform_coins FROM users WHERE id = ?',
             //                 values: [userId]
             //             }) as any[];
             //             if (userBalance.length > 0) {
@@ -2397,7 +2397,7 @@ export const doPayment = async (evt: H3Event) => {
             let currentPtbBalance = 0;
             try {
                 const userBalance = await sql({
-                    query: 'SELECT platform_coins FROM Users WHERE id = ?',
+                    query: 'SELECT platform_coins FROM users WHERE id = ?',
                     values: [userId]
                 }) as any[];
                 if (userBalance.length > 0) {
@@ -2526,7 +2526,7 @@ export const doPayment = async (evt: H3Event) => {
             //         let currentPtbBalance = 0;
             //         try {
             //             const userBalance = await sql({
-            //                 query: 'SELECT platform_coins FROM Users WHERE id = ?',
+            //                 query: 'SELECT platform_coins FROM users WHERE id = ?',
             //                 values: [userId]
             //             }) as any[];
             //             if (userBalance.length > 0) {
@@ -2645,7 +2645,7 @@ export const doPayment = async (evt: H3Event) => {
             let currentPtbBalance = 0;
             try {
                 const userBalance = await sql({
-                    query: 'SELECT platform_coins FROM Users WHERE id = ?',
+                    query: 'SELECT platform_coins FROM users WHERE id = ?',
                     values: [userId]
                 }) as any[];
                 if (userBalance.length > 0) {
@@ -3062,7 +3062,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
 
         const result = await sql({
-            query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
+            query: 'SELECT * FROM paymentrecords WHERE mch_order_id = ? LIMIT 1',
             values: [body.trade_no]
         }) as any[];
 
@@ -3268,7 +3268,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
 
         const result = await sql({
-            query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
+            query: 'SELECT * FROM paymentrecords WHERE mch_order_id = ? LIMIT 1',
             values: [body.trade_no]
         }) as any[];
 
@@ -3389,7 +3389,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
 
             // 获取用户当前平台币余额
             const user = await sql({
-                query: 'SELECT id, platform_coins FROM Users WHERE id = ?',
+                query: 'SELECT id, platform_coins FROM users WHERE id = ?',
                 values: [localOrder.user_id],
             }) as any[];
 
@@ -3664,7 +3664,7 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
 
             // 获取用户当前平台币余额
             const user = await sql({
-                query: 'SELECT id, platform_coins FROM Users WHERE id = ?',
+                query: 'SELECT id, platform_coins FROM users WHERE id = ?',
                 values: [orderDetail.user_id],
             }) as any[];
 

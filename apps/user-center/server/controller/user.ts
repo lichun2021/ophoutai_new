@@ -1,4 +1,4 @@
-import * as UserModel from '../model/user';
+﻿import * as UserModel from '../model/user';
 import {H3Event, getHeaders, getQuery} from 'h3';
 import { User } from '../model/user';
 import * as AdminModel from '../model/admin';
@@ -23,7 +23,7 @@ function getGameIp(amount?: number): string {
 async function getUserZfbWxSuccessTotal(userId: number): Promise<number> {
     const rows = await sql({
         query: `SELECT COALESCE(SUM(amount), 0) AS total
-                FROM PaymentRecords
+                FROM paymentrecords
                 WHERE user_id = ?
                   AND payment_status = 3
                   AND payment_way IN ('支付宝', '微信')`,
@@ -60,7 +60,7 @@ export const checkChannelStatus = async(evt: H3Event) => {
         
         // 查询代理账号状态
         const adminResult = await sql({
-            query: 'SELECT id, name, channel_code, is_active FROM Admins WHERE channel_code = ?',
+            query: 'SELECT id, name, channel_code, is_active FROM admins WHERE channel_code = ?',
             values: [channelCode],
         }) as any[];
         
@@ -312,7 +312,7 @@ export const insert = async(evt:H3Event) => {
         
         // 验证channel_code是否在Admins表中存在
         const adminResult = await sql({
-            query: 'SELECT id FROM Admins WHERE channel_code = ? AND is_active = 1',
+            query: 'SELECT id FROM admins WHERE channel_code = ? AND is_active = 1',
             values: [body.channel_code],
         }) as any[];
         
@@ -325,7 +325,7 @@ export const insert = async(evt:H3Event) => {
         
         // 验证game_code是否在Games表中存在
         const gameResult = await sql({
-            query: 'SELECT id FROM Games WHERE game_code = ? AND is_active = 1',
+            query: 'SELECT id FROM games WHERE game_code = ? AND is_active = 1',
             values: [body.game_code],
         }) as any[];
         
@@ -393,7 +393,7 @@ export const reg = async(evt:H3Event) => {
 
         // 验证代理账号是否启用
         const adminResult = await sql({
-            query: 'SELECT id FROM Admins WHERE channel_code = ? AND is_active = 1',
+            query: 'SELECT id FROM admins WHERE channel_code = ? AND is_active = 1',
             values: [body.channel_code],
         }) as any[];
 
@@ -478,7 +478,7 @@ export const reg = async(evt:H3Event) => {
     try{
         // 直接查询 SubUsers 表
         const result = await sql({
-            query: 'SELECT * FROM SubUsers WHERE id = ?',
+            query: 'SELECT * FROM subusers WHERE id = ?',
             values: [thirdparty_uid],
         }) as any[];
 
@@ -674,7 +674,7 @@ export const userLogin = async(evt: H3Event) => {
         if (password) {
             // 传统密码登录
             user = await sql({
-                query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
+                query: 'SELECT * FROM users WHERE username = ? AND password = ?',
                 values: [username, password],
             }) as any[];
         } else if (sig && ts) {
@@ -700,7 +700,7 @@ export const userLogin = async(evt: H3Event) => {
                 throw createError({ status: 401, message: '签名无效' });
             }
             user = await sql({
-                query: 'SELECT * FROM Users WHERE username = ? LIMIT 1',
+                query: 'SELECT * FROM users WHERE username = ? LIMIT 1',
                 values: [username],
             }) as any[];
         } else {
@@ -893,7 +893,7 @@ export const sdkLogin = async(evt: H3Event) => {
         
         // 通过用户名和密码查找用户
         const user = await sql({
-            query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
+            query: 'SELECT * FROM users WHERE username = ? AND password = ?',
             values: [username, password],
         }) as any[];
         
@@ -1092,7 +1092,7 @@ export const getSubAccountList = async(evt: H3Event) => {
         
         // 通过用户名查找主用户
         const user = await sql({
-            query: 'SELECT id FROM Users WHERE username = ?',
+            query: 'SELECT id FROM users WHERE username = ?',
             values: [username],
         }) as any[];
         
@@ -1190,7 +1190,7 @@ export const addSubAccount = async(evt: H3Event) => {
         
         // 通过用户名查找主用户
         const user = await sql({
-            query: 'SELECT id FROM Users WHERE username = ?',
+            query: 'SELECT id FROM users WHERE username = ?',
             values: [username],
         }) as any[];
         
@@ -1347,7 +1347,7 @@ export const editSubAccountNickname = async(evt: H3Event) => {
         
         // 通过用户名查找主用户
         const user = await sql({
-            query: 'SELECT id FROM Users WHERE username = ?',
+            query: 'SELECT id FROM users WHERE username = ?',
             values: [username],
         }) as any[];
         
@@ -1368,7 +1368,7 @@ export const editSubAccountNickname = async(evt: H3Event) => {
         
         // 查找子账号并验证是否属于该主用户
         const subUser = await sql({
-            query: 'SELECT id FROM SubUsers WHERE username = ? AND parent_user_id = ?',
+            query: 'SELECT id FROM subusers WHERE username = ? AND parent_user_id = ?',
             values: [subAccount, userId],
         }) as any[];
         
@@ -1389,7 +1389,7 @@ export const editSubAccountNickname = async(evt: H3Event) => {
         
         // 更新子账号昵称（直接更新username字段，因为username就是nickname）
         await sql({
-            query: 'UPDATE SubUsers SET username = ? WHERE id = ?',
+            query: 'UPDATE subusers SET username = ? WHERE id = ?',
             values: [nickname, subUserId],
         });
         
@@ -1467,7 +1467,7 @@ export const reportRole = async(evt: H3Event) => {
         
         // 查找主用户
         const user = await sql({
-            query: 'SELECT id FROM Users WHERE username = ?',
+            query: 'SELECT id FROM users WHERE username = ?',
             values: [username],
         }) as any[];
         
@@ -1541,7 +1541,7 @@ export const reportRole = async(evt: H3Event) => {
             
             // 从Users表获取游戏代码和渠道码
             const userInfoResult = await sql({
-                query: 'SELECT game_code, channel_code FROM Users WHERE id = ?',
+                query: 'SELECT game_code, channel_code FROM users WHERE id = ?',
                 values: [userId],
             }) as any[];
             
@@ -1672,7 +1672,7 @@ export const updateSubUserWuid = async(evt: H3Event) => {
         
 //         // 验证用户是否存在，同时获取game_code和channel_code
 //         const user = await sql({
-//             query: 'SELECT id, channel_code, game_code FROM Users WHERE username = ?',
+//             query: 'SELECT id, channel_code, game_code FROM users WHERE username = ?',
 //             values: [username],
 //         }) as any[];
         
@@ -1784,7 +1784,7 @@ export const register = async(evt: H3Event) => {
         
         // 检查用户名是否已存在
         const existingUserByUsername = await sql({
-            query: 'SELECT id FROM Users WHERE username = ?',
+            query: 'SELECT id FROM users WHERE username = ?',
             values: [body.username],
         }) as any[];
         
@@ -1806,7 +1806,7 @@ export const register = async(evt: H3Event) => {
         
         // 验证channel_code是否在Admins表中存在
         const adminResult = await sql({
-            query: 'SELECT id FROM Admins WHERE channel_code = ? AND is_active = 1',
+            query: 'SELECT id FROM admins WHERE channel_code = ? AND is_active = 1',
             values: [body.channel_code],
         }) as any[];
         
@@ -1819,7 +1819,7 @@ export const register = async(evt: H3Event) => {
         
         // 验证game_code是否在Games表中存在
         const gameResult = await sql({
-            query: 'SELECT id FROM Games WHERE game_code = ? AND is_active = 1',
+            query: 'SELECT id FROM games WHERE game_code = ? AND is_active = 1',
             values: [body.game_code],
         }) as any[];
         

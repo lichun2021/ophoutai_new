@@ -49,7 +49,7 @@ export const transferBetweenAdmins = async (
 
         // 获取发送方信息
         const fromAdmin = await sql({
-            query: 'SELECT name, available_platform_coins FROM Admins WHERE channel_code = ?',
+            query: 'SELECT name, available_platform_coins FROM admins WHERE channel_code = ?',
             values: [fromChannelCode]
         }) as any[];
 
@@ -59,7 +59,7 @@ export const transferBetweenAdmins = async (
 
         // 获取接收方信息
         const toAdmin = await sql({
-            query: 'SELECT name, available_platform_coins FROM Admins WHERE channel_code = ?',
+            query: 'SELECT name, available_platform_coins FROM admins WHERE channel_code = ?',
             values: [toChannelCode]
         }) as any[];
 
@@ -79,19 +79,19 @@ export const transferBetweenAdmins = async (
 
         // 更新发送方余额
         await sql({
-            query: 'UPDATE Admins SET available_platform_coins = ? WHERE channel_code = ?',
+            query: 'UPDATE admins SET available_platform_coins = ? WHERE channel_code = ?',
             values: [newFromBalance, fromChannelCode]
         });
 
         // 更新接收方余额
         await sql({
-            query: 'UPDATE Admins SET available_platform_coins = ? WHERE channel_code = ?',
+            query: 'UPDATE admins SET available_platform_coins = ? WHERE channel_code = ?',
             values: [newToBalance, toChannelCode]
         });
 
         // 记录流水
         await sql({
-            query: `INSERT INTO AdminPlatformCoinTransactions 
+            query: `INSERT INTO adminplatformcointransactions 
                    (from_channel_code, to_channel_code, from_admin_name, to_admin_name, 
                     amount, from_balance_before, from_balance_after, to_balance_before, to_balance_after, 
                     remark, operator_channel_code) 
@@ -124,7 +124,7 @@ export const transferToPlayer = async (
 
         // 获取代理信息
         const admin = await sql({
-            query: 'SELECT name, available_platform_coins FROM Admins WHERE channel_code = ?',
+            query: 'SELECT name, available_platform_coins FROM admins WHERE channel_code = ?',
             values: [adminChannelCode]
         }) as any[];
 
@@ -134,7 +134,7 @@ export const transferToPlayer = async (
 
         // 获取玩家信息 - 使用user_id查找
         const user = await sql({
-            query: 'SELECT id, platform_coins, channel_code, game_code, thirdparty_uid FROM Users WHERE id = ?',
+            query: 'SELECT id, platform_coins, channel_code, game_code, thirdparty_uid FROM users WHERE id = ?',
             values: [parseInt(userId.toString())]
         }) as any[];
 
@@ -162,7 +162,7 @@ export const transferToPlayer = async (
 
         // 更新代理余额
         await sql({
-            query: 'UPDATE Admins SET available_platform_coins = ? WHERE channel_code = ?',
+            query: 'UPDATE admins SET available_platform_coins = ? WHERE channel_code = ?',
             values: [newAdminBalance, adminChannelCode]
         });
 
@@ -176,7 +176,7 @@ export const transferToPlayer = async (
 
         // 记录流水 - 使用user_thirdparty_uid字段
         await sql({
-            query: `INSERT INTO AdminToPlayerPlatformCoinTransactions 
+            query: `INSERT INTO admintoplayerplatformcointransactions 
                    (admin_channel_code, admin_name, user_thirdparty_uid, user_channel_code, game_code,
                     amount, admin_balance_before, admin_balance_after, player_balance_before, player_balance_after, 
                     remark, operator_channel_code) 
@@ -193,7 +193,7 @@ export const transferToPlayer = async (
         const operationType = amount > 0 ? '管理员发放' : '管理员扣除';
         
         await sql({
-            query: `INSERT INTO PaymentRecords 
+            query: `INSERT INTO paymentrecords 
                    (user_id, sub_user_id, transaction_id, wuid, payment_way, payment_id,
                     world_id, product_name, product_des, ip, amount, mch_order_id, msg,
                     server_url, device, channel_code, game_code, payment_status,
@@ -238,7 +238,7 @@ export const getAdminTransactions = async (channelCode: string, page: number = 1
     const offset = (page - 1) * pageSize;
     
     const transactions = await sql({
-        query: `SELECT * FROM AdminPlatformCoinTransactions 
+        query: `SELECT * FROM adminplatformcointransactions 
                WHERE from_channel_code = ? OR to_channel_code = ?
                ORDER BY created_at DESC 
                LIMIT ? OFFSET ?`,
@@ -246,7 +246,7 @@ export const getAdminTransactions = async (channelCode: string, page: number = 1
     });
 
     const countResult = await sql({
-        query: `SELECT COUNT(*) as total FROM AdminPlatformCoinTransactions 
+        query: `SELECT COUNT(*) as total FROM adminplatformcointransactions 
                WHERE from_channel_code = ? OR to_channel_code = ?`,
         values: [channelCode, channelCode]
     }) as any[];
@@ -268,9 +268,9 @@ export const getAdminToPlayerTransactions = async (channelCode: string, page: nu
                    apt.*,
                    g.game_name,
                    u.id as user_id
-                FROM AdminToPlayerPlatformCoinTransactions apt
-                LEFT JOIN Games g ON apt.game_code = g.game_code
-                LEFT JOIN Users u ON apt.user_thirdparty_uid = u.thirdparty_uid
+                FROM admintoplayerplatformcointransactions apt
+                LEFT JOIN games g ON apt.game_code = g.game_code
+                LEFT JOIN users u ON apt.user_thirdparty_uid = u.thirdparty_uid
                 WHERE apt.admin_channel_code = ?
                 ORDER BY apt.created_at DESC 
                 LIMIT ? OFFSET ?`,
@@ -278,7 +278,7 @@ export const getAdminToPlayerTransactions = async (channelCode: string, page: nu
     });
 
     const countResult = await sql({
-        query: `SELECT COUNT(*) as total FROM AdminToPlayerPlatformCoinTransactions 
+        query: `SELECT COUNT(*) as total FROM admintoplayerplatformcointransactions 
                WHERE admin_channel_code = ?`,
         values: [channelCode]
     }) as any[];
@@ -294,7 +294,7 @@ export const getAdminToPlayerTransactions = async (channelCode: string, page: nu
 // 获取代理余额
 export const getAdminBalance = async (channelCode: string) => {
     const result = await sql({
-        query: 'SELECT platform_coins, available_platform_coins FROM Admins WHERE channel_code = ?',
+        query: 'SELECT platform_coins, available_platform_coins FROM admins WHERE channel_code = ?',
         values: [channelCode]
     }) as any[];
 
@@ -321,7 +321,7 @@ export const allocatePlatformCoins = async (
 
         // 获取发送方信息（超级管理员）
         const fromAdmin = await sql({
-            query: 'SELECT name, available_platform_coins FROM Admins WHERE channel_code = ?',
+            query: 'SELECT name, available_platform_coins FROM admins WHERE channel_code = ?',
             values: [fromChannelCode]
         }) as any[];
 
@@ -331,7 +331,7 @@ export const allocatePlatformCoins = async (
 
         // 获取接收方信息
         const toAdmin = await sql({
-            query: 'SELECT name, available_platform_coins FROM Admins WHERE channel_code = ?',
+            query: 'SELECT name, available_platform_coins FROM admins WHERE channel_code = ?',
             values: [toChannelCode]
         }) as any[];
 
@@ -352,19 +352,19 @@ export const allocatePlatformCoins = async (
 
         // 更新发送方余额
         await sql({
-            query: 'UPDATE Admins SET available_platform_coins = ? WHERE channel_code = ?',
+            query: 'UPDATE admins SET available_platform_coins = ? WHERE channel_code = ?',
             values: [newFromBalance, fromChannelCode]
         });
 
         // 更新接收方余额
         await sql({
-            query: 'UPDATE Admins SET available_platform_coins = ? WHERE channel_code = ?',
+            query: 'UPDATE admins SET available_platform_coins = ? WHERE channel_code = ?',
             values: [newToBalance, toChannelCode]
         });
 
         // 记录流水
         await sql({
-            query: `INSERT INTO AdminPlatformCoinTransactions 
+            query: `INSERT INTO adminplatformcointransactions 
                    (from_channel_code, to_channel_code, from_admin_name, to_admin_name, 
                     amount, from_balance_before, from_balance_after, to_balance_before, to_balance_after, 
                     remark, operator_channel_code) 

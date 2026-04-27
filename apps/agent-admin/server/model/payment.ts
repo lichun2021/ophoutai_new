@@ -33,7 +33,7 @@ export type Payment = {
 
 export const detailByTransId = async (transaction_id: string) => {
     const result = await sql({
-        query: 'SELECT * FROM PaymentRecords WHERE transaction_id = ?',
+        query: 'SELECT * FROM paymentrecords WHERE transaction_id = ?',
         values: [transaction_id],
     }) as any;
     return result.length === 1 ? result[0] as Payment : null;
@@ -41,7 +41,7 @@ export const detailByTransId = async (transaction_id: string) => {
 
 export const detailByMchOrderId = async (mch_order_id: string) => {
     const result = await sql({
-        query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ?',
+        query: 'SELECT * FROM paymentrecords WHERE mch_order_id = ?',
         values: [mch_order_id],
     }) as any;
     return result.length === 1 ? result[0] as Payment : null;
@@ -49,7 +49,7 @@ export const detailByMchOrderId = async (mch_order_id: string) => {
 
 export const detailByUserId = async (user_id: any) => {
     const paymentdata = await sql({
-        query: 'SELECT * FROM PaymentRecords WHERE user_id = ?',
+        query: 'SELECT * FROM paymentrecords WHERE user_id = ?',
         values: [user_id],
     }) as any;
     return  paymentdata as Payment[];
@@ -58,7 +58,7 @@ export const detailByUserId = async (user_id: any) => {
 
 // export const read = async (permissions:any) => {
 //     let _sql = {
-//         query: 'SELECT * FROM PaymentRecords',
+//         query: 'SELECT * FROM paymentrecords',
 //     }
 //     if(permissions.channel_id.length>0){
 //         _sql.query += " where channel_id in (" + permissions.channel_id.join(",") + ")"
@@ -74,7 +74,7 @@ export const readPage = async (pageIndex: any,permissions:any,tranId?:any,start_
     const offset = (pageIndex - 1) * pageSize; // 计算起始位置
 
     let _sql = {
-        query: 'SELECT pr.* FROM PaymentRecords pr ',
+        query: 'SELECT pr.* FROM paymentrecords pr ',
         values: [] as (string | number | Date)[], 
     }
 
@@ -169,7 +169,7 @@ export const readPage = async (pageIndex: any,permissions:any,tranId?:any,start_
 export const count = async (permissions:any,tranId?:any,start_time?:any,end_time?:any,userid?:any,mch_order_id?:any,payment_status?:any) => {
     try {
         let _sql = {
-            query: 'SELECT COUNT(*) AS total FROM PaymentRecords pr',
+            query: 'SELECT COUNT(*) AS total FROM paymentrecords pr',
             values: [] as (string | number | Date)[], 
         }
 
@@ -260,7 +260,7 @@ export const count = async (permissions:any,tranId?:any,start_time?:any,end_time
 export const allAmount = async (permissions:any,tranId?:any,start_time?:any,end_time?:any,userid?:any,mch_order_id?:any,state?:number,payment_status?:any) => {
     try {
         let _sql = {
-            query: 'SELECT sum(pr.amount) AS total FROM PaymentRecords pr',
+            query: 'SELECT sum(pr.amount) AS total FROM paymentrecords pr',
             values: [] as (string | number | Date)[], 
         }
 
@@ -376,7 +376,7 @@ export const allAmount = async (permissions:any,tranId?:any,start_time?:any,end_
 
 export const updateState = async (transaction_id: string, data: Pick<Payment,"payment_status">) => {
     await sql({
-        query: 'UPDATE PaymentRecords SET payment_status = ? WHERE transaction_id = ?',
+        query: 'UPDATE paymentrecords SET payment_status = ? WHERE transaction_id = ?',
         values: [data.payment_status, transaction_id],
     });
 }
@@ -384,7 +384,7 @@ export const updateState = async (transaction_id: string, data: Pick<Payment,"pa
 export const updateOrderCall = async (transaction_id: string, data: Pick<Payment,'payment_status'|'mch_order_id'>) => {
     // 保护：若库中已存在第三方单号（非本地前缀且非空），则不覆盖
     const existing: any[] = await sql({
-        query: 'SELECT mch_order_id, payment_status FROM PaymentRecords WHERE transaction_id = ?',
+        query: 'SELECT mch_order_id, payment_status FROM paymentrecords WHERE transaction_id = ?',
         values: [transaction_id],
     }) as any[];
     const current = existing[0]?.mch_order_id || '';
@@ -401,14 +401,14 @@ export const updateOrderCall = async (transaction_id: string, data: Pick<Payment
     }
     values.push(transaction_id);
     const _sql  = {
-        query: `UPDATE PaymentRecords SET ${fields.join(', ')} WHERE transaction_id = ?`,
+        query: `UPDATE paymentrecords SET ${fields.join(', ')} WHERE transaction_id = ?`,
         values
     }
     await sql(_sql);
 }
 
 export const getUserOrders = async (thirdparty_uid: string, status?: number) => {
-    let query = 'SELECT * FROM PaymentRecords WHERE user_id = ?';
+    let query = 'SELECT * FROM paymentrecords WHERE user_id = ?';
     const values: any[] = [thirdparty_uid];
     
     if (status !== undefined) {
@@ -435,13 +435,13 @@ export const getUserOrders = async (thirdparty_uid: string, status?: number) => 
   ) => {
       
       // 构建基础 SQL 查询
-      let query = 'UPDATE PaymentRecords SET payment_status = ?';
+      let query = 'UPDATE paymentrecords SET payment_status = ?';
       const values: any[] = [status];
       
       // 保护：若库中已存在第三方单号（非本地前缀且非空），则不覆盖，除非写入同值
       if(orderid){
             const existing: any[] = await sql({
-                query: 'SELECT mch_order_id, payment_status FROM PaymentRecords WHERE transaction_id = ?',
+                query: 'SELECT mch_order_id, payment_status FROM paymentrecords WHERE transaction_id = ?',
                 values: [transaction_id],
             }) as any[];
             const current = existing[0]?.mch_order_id || '';
@@ -478,7 +478,7 @@ export const getUserOrders = async (thirdparty_uid: string, status?: number) => 
 export const getOrderStatus = async (transaction_id: string): Promise<number> => {
     try {
         const result: any = await sql({
-            query: 'SELECT payment_status FROM PaymentRecords WHERE transaction_id = ?',
+            query: 'SELECT payment_status FROM paymentrecords WHERE transaction_id = ?',
             values: [transaction_id],
         });
 
@@ -497,14 +497,14 @@ export const getOrderStatus = async (transaction_id: string): Promise<number> =>
 
 export const updateOrderErrorMsg = async (transaction_id: string, error_msg: string) => {
     await sql({
-        query: 'UPDATE PaymentRecords SET msg=? WHERE transaction_id = ?',
+        query: 'UPDATE paymentrecords SET msg=? WHERE transaction_id = ?',
         values: [error_msg, transaction_id],
     });
 }
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM PaymentRecords WHERE id = ?',
+        query: 'DELETE FROM paymentrecords WHERE id = ?',
         values: [id],
     });
 }
@@ -512,7 +512,7 @@ export const remove = async (id: number) => {
 export const insert = async (paymentData: Omit<Payment, 'id' | 'created_at'>) => {
     
     const result = await sql({
-        query: 'INSERT INTO PaymentRecords (user_id, sub_user_id, role_id, transaction_id, wuid, payment_way, payment_id, world_id, product_name, product_des, ip, amount, mch_order_id, msg, server_url, device, channel_code, game_code, payment_status, ptb_before, ptb_change, ptb_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        query: 'INSERT INTO paymentrecords (user_id, sub_user_id, role_id, transaction_id, wuid, payment_way, payment_id, world_id, product_name, product_des, ip, amount, mch_order_id, msg, server_url, device, channel_code, game_code, payment_status, ptb_before, ptb_change, ptb_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         values: [
             paymentData.user_id, 
             paymentData.sub_user_id, // 保持null值，不转换为0
@@ -614,7 +614,7 @@ export const updateByTransactionId = async (transaction_id: string, updateData: 
         // 保护：若库中已存在第三方单号（非本地前缀且非空），则不覆盖，除非写入同值；
         // 同时在未完成/处理中（status<=1）阶段允许覆盖一次
         const existing: any[] = await sql({
-            query: 'SELECT mch_order_id, payment_status FROM PaymentRecords WHERE transaction_id = ?',
+            query: 'SELECT mch_order_id, payment_status FROM paymentrecords WHERE transaction_id = ?',
             values: [actualTransactionId],
         }) as any[];
         const current = existing[0]?.mch_order_id || '';
@@ -668,7 +668,7 @@ export const updateByTransactionId = async (transaction_id: string, updateData: 
     
     // 执行更新
     await sql({
-        query: `UPDATE PaymentRecords SET ${fields.join(', ')} WHERE transaction_id = ?`,
+        query: `UPDATE paymentrecords SET ${fields.join(', ')} WHERE transaction_id = ?`,
         values: values,
     });
 };

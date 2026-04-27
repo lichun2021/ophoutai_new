@@ -20,7 +20,7 @@ export type Settlement = {
 
 export const findByAdminId = async (admin_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM Settlements WHERE admin_id = ? ORDER BY created_at DESC',
+        query: 'SELECT * FROM settlements WHERE admin_id = ? ORDER BY created_at DESC',
         values: [admin_id],
     }) as any;
     return result as Settlement[];
@@ -28,7 +28,7 @@ export const findByAdminId = async (admin_id: number) => {
 
 export const findById = async (id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM Settlements WHERE id = ?',
+        query: 'SELECT * FROM settlements WHERE id = ?',
         values: [id],
     }) as any;
     return result.length === 1 ? result[0] as Settlement : null;
@@ -36,7 +36,7 @@ export const findById = async (id: number) => {
 
 export const findByStatus = async (status: number) => {
     const result = await sql({
-        query: 'SELECT * FROM Settlements WHERE status = ? ORDER BY created_at DESC',
+        query: 'SELECT * FROM settlements WHERE status = ? ORDER BY created_at DESC',
         values: [status],
     }) as any;
     return result as Settlement[];
@@ -44,7 +44,7 @@ export const findByStatus = async (status: number) => {
 
 export const findPendingByAdminId = async (admin_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM Settlements WHERE admin_id = ? AND status = 0 ORDER BY created_at DESC',
+        query: 'SELECT * FROM settlements WHERE admin_id = ? AND status = 0 ORDER BY created_at DESC',
         values: [admin_id],
     }) as any;
     return result as Settlement[];
@@ -52,7 +52,7 @@ export const findPendingByAdminId = async (admin_id: number) => {
 
 export const read = async () => {
     const settlements = await sql({
-        query: 'SELECT * FROM Settlements ORDER BY created_at DESC',
+        query: 'SELECT * FROM settlements ORDER BY created_at DESC',
     });
     return settlements as Settlement[];
 };
@@ -69,7 +69,7 @@ export const readPage = async (
     const offset = (pageIndex - 1) * pageSize;
     
     let _sql = {
-        query: 'SELECT * FROM Settlements',
+        query: 'SELECT * FROM settlements',
         values: [] as (string | number)[],
     };
     
@@ -115,7 +115,7 @@ export const count = async (
 ) => {
     try {
         let _sql = {
-            query: 'SELECT COUNT(*) AS total FROM Settlements',
+            query: 'SELECT COUNT(*) AS total FROM settlements',
             values: [] as (string | number)[],
         };
         
@@ -157,7 +157,7 @@ export const count = async (
 export const getTotalAmountByStatus = async (status: number, admin_id?: number) => {
     try {
         let _sql = {
-            query: 'SELECT SUM(settlement_amount) AS total FROM Settlements WHERE status = ?',
+            query: 'SELECT SUM(settlement_amount) AS total FROM settlements WHERE status = ?',
             values: [status] as number[],
         };
         
@@ -177,7 +177,7 @@ export const getTotalAmountByStatus = async (status: number, admin_id?: number) 
 
 export const insert = async (settlementData: Omit<Settlement, 'id' | 'created_at' | 'updated_at'>) => {
     const result = await sql({
-        query: 'INSERT INTO Settlements (admin_id, admin_name, admin_level, total_amount, divide_rate, settlement_amount, status, settlement_date, remark, u_address, settlement_method, channel_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        query: 'INSERT INTO settlements (admin_id, admin_name, admin_level, total_amount, divide_rate, settlement_amount, status, settlement_date, remark, u_address, settlement_method, channel_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         values: [
             settlementData.admin_id,
             settlementData.admin_name,
@@ -214,7 +214,7 @@ export const updateStatus = async (id: number, status: number, remark?: string) 
     values.push(id);
     
     await sql({
-        query: `UPDATE Settlements SET ${fields.join(', ')} WHERE id = ?`,
+        query: `UPDATE settlements SET ${fields.join(', ')} WHERE id = ?`,
         values: values,
     });
 };
@@ -265,7 +265,7 @@ export const update = async (id: number, settlementData: Partial<Omit<Settlement
         values.push(id);
         
         await sql({
-            query: `UPDATE Settlements SET ${fields.join(', ')} WHERE id = ?`,
+            query: `UPDATE settlements SET ${fields.join(', ')} WHERE id = ?`,
             values: values,
         });
     }
@@ -273,14 +273,14 @@ export const update = async (id: number, settlementData: Partial<Omit<Settlement
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM Settlements WHERE id = ?',
+        query: 'DELETE FROM settlements WHERE id = ?',
         values: [id],
     });
 };
 
 export const removeByAdminId = async (admin_id: number) => {
     await sql({
-        query: 'DELETE FROM Settlements WHERE admin_id = ?',
+        query: 'DELETE FROM settlements WHERE admin_id = ?',
         values: [admin_id],
     });
 };
@@ -321,7 +321,7 @@ export const getAdminRelatedSettlements = async (adminId: number, page: number =
         const settlements = await sql({
             query: `SELECT s.*, 
                            CASE WHEN s.channel_code = ? THEN 1 ELSE 0 END as is_own
-                   FROM Settlements s
+                   FROM settlements s
                    WHERE s.channel_code IN (${placeholders})
                    ORDER BY s.created_at DESC 
                    LIMIT ? OFFSET ?`,
@@ -330,7 +330,7 @@ export const getAdminRelatedSettlements = async (adminId: number, page: number =
         
         // 获取总数
         const countResult = await sql({
-            query: `SELECT COUNT(*) as total FROM Settlements 
+            query: `SELECT COUNT(*) as total FROM settlements 
                    WHERE channel_code IN (${placeholders})`,
             values: channelCodes
         }) as any[];
@@ -408,7 +408,7 @@ export const getChildAdminSettlements = async (
         // 查询下级代理的结算申请
         const settlements = await sql({
             query: `SELECT s.*
-                   FROM Settlements s
+                   FROM settlements s
                    WHERE ${whereClause}
                    ORDER BY s.status ASC, s.created_at DESC
                    LIMIT ? OFFSET ?`,
@@ -417,7 +417,7 @@ export const getChildAdminSettlements = async (
         
         // 获取总数
         const countResult = await sql({
-            query: `SELECT COUNT(*) as total FROM Settlements s
+            query: `SELECT COUNT(*) as total FROM settlements s
                    WHERE ${whereClause}`,
             values: queryValues
         }) as any[];
@@ -467,8 +467,8 @@ export const calculateWithdrawableAmount = async (adminId: number) => {
         // 1. 计算自己渠道玩家的真实消费金额（排除平台币支付）
         const ownChannelResult = await sql({
             query: `SELECT COALESCE(SUM(pr.amount), 0) as total_amount
-                   FROM PaymentRecords pr
-                   JOIN Users u ON pr.user_id = u.id
+                   FROM paymentrecords pr
+                   JOIN users u ON pr.user_id = u.id
                    WHERE u.channel_code = ? AND pr.payment_status = 3
                    AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')`,
             values: [admin.channel_code]
@@ -486,8 +486,8 @@ export const calculateWithdrawableAmount = async (adminId: number) => {
             if (childChannels.length > 0) {
                 const childChannelsResult = await sql({
                     query: `SELECT COALESCE(SUM(pr.amount), 0) as total_amount
-                           FROM PaymentRecords pr
-                           JOIN Users u ON pr.user_id = u.id
+                           FROM paymentrecords pr
+                           JOIN users u ON pr.user_id = u.id
                            WHERE u.channel_code IN (${childChannels.map(() => '?').join(',')}) 
                            AND pr.payment_status = 3
                            AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')`,
@@ -501,7 +501,7 @@ export const calculateWithdrawableAmount = async (adminId: number) => {
         // 3. 计算已结算金额（状态为1的结算记录）
         const settledResult = await sql({
             query: `SELECT COALESCE(SUM(total_amount), 0) as settled_amount
-                   FROM Settlements 
+                   FROM settlements 
                    WHERE admin_id = ? AND status = 1`,
             values: [adminId]
         }) as any[];

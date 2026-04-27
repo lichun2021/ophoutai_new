@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 import { sql } from '../db';
 import { getSystemParam } from './systemConfig';
 
@@ -541,8 +541,8 @@ const mimmmaProvider: PaymentProvider = {
 const ahqlhConfig = {
     baseUrl: 'https://twwzf.ahqlhkj.top/mapi.php',
     apiUrl: 'https://twwzf.ahqlhkj.top/api.php',
-    pid: '1025',
-    md5Key: 'io24FF538Xv5TtlUx45okLXQQz6LLZ1w'
+    pid: '1027',
+    md5Key: 'ORnXNo1HHJo1oZHNOjlNh1rJRxjbNrxm'
 };
 
 const ahqlhProvider: PaymentProvider = {
@@ -992,8 +992,8 @@ export const gatewayParamSets: Record<string, GatewayParamSet & { supportQuery?:
         credentials: {
             baseUrl: 'https://twwzf.ahqlhkj.top/mapi.php',
             apiUrl: 'https://twwzf.ahqlhkj.top/api.php',
-            pid: '1025',
-            md5Key: 'io24FF538Xv5TtlUx45okLXQQz6LLZ1w'
+            pid: '1027',
+            md5Key: 'ORnXNo1HHJo1oZHNOjlNh1rJRxjbNrxm'
         }
     },
     // payment=5 接入 sxjzszPay
@@ -1036,7 +1036,7 @@ export async function selectPaymentChannelByRules(amount: number, paymentMethod?
             const savedRuleId = await getOrderRuleMapping(transactionId);
             if (savedRuleId) {
                 const ruleResult = await sql({
-                    query: 'SELECT payment_channel FROM PaymentRoutingRules WHERE id = ?',
+                    query: 'SELECT payment_channel FROM paymentroutingrules WHERE id = ?',
                     values: [savedRuleId]
                 }) as any[];
                 if (ruleResult.length > 0 && ruleResult[0].payment_channel) {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 渠道代码验证工具
  */
 
@@ -56,7 +56,7 @@ export const checkChannelCodeExists = async (channelCode: string, excludeId?: nu
     try {
         const trimmedCode = channelCode.trim();
         
-        let query = 'SELECT id, name, channel_code FROM Admins WHERE channel_code = ? AND is_active = 1';
+        let query = 'SELECT id, name, channel_code FROM admins WHERE channel_code = ? AND is_active = 1';
         let values: any[] = [trimmedCode];
 
         if (excludeId) {

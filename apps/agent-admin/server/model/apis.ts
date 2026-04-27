@@ -5,7 +5,7 @@ import {sql} from '../db';
 
 export const updateApiUrl = async (apiUrl:string) => {
     await sql({
-        query: 'UPDATE Apis SET apiurl = ? WHERE id = 999',
+        query: 'UPDATE apis SET apiurl = ? WHERE id = 999',
         values: [apiUrl],
     });
 }
@@ -13,7 +13,7 @@ export const updateApiUrl = async (apiUrl:string) => {
 export const getApiUrl = async () => {
 
     const result = await sql({
-        query: 'SELECT apiurl FROM Apis WHERE id = 999',
+        query: 'SELECT apiurl FROM apis WHERE id = 999',
     }) as any;
     console.log("getApiUrl",result);
     return result.length === 1 ? result[0].apiurl : null;

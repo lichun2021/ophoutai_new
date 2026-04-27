@@ -10,7 +10,7 @@ export type SubUser = {
 
 export const findByParentUserId = async (parent_user_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM SubUsers WHERE parent_user_id = ?',
+        query: 'SELECT * FROM subusers WHERE parent_user_id = ?',
         values: [parent_user_id],
     }) as any;
     return result as SubUser[];
@@ -18,7 +18,7 @@ export const findByParentUserId = async (parent_user_id: number) => {
 
 export const findByUsername = async (username: string) => {
     const result = await sql({
-        query: 'SELECT * FROM SubUsers WHERE username = ?',
+        query: 'SELECT * FROM subusers WHERE username = ?',
         values: [username],
     }) as any;
     return result.length === 1 ? result[0] as SubUser : null;
@@ -26,7 +26,7 @@ export const findByUsername = async (username: string) => {
 
 export const findById = async (id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM SubUsers WHERE id = ?',
+        query: 'SELECT * FROM subusers WHERE id = ?',
         values: [id],
     }) as any;
     return result.length === 1 ? result[0] as SubUser : null;
@@ -34,7 +34,7 @@ export const findById = async (id: number) => {
 
 export const countByParentUserId = async (parent_user_id: number) => {
     const result = await sql({
-        query: 'SELECT COUNT(*) AS total FROM SubUsers WHERE parent_user_id = ?',
+        query: 'SELECT COUNT(*) AS total FROM subusers WHERE parent_user_id = ?',
         values: [parent_user_id],
     }) as any;
     return result[0].total as number;
@@ -42,7 +42,7 @@ export const countByParentUserId = async (parent_user_id: number) => {
 
 export const read = async () => {
     const subUsers = await sql({
-        query: 'SELECT * FROM SubUsers ORDER BY created_at DESC',
+        query: 'SELECT * FROM subusers ORDER BY created_at DESC',
     });
     return subUsers as SubUser[];
 };
@@ -51,7 +51,7 @@ export const readPage = async (pageIndex: number, pageSize: number = 10, parent_
     const offset = (pageIndex - 1) * pageSize;
     
     let _sql = {
-        query: 'SELECT * FROM SubUsers',
+        query: 'SELECT * FROM subusers',
         values: [] as (string | number)[],
     };
     
@@ -70,7 +70,7 @@ export const readPage = async (pageIndex: number, pageSize: number = 10, parent_
 export const count = async (parent_user_id?: number) => {
     try {
         let _sql = {
-            query: 'SELECT COUNT(*) AS total FROM SubUsers',
+            query: 'SELECT COUNT(*) AS total FROM subusers',
             values: [] as number[],
         };
         
@@ -90,7 +90,7 @@ export const count = async (parent_user_id?: number) => {
 
 export const insert = async (subUserData: Omit<SubUser, 'id' | 'created_at'>) => {
     const result = await sql({
-        query: 'INSERT INTO SubUsers (parent_user_id, username, wuid) VALUES (?, ?, ?)',
+        query: 'INSERT INTO subusers (parent_user_id, username, wuid) VALUES (?, ?, ?)',
         values: [subUserData.parent_user_id, subUserData.username, subUserData.wuid || ''],
     });
     return result;
@@ -117,7 +117,7 @@ export const update = async (id: number, subUserData: Partial<Omit<SubUser, 'id'
         values.push(id);
         
         await sql({
-            query: `UPDATE SubUsers SET ${fields.join(', ')} WHERE id = ?`,
+            query: `UPDATE subusers SET ${fields.join(', ')} WHERE id = ?`,
             values: values,
         });
     }
@@ -125,14 +125,14 @@ export const update = async (id: number, subUserData: Partial<Omit<SubUser, 'id'
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM SubUsers WHERE id = ?',
+        query: 'DELETE FROM subusers WHERE id = ?',
         values: [id],
     });
 };
 
 export const removeByParentUserId = async (parent_user_id: number) => {
     await sql({
-        query: 'DELETE FROM SubUsers WHERE parent_user_id = ?',
+        query: 'DELETE FROM subusers WHERE parent_user_id = ?',
         values: [parent_user_id],
     });
 };
@@ -142,7 +142,7 @@ export const updateWuidByThirdpartyUid = async (thirdparty_uid: string, uid: str
     try {
         // 1. 直接在 SubUsers 表中通过 id 字段查找子用户
         const subUserResult = await sql({
-            query: 'SELECT id FROM SubUsers WHERE id = ?',
+            query: 'SELECT id FROM subusers WHERE id = ?',
             values: [thirdparty_uid],
         }) as any[];
         
@@ -155,7 +155,7 @@ export const updateWuidByThirdpartyUid = async (thirdparty_uid: string, uid: str
         
         // 2. 更新子账号的 wuid 字段
         await sql({
-            query: 'UPDATE SubUsers SET wuid = ? WHERE id = ?',
+            query: 'UPDATE subusers SET wuid = ? WHERE id = ?',
             values: [uid, thirdparty_uid],
         });
         

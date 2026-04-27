@@ -223,7 +223,7 @@ export const getPublicGiftPackages = defineEventHandler(async (event) => {
 export const getGiftPackageCategories = defineEventHandler(async (event) => {
     try {
         const result = await sql({
-            query: `SELECT DISTINCT category FROM ExternalGiftPackages 
+            query: `SELECT DISTINCT category FROM externalgiftpackages 
                     WHERE is_active = 1 
                     AND category IS NOT NULL 
                     AND category != '' 
@@ -284,8 +284,8 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         
         // 验证角色是否属于该用户（通过子账号关联）
         const character = await sql({
-            query: `SELECT gc.* FROM GameCharacters gc 
-                   INNER JOIN SubUsers su ON gc.subuser_id = su.id 
+            query: `SELECT gc.* FROM gamecharacters gc 
+                   INNER JOIN subusers su ON gc.subuser_id = su.id 
                    WHERE su.parent_user_id = ? AND gc.uuid = ?`,
             values: [user_id, character_uuid],
         }) as any[];
@@ -659,8 +659,8 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
         // 从PaymentRecords表获取真实充值记录（排除平台币消费，关联 GameCharacters 表获取角色名字）
         const records = await sql({
             query: `SELECT pr.*, gc.character_name as role_name
-                   FROM PaymentRecords pr
-                   LEFT JOIN GameCharacters gc ON pr.role_id = gc.uuid
+                   FROM paymentrecords pr
+                   LEFT JOIN gamecharacters gc ON pr.role_id = gc.uuid
                    WHERE pr.user_id = ? AND pr.payment_status = 3
                    AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
                    ORDER BY pr.created_at DESC 
@@ -670,7 +670,7 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
         
         // 获取总数
         const countResult = await sql({
-            query: `SELECT COUNT(*) as total FROM PaymentRecords 
+            query: `SELECT COUNT(*) as total FROM paymentrecords 
                    WHERE user_id = ? AND payment_status = 3
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
             values: [user_id],
@@ -745,8 +745,8 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
         
         const records = await sql({
             query: `SELECT pr.*, gc.character_name as role_name
-                   FROM PaymentRecords pr
-                   LEFT JOIN GameCharacters gc ON pr.role_id = gc.uuid
+                   FROM paymentrecords pr
+                   LEFT JOIN gamecharacters gc ON pr.role_id = gc.uuid
                    WHERE ${whereClauseSql}
                    ORDER BY pr.created_at DESC 
                    LIMIT ?, ?`,
@@ -756,7 +756,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
         // 获取总数（按当前状态过滤）
         const countResult = await sql({
             query: `SELECT COUNT(*) as total 
-                   FROM PaymentRecords pr
+                   FROM paymentrecords pr
                    WHERE ${whereClauseSql}`,
             values: whereValues,
         }) as any[];
@@ -764,7 +764,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
         // 获取已完成订单数量
         const completedCountResult = await sql({
             query: `SELECT COUNT(*) as completed 
-                   FROM PaymentRecords 
+                   FROM paymentrecords 
                    WHERE user_id = ?
                      AND payment_way = '平台币'
                      AND payment_status = 3
@@ -775,7 +775,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
         
         const totalSpentResult = await sql({
             query: `SELECT COALESCE(SUM(amount), 0) AS total_spent
-                   FROM PaymentRecords
+                   FROM paymentrecords
                    WHERE user_id = ?
                      AND payment_way = '平台币'
                      AND payment_status = 3
@@ -837,7 +837,7 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
         
         // 获取累计充值金额（真实充值：排除平台币支付，只统计支付宝、微信等现金充值）
         const totalRechargeResult = await sql({
-            query: `SELECT SUM(amount) as total FROM PaymentRecords 
+            query: `SELECT SUM(amount) as total FROM paymentrecords 
                    WHERE user_id = ? AND payment_status = 3
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
             values: [user_id],
@@ -847,7 +847,7 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
         
         // 获取购买次数（payment_way是"平台币"且已完成的记录）
         const purchaseCountResult = await sql({
-            query: `SELECT COUNT(*) as count FROM PaymentRecords 
+            query: `SELECT COUNT(*) as count FROM paymentrecords 
                    WHERE user_id = ? AND payment_way = '平台币' AND payment_status = 3`,
             values: [user_id],
         }) as any[];
@@ -856,7 +856,7 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
         
         // 获取最近3次购买记录（payment_way是"平台币"的记录）
         const recentOrdersResult = await sql({
-            query: `SELECT * FROM PaymentRecords 
+            query: `SELECT * FROM paymentrecords 
                    WHERE user_id = ? AND payment_way = '平台币'
                    ORDER BY created_at DESC 
                    LIMIT 3`,
@@ -904,7 +904,7 @@ export const getUserStats = defineEventHandler(async (event) => {
         
         // 获取累计充值金额（真实充值：排除平台币支付）
         const totalRechargeResult = await sql({
-            query: `SELECT SUM(amount) as total FROM PaymentRecords 
+            query: `SELECT SUM(amount) as total FROM paymentrecords 
                    WHERE user_id = ? AND payment_status = 3
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
             values: [user_id],
@@ -914,7 +914,7 @@ export const getUserStats = defineEventHandler(async (event) => {
         
         // 获取购买次数（使用平台币的消费次数）
         const purchaseCountResult = await sql({
-            query: `SELECT COUNT(*) as count FROM PaymentRecords 
+            query: `SELECT COUNT(*) as count FROM paymentrecords 
                    WHERE user_id = ? AND payment_way = '平台币' AND payment_status = 3`,
             values: [user_id],
         }) as any[];

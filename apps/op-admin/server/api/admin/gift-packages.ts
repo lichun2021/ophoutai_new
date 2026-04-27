@@ -80,7 +80,7 @@ async function handleGetGiftPackages(event: any) {
   }
   
   // 获取总数
-  const countQuery = `SELECT COUNT(*) as total FROM ExternalGiftPackages ${whereClause}`;
+  const countQuery = `SELECT COUNT(*) as total FROM externalgiftpackages ${whereClause}`;
   const countResult = await sql({
     query: countQuery,
     values
@@ -91,7 +91,7 @@ async function handleGetGiftPackages(event: any) {
   // 获取分页数据
   const offset = (page - 1) * pageSize;
   const dataQuery = `
-    SELECT * FROM ExternalGiftPackages 
+    SELECT * FROM externalgiftpackages 
     ${whereClause} 
     ORDER BY sort_order DESC, created_at DESC 
     LIMIT ?, ?
@@ -200,7 +200,7 @@ async function handleCreateGiftPackage(event: any) {
   
   // 保存到数据库
   const result: any = await sql({
-    query: `INSERT INTO ExternalGiftPackages 
+    query: `INSERT INTO externalgiftpackages 
             (package_code, package_name, description, price_platform_coins, price_real_money,
              gift_items, category, icon_url, is_active, is_limited, total_quantity, sold_quantity,
              max_per_user, start_time, end_time, available_weekdays, sort_order, game_code)
@@ -302,7 +302,7 @@ async function handleUpdateGiftPackage(event: any) {
   updateValues.push(id);
   
   await sql({
-    query: `UPDATE ExternalGiftPackages SET ${updateFields.join(', ')} WHERE id = ?`,
+    query: `UPDATE externalgiftpackages SET ${updateFields.join(', ')} WHERE id = ?`,
     values: updateValues
   });
   
@@ -335,7 +335,7 @@ async function handleDeleteGiftPackage(event: any) {
   
   // 检查是否有购买记录
   const purchaseRecords = await sql({
-    query: 'SELECT COUNT(*) as count FROM GiftPackagePurchaseRecords WHERE package_id = ?',
+    query: 'SELECT COUNT(*) as count FROM giftpackagepurchaserecords WHERE package_id = ?',
     values: [id]
   }) as any[];
   
@@ -347,7 +347,7 @@ async function handleDeleteGiftPackage(event: any) {
   }
   
   await sql({
-    query: 'DELETE FROM ExternalGiftPackages WHERE id = ?',
+    query: 'DELETE FROM externalgiftpackages WHERE id = ?',
     values: [id]
   });
   

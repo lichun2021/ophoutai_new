@@ -16,7 +16,7 @@ export type PaymentSetting = {
 
 export const detail = async (id: string) => {
     const result = await sql({
-        query: 'SELECT * FROM PaymentSettings WHERE id = ?',
+        query: 'SELECT * FROM paymentsettings WHERE id = ?',
         values: [id],
     }) as any;
     return result.length === 1 ? result[0] as PaymentSetting : null;
@@ -25,14 +25,14 @@ export const detail = async (id: string) => {
 
 export const read = async () => {
     const result = await sql({
-        query: 'SELECT * FROM PaymentSettings',
+        query: 'SELECT * FROM paymentsettings',
     });
     return result as PaymentSetting[];
 }
 
 export const GetOpenPaySetting = async () => {
     const result = await sql({
-        query: 'SELECT * FROM PaymentSettings where isClose = 1',
+        query: 'SELECT * FROM paymentsettings where isClose = 1',
     });
     return result as PaymentSetting[];
 }
@@ -42,21 +42,21 @@ export const GetOpenPaySetting = async () => {
 
 export const update = async (data: PaymentSetting) => {
     await sql({
-        query: 'UPDATE PaymentSettings SET payment_method = ?, payment_channel = ?, icon_url = ?, request_url = ?, MinPrice = ?, MaxPrice = ?, Sort = ?, isClose = ?, clientIsClose = ? WHERE id = ?',
+        query: 'UPDATE paymentsettings SET payment_method = ?, payment_channel = ?, icon_url = ?, request_url = ?, MinPrice = ?, MaxPrice = ?, Sort = ?, isClose = ?, clientIsClose = ? WHERE id = ?',
         values: [data.payment_method, data.payment_channel, data.icon_url, data.request_url, data.MinPrice, data.MaxPrice, data.Sort, data.isClose, (data.clientIsClose ?? 1), data.id],
     });
 }
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM PaymentSettings WHERE id = ?',
+        query: 'DELETE FROM paymentsettings WHERE id = ?',
         values: [id],
     });
 }
 
 export const insert = async (data: PaymentSetting) => {
     const result = await sql({
-        query: 'INSERT INTO PaymentSettings (payment_method, payment_channel, icon_url, request_url, MinPrice, MaxPrice, Sort, isClose, clientIsClose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        query: 'INSERT INTO paymentsettings (payment_method, payment_channel, icon_url, request_url, MinPrice, MaxPrice, Sort, isClose, clientIsClose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         values: [data.payment_method, data.payment_channel, data.icon_url || '', data.request_url || '', data.MinPrice, data.MaxPrice, data.Sort, (data.isClose ?? 1), (data.clientIsClose ?? 1)],
     });
     return result;

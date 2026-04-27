@@ -1,4 +1,4 @@
-import {sql} from '../db';
+﻿import {sql} from '../db';
 
 export type GameCharacter = {
     id?: number;
@@ -17,7 +17,7 @@ export type GameCharacter = {
 
 export const findByUuid = async (uuid: string) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE uuid = ? LIMIT 1',
+        query: 'SELECT * FROM gamecharacters WHERE uuid = ? LIMIT 1',
         values: [uuid],
     }) as any;
     return result.length > 0 ? result[0] as GameCharacter : null;
@@ -25,7 +25,7 @@ export const findByUuid = async (uuid: string) => {
 
 export const findByUserId = async (user_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE user_id = ? ORDER BY created_at DESC',
+        query: 'SELECT * FROM gamecharacters WHERE user_id = ? ORDER BY created_at DESC',
         values: [user_id],
     }) as any;
     return result as GameCharacter[];
@@ -33,7 +33,7 @@ export const findByUserId = async (user_id: number) => {
 
 export const findBySubUserId = async (subuser_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE subuser_id = ? ORDER BY created_at DESC',
+        query: 'SELECT * FROM gamecharacters WHERE subuser_id = ? ORDER BY created_at DESC',
         values: [subuser_id],
     }) as any;
     return result as GameCharacter[];
@@ -41,7 +41,7 @@ export const findBySubUserId = async (subuser_id: number) => {
 
 export const findByGameId = async (game_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE game_id = ? ORDER BY created_at DESC',
+        query: 'SELECT * FROM gamecharacters WHERE game_id = ? ORDER BY created_at DESC',
         values: [game_id],
     }) as any;
     return result as GameCharacter[];
@@ -49,7 +49,7 @@ export const findByGameId = async (game_id: number) => {
 
 export const findByUserAndGame = async (user_id: number, game_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE user_id = ? AND game_id = ? ORDER BY created_at DESC',
+        query: 'SELECT * FROM gamecharacters WHERE user_id = ? AND game_id = ? ORDER BY created_at DESC',
         values: [user_id, game_id],
     }) as any;
     return result as GameCharacter[];
@@ -57,7 +57,7 @@ export const findByUserAndGame = async (user_id: number, game_id: number) => {
 
 export const findBySubUserAndGame = async (subuser_id: number, game_id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE subuser_id = ? AND game_id = ? ORDER BY created_at DESC',
+        query: 'SELECT * FROM gamecharacters WHERE subuser_id = ? AND game_id = ? ORDER BY created_at DESC',
         values: [subuser_id, game_id],
     }) as any;
     return result as GameCharacter[];
@@ -65,7 +65,7 @@ export const findBySubUserAndGame = async (subuser_id: number, game_id: number) 
 
 export const read = async () => {
     const characters = await sql({
-        query: 'SELECT * FROM GameCharacters ORDER BY created_at DESC',
+        query: 'SELECT * FROM gamecharacters ORDER BY created_at DESC',
     });
     return characters as GameCharacter[];
 };
@@ -74,7 +74,7 @@ export const readPage = async (pageIndex: number, pageSize: number = 10, user_id
     const offset = (pageIndex - 1) * pageSize;
     
     let _sql = {
-        query: 'SELECT * FROM GameCharacters',
+        query: 'SELECT * FROM gamecharacters',
         values: [] as number[],
     };
     
@@ -109,7 +109,7 @@ export const readPage = async (pageIndex: number, pageSize: number = 10, user_id
 export const count = async (user_id?: number, subuser_id?: number, game_id?: number) => {
     try {
         let _sql = {
-            query: 'SELECT COUNT(*) AS total FROM GameCharacters',
+            query: 'SELECT COUNT(*) AS total FROM gamecharacters',
             values: [] as number[],
         };
         
@@ -166,7 +166,7 @@ export const insert = async (characterData: Omit<GameCharacter, 'id' | 'created_
     const extData = normalizeExtData(characterData.ext);
     
     const result = await sql({
-        query: 'INSERT INTO GameCharacters (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        query: 'INSERT INTO gamecharacters (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         values: [
             characterData.user_id,
             characterData.subuser_id,
@@ -191,7 +191,7 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
         
         // 1. 先根据 subuser_id + uuid 查询角色是否已存在
         const existingResult = await sql({
-            query: 'SELECT id, server_id, server_name FROM GameCharacters WHERE subuser_id = ? AND uuid = ? LIMIT 1',
+            query: 'SELECT id, server_id, server_name FROM gamecharacters WHERE subuser_id = ? AND uuid = ? LIMIT 1',
             values: [characterData.subuser_id, characterData.uuid],
         }) as any[];
         
@@ -201,7 +201,7 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
             
             await sql({
                 query: `
-                    UPDATE GameCharacters 
+                    UPDATE gamecharacters 
                     SET 
                         character_name = ?, 
                         character_level = ?, 
@@ -223,7 +223,7 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
             // 3. 如果不存在，则执行插入
             const result = await sql({
                 query: `
-                    INSERT INTO GameCharacters 
+                    INSERT INTO gamecharacters 
                     (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 `,
@@ -300,7 +300,7 @@ export const update = async (id: number, characterData: Partial<Omit<GameCharact
         values.push(id);
         
         await sql({
-            query: `UPDATE GameCharacters SET ${fields.join(', ')} WHERE id = ?`,
+            query: `UPDATE gamecharacters SET ${fields.join(', ')} WHERE id = ?`,
             values: values,
         });
     }
@@ -308,35 +308,35 @@ export const update = async (id: number, characterData: Partial<Omit<GameCharact
 
 export const updateLastLogin = async (id: number, last_login_at: string) => {
     await sql({
-        query: 'UPDATE GameCharacters SET last_login_at = ? WHERE id = ?',
+        query: 'UPDATE gamecharacters SET last_login_at = ? WHERE id = ?',
         values: [last_login_at, id],
     });
 };
 
 export const updateLevel = async (id: number, character_level: number) => {
     await sql({
-        query: 'UPDATE GameCharacters SET character_level = ? WHERE id = ?',
+        query: 'UPDATE gamecharacters SET character_level = ? WHERE id = ?',
         values: [character_level, id],
     });
 };
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM GameCharacters WHERE id = ?',
+        query: 'DELETE FROM gamecharacters WHERE id = ?',
         values: [id],
     });
 };
 
 export const removeByUserId = async (user_id: number) => {
     await sql({
-        query: 'DELETE FROM GameCharacters WHERE user_id = ?',
+        query: 'DELETE FROM gamecharacters WHERE user_id = ?',
         values: [user_id],
     });
 };
 
 export const removeBySubUserId = async (subuser_id: number) => {
     await sql({
-        query: 'DELETE FROM GameCharacters WHERE subuser_id = ?',
+        query: 'DELETE FROM gamecharacters WHERE subuser_id = ?',
         values: [subuser_id],
     });
 }; 

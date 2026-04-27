@@ -27,7 +27,7 @@ export type Admin = {
 
 export const getAdminLevel = async (id:number) => {
     const result = await sql({
-        query: 'SELECT level FROM Admins WHERE id = ?',
+        query: 'SELECT level FROM admins WHERE id = ?',
         values: [id],
     }) as any;
     // console.log("getAdminLevel",result,id);
@@ -37,7 +37,7 @@ export const getAdminLevel = async (id:number) => {
 
 export const login = async (name: string,password:string) => {
     const result = await sql({
-        query: 'SELECT * FROM Admins WHERE name = ? and password = ?',
+        query: 'SELECT * FROM admins WHERE name = ? and password = ?',
         values: [name,password],
     }) as any;
     return result.length === 1 ? result[0] as Admin : null;
@@ -45,7 +45,7 @@ export const login = async (name: string,password:string) => {
 
 export const getByName = async (name: string) => {
     const result = await sql({
-        query: 'SELECT * FROM Admins WHERE name = ? LIMIT 1',
+        query: 'SELECT * FROM admins WHERE name = ? LIMIT 1',
         values: [name],
     }) as any;
     return result.length === 1 ? result[0] as Admin : null;
@@ -53,28 +53,28 @@ export const getByName = async (name: string) => {
 
 export const read = async () => {
     const users = await sql({
-        query: 'SELECT * FROM Admins',
+        query: 'SELECT * FROM admins',
     });
     return users as Admin[];
 }
 
 export const updatePassword = async (id: number, data: Pick<Admin,"password">) => {
     await sql({
-        query: 'UPDATE Admins SET password = ? WHERE id = ?',
+        query: 'UPDATE admins SET password = ? WHERE id = ?',
         values: [data.password, id],
     });
 }
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM Admins WHERE id = ?',
+        query: 'DELETE FROM admins WHERE id = ?',
         values: [id],
     });
 }
 
 export const insert = async (adminData: Omit<Admin, 'id' | 'created_at' | 'updated_at'>) => {
     const result = await sql({
-        query: 'INSERT INTO Admins (level, name, password, channel_code, settlement_type, settlement_amount, settlement_amount_available, divide_rate, platform_coins, available_platform_coins, tg_account, qq_account, email, phone, is_active, allowed_channel_codes, allowed_game_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        query: 'INSERT INTO admins (level, name, password, channel_code, settlement_type, settlement_amount, settlement_amount_available, divide_rate, platform_coins, available_platform_coins, tg_account, qq_account, email, phone, is_active, allowed_channel_codes, allowed_game_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         values: [
             adminData.level, 
             adminData.name, 
@@ -176,7 +176,7 @@ export const updateAdmin = async (id: number, adminData: Partial<Omit<Admin, 'id
         values.push(id);
         
         await sql({
-            query: `UPDATE Admins SET ${fields.join(', ')} WHERE id = ?`,
+            query: `UPDATE admins SET ${fields.join(', ')} WHERE id = ?`,
             values: values,
         });
     }
@@ -185,7 +185,7 @@ export const updateAdmin = async (id: number, adminData: Partial<Omit<Admin, 'id
 // 获取管理员详细信息（包含权限）
 export const getAdminWithPermissions = async (id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM Admins WHERE id = ?',
+        query: 'SELECT * FROM admins WHERE id = ?',
         values: [id],
     }) as any;
     
@@ -228,7 +228,7 @@ export const getAdminWithPermissions = async (id: number) => {
 // 更新管理员的权限（channelCodes）
 export const updateChannelCodes = async (id: number, channelCodes: string[]) => {
     await sql({
-        query: 'UPDATE Admins SET allowed_channel_codes = ?, updated_at = NOW() WHERE id = ?',
+        query: 'UPDATE admins SET allowed_channel_codes = ?, updated_at = NOW() WHERE id = ?',
         values: [JSON.stringify(channelCodes), id],
     });
 }
@@ -355,7 +355,7 @@ export const cascadeRefreshUpwardPermissions = async (channelCode: string) => {
 // 更新管理员的游戏权限
 export const updateGameIds = async (id: number, gameIds: number[]) => {
     await sql({
-        query: 'UPDATE Admins SET allowed_game_ids = ?, updated_at = NOW() WHERE id = ?',
+        query: 'UPDATE admins SET allowed_game_ids = ?, updated_at = NOW() WHERE id = ?',
         values: [JSON.stringify(gameIds), id],
     });
 }
@@ -363,7 +363,7 @@ export const updateGameIds = async (id: number, gameIds: number[]) => {
 // 切换管理员状态
 export const toggleAdminStatus = async (id: number, isActive: boolean) => {
     await sql({
-        query: 'UPDATE Admins SET is_active = ?, updated_at = NOW() WHERE id = ?',
+        query: 'UPDATE admins SET is_active = ?, updated_at = NOW() WHERE id = ?',
         values: [isActive ? 1 : 0, id],
     });
 }
@@ -371,7 +371,7 @@ export const toggleAdminStatus = async (id: number, isActive: boolean) => {
 // 获取所有可用的游戏列表
 export const getAllGames = async () => {
     const games = await sql({
-        query: 'SELECT id, game_name, game_code, icon_url, supported_devices, register_url, ios_download_url, android_download_url, description, is_active FROM Games ORDER BY id',
+        query: 'SELECT id, game_name, game_code, icon_url, supported_devices, register_url, ios_download_url, android_download_url, description, is_active FROM games ORDER BY id',
     });
     return games as Array<{
         id: number,
@@ -725,7 +725,7 @@ export const syncAllGamePermissions = async () => {
 export const updateAdminPassword = async (adminId: number, newPassword: string): Promise<boolean> => {
     try {
         await sql({
-            query: 'UPDATE Admins SET password = ?, updated_at = NOW() WHERE id = ?',
+            query: 'UPDATE admins SET password = ?, updated_at = NOW() WHERE id = ?',
             values: [newPassword, adminId],
         });
         return true;
@@ -756,7 +756,7 @@ export const updateProfile = async (adminId: number, profileData: {qq_account?: 
             values.push(adminId);
             
             await sql({
-                query: `UPDATE Admins SET ${fields.join(', ')} WHERE id = ?`,
+                query: `UPDATE admins SET ${fields.join(', ')} WHERE id = ?`,
                 values: values,
             });
         }
@@ -772,7 +772,7 @@ export const updateProfile = async (adminId: number, profileData: {qq_account?: 
 export const getAdminProfile = async (adminId: number) => {
     try {
         const result = await sql({
-            query: 'SELECT id, level, name, channel_code, created_at, updated_at, settlement_type, settlement_amount, settlement_amount_available, divide_rate, tg_account, qq_account, email, phone, allowed_channel_codes, allowed_game_ids FROM Admins WHERE id = ?',
+            query: 'SELECT id, level, name, channel_code, created_at, updated_at, settlement_type, settlement_amount, settlement_amount_available, divide_rate, tg_account, qq_account, email, phone, allowed_channel_codes, allowed_game_ids FROM admins WHERE id = ?',
             values: [adminId],
         }) as any;
         

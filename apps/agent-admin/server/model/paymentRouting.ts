@@ -72,7 +72,7 @@ export const getOrderRuleMapping = async (transactionId: string): Promise<number
 // 获取所有启用的规则（按优先级排序）
 export const getActiveRules = async (): Promise<PaymentRoutingRule[]> => {
     const result = await sql({
-        query: 'SELECT * FROM PaymentRoutingRules WHERE is_enabled = 1 ORDER BY priority DESC',
+        query: 'SELECT * FROM paymentroutingrules WHERE is_enabled = 1 ORDER BY priority DESC',
     });
     return result as PaymentRoutingRule[];
 };
@@ -168,14 +168,14 @@ export const matchRule = async (
 // CRUD 操作
 export const getAllRules = async () => {
     const result = await sql({
-        query: 'SELECT * FROM PaymentRoutingRules ORDER BY priority DESC',
+        query: 'SELECT * FROM paymentroutingrules ORDER BY priority DESC',
     });
     return result as PaymentRoutingRule[];
 };
 
 export const createRule = async (rule: Omit<PaymentRoutingRule, 'id'>) => {
     return await sql({
-        query: `INSERT INTO PaymentRoutingRules 
+        query: `INSERT INTO paymentroutingrules 
                 (rule_name, priority, is_enabled, min_amount, max_amount, 
                  time_start, time_end, payment_channel, daily_quota, fallback_channel,
                  allow_zfb, allow_wx)
@@ -229,14 +229,14 @@ export const updateRule = async (id: number, rule: Partial<PaymentRoutingRule>) 
     values.push(id);
     
     return await sql({
-        query: `UPDATE PaymentRoutingRules SET ${fields.join(', ')} WHERE id = ?`,
+        query: `UPDATE paymentroutingrules SET ${fields.join(', ')} WHERE id = ?`,
         values
     });
 };
 
 export const deleteRule = async (id: number) => {
     return await sql({
-        query: 'DELETE FROM PaymentRoutingRules WHERE id = ?',
+        query: 'DELETE FROM paymentroutingrules WHERE id = ?',
         values: [id]
     });
 };
@@ -246,7 +246,7 @@ export const toggleRule = async (id: number, enabled?: boolean) => {
 
     if (targetStatus === undefined) {
         const result: any = await sql({
-            query: 'SELECT is_enabled FROM PaymentRoutingRules WHERE id = ?',
+            query: 'SELECT is_enabled FROM paymentroutingrules WHERE id = ?',
             values: [id]
         });
 
@@ -255,7 +255,7 @@ export const toggleRule = async (id: number, enabled?: boolean) => {
     }
 
     return await sql({
-        query: 'UPDATE PaymentRoutingRules SET is_enabled = ? WHERE id = ?',
+        query: 'UPDATE paymentroutingrules SET is_enabled = ? WHERE id = ?',
         values: [targetStatus ? 1 : 0, id]
     });
 };

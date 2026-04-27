@@ -55,7 +55,7 @@ async function handleGetSalesDetails(event: any) {
       package_name,
       category,
       price_platform_coins + price_real_money as price
-    FROM ExternalGiftPackages
+    FROM externalgiftpackages
     WHERE id = ?
   `;
   

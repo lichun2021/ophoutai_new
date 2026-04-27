@@ -1,4 +1,4 @@
-import { H3Event, readBody, createError } from 'h3';
+﻿import { H3Event, readBody, createError } from 'h3';
 import { sql } from '../db';
 
 type PaymentRecordRow = {
@@ -104,7 +104,7 @@ export const getPlayerDetail = async (evt: H3Event) => {
                 return null;
             }
             const rows = await sql({
-                query: `SELECT ${baseUserFields} FROM Users WHERE id = ? LIMIT 1`,
+                query: `SELECT ${baseUserFields} FROM users WHERE id = ? LIMIT 1`,
                 values: [id],
             }) as any[];
             return rows.length > 0 ? rows[0] : null;
@@ -113,7 +113,7 @@ export const getPlayerDetail = async (evt: H3Event) => {
         const fetchUserByUsername = async (username: string) => {
             if (!username) return null;
             const rows = await sql({
-                query: `SELECT ${baseUserFields} FROM Users WHERE username = ? LIMIT 1`,
+                query: `SELECT ${baseUserFields} FROM users WHERE username = ? LIMIT 1`,
                 values: [username],
             }) as any[];
             return rows.length > 0 ? rows[0] : null;
@@ -222,7 +222,7 @@ export const getPlayerDetail = async (evt: H3Event) => {
 
         // 提前获取角色的基本信息（区服、等级等）
         const characterRows = await sql({
-            query: 'SELECT uuid, server_id, server_name, character_level FROM GameCharacters WHERE user_id = ?',
+            query: 'SELECT uuid, server_id, server_name, character_level FROM gamecharacters WHERE user_id = ?',
             values: [userId]
         }) as any[];
         

@@ -1,4 +1,4 @@
-import { H3Event, readBody, createError } from 'h3';
+﻿import { H3Event, readBody, createError } from 'h3';
 import * as PaymentRoutingModel from '../model/paymentRouting';
 import * as SystemParamsModel from '../model/systemParams';
 
@@ -295,7 +295,7 @@ export const resetDailyQuota = async (evt: H3Event) => {
         
         const { sql } = await import('../db');
         await sql({
-            query: 'UPDATE PaymentRoutingRules SET used_quota = 0, quota_reset_date = CURDATE() WHERE id = ?',
+            query: 'UPDATE paymentroutingrules SET used_quota = 0, quota_reset_date = CURDATE() WHERE id = ?',
             values: [id]
         });
         

@@ -8,7 +8,7 @@ export type SystemParam = {
 
 export const detail = async (key: string) => {
     const result = await sql({
-        query: 'SELECT * FROM SystemParams WHERE `key` = ?',
+        query: 'SELECT * FROM systemparams WHERE `key` = ?',
         values: [key],
     }) as any;
     return result.length === 1 ? result[0] as SystemParam : null;
@@ -16,21 +16,21 @@ export const detail = async (key: string) => {
 
 export const read = async () => {
     const result = await sql({
-        query: 'SELECT * FROM SystemParams ORDER BY id ASC',
+        query: 'SELECT * FROM systemparams ORDER BY id ASC',
     });
     return result as SystemParam[];
 };
 
 export const update = async (key: string, content: string) => {
     await sql({
-        query: 'UPDATE SystemParams SET content = ? WHERE `key` = ?',
+        query: 'UPDATE systemparams SET content = ? WHERE `key` = ?',
         values: [content, key],
     });
 };
 
 export const insert = async (data: Omit<SystemParam, 'id'>) => {
     const result = await sql({
-        query: 'INSERT INTO SystemParams (`key`, content) VALUES (?, ?)',
+        query: 'INSERT INTO systemparams (`key`, content) VALUES (?, ?)',
         values: [data.key, data.content],
     });
     return result;
@@ -38,7 +38,7 @@ export const insert = async (data: Omit<SystemParam, 'id'>) => {
 
 export const remove = async (key: string) => {
     await sql({
-        query: 'DELETE FROM SystemParams WHERE `key` = ?',
+        query: 'DELETE FROM systemparams WHERE `key` = ?',
         values: [key],
     });
 };

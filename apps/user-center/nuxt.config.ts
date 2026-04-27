@@ -32,7 +32,7 @@ export default defineNuxtConfig({
     public: {
       apiBaseURL: process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:3001',
       baseUrl: process.env.BASE_URL || 'http://localhost:3001',
-      apiSignKey: process.env.API_SIGN_KEY || process.env.PUBLIC_API_SIGN_KEY || 'fasdjhkfh2348!@#$!617'
+      apiSignKey: process.env.API_SIGN_KEY || process.env.PUBLIC_API_SIGN_KEY || 'q12eiedu24fi3rf434g34g'
     }
   },
 

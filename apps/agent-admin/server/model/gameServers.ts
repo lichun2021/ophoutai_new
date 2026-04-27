@@ -19,14 +19,14 @@ export interface GameServerConfig {
 
 export async function listAll(): Promise<GameServerConfig[]> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers ORDER BY id ASC'
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers ORDER BY id ASC'
   }) as any[];
   return rows as GameServerConfig[];
 }
 
 export async function listActive(): Promise<GameServerConfig[]> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE is_active = 1 ORDER BY id ASC'
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers WHERE is_active = 1 ORDER BY id ASC'
   }) as any[];
   return rows as GameServerConfig[];
 }
@@ -34,14 +34,14 @@ export async function listActive(): Promise<GameServerConfig[]> {
 // 获取允许CDK领取的活跃服务器
 export async function listCdkRedeemable(): Promise<GameServerConfig[]> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, created_at, updated_at FROM GameServers WHERE is_active = 1 AND allow_cdk_redeem = 1 ORDER BY id ASC'
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, created_at, updated_at FROM gameservers WHERE is_active = 1 AND allow_cdk_redeem = 1 ORDER BY id ASC'
   }) as any[];
   return rows as GameServerConfig[];
 }
 
 export async function getById(id: number): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE id = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers WHERE id = ? LIMIT 1',
     values: [id]
   }) as any[];
   return rows.length ? rows[0] as GameServerConfig : null;
@@ -49,7 +49,7 @@ export async function getById(id: number): Promise<GameServerConfig | null> {
 
 export async function getByBName(bname: string): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE bname = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers WHERE bname = ? LIMIT 1',
     values: [bname]
   }) as any[];
   return rows.length ? rows[0] as GameServerConfig : null;
@@ -57,7 +57,7 @@ export async function getByBName(bname: string): Promise<GameServerConfig | null
 
 export async function getByName(name: string): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE name = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers WHERE name = ? LIMIT 1',
     values: [name]
   }) as any[];
   return rows.length ? rows[0] as GameServerConfig : null;
@@ -65,7 +65,7 @@ export async function getByName(name: string): Promise<GameServerConfig | null> 
 
 export async function getByServerId(serverId: number): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE server_id = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers WHERE server_id = ? LIMIT 1',
     values: [serverId]
   }) as any[];
   return rows.length ? rows[0] as GameServerConfig : null;
@@ -109,7 +109,7 @@ export async function getByWorldId(worldId: number): Promise<GameServerConfig | 
   
   // 2. Redis 没有，从数据库查询
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE server_id = ? OR bname = ? OR name = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers WHERE server_id = ? OR bname = ? OR name = ? LIMIT 1',
     values: [worldId, `game_${worldId}`, `game_${worldId}`]
   }) as any[];
   
@@ -135,7 +135,7 @@ export async function getByWorldId(worldId: number): Promise<GameServerConfig | 
 
 export async function createServer(cfg: Omit<GameServerConfig, 'id' | 'created_at' | 'updated_at'>): Promise<any> {
   return await sql({
-    query: 'INSERT INTO GameServers (server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    query: 'INSERT INTO gameservers (server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     values: [cfg.server_id ?? null, cfg.name, cfg.webhost, cfg.dbip, cfg.bname, cfg.dbuser, cfg.dbpass, cfg.is_active ?? 1, cfg.allow_cdk_redeem ?? 1, cfg.count_online ?? 1]
   });
 }
@@ -155,14 +155,14 @@ export async function updateServer(id: number, cfg: Partial<Omit<GameServerConfi
   if (cfg.count_online !== undefined) { fields.push('count_online = ?'); values.push(cfg.count_online); }
   if (!fields.length) return;
   values.push(id);
-  await sql({ query: `UPDATE GameServers SET ${fields.join(', ')}, updated_at = NOW() WHERE id = ?`, values });
+  await sql({ query: `UPDATE gameservers SET ${fields.join(', ')}, updated_at = NOW() WHERE id = ?`, values });
   
   // 清除 Redis 缓存
   await clearServerCache(id);
 }
 
 export async function removeServer(id: number): Promise<void> {
-  await sql({ query: 'DELETE FROM GameServers WHERE id = ?', values: [id] });
+  await sql({ query: 'DELETE FROM gameservers WHERE id = ?', values: [id] });
   
   // 清除 Redis 缓存
   await clearServerCache(id);

@@ -1,4 +1,4 @@
-import { sql } from '../db';
+﻿import { sql } from '../db';
 
 interface SystemConfig {
     kefu_line?: string;
@@ -30,7 +30,7 @@ const getBaseUrl = () => {
 export async function getSystemParam(key: string, defaultValue: string = ''): Promise<string> {
     try {
         const result = await sql({
-            query: 'SELECT content FROM SystemParams WHERE `key` = ?',
+            query: 'SELECT content FROM systemparams WHERE `key` = ?',
             values: [key],
         }) as any[];
         

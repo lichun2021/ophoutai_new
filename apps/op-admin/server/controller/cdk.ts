@@ -2,16 +2,15 @@ import { H3Event, readBody, getQuery, createError } from 'h3';
 import { gameDbSql } from '../db/gameDb';
 import * as CDKModel from '../model/cdk';
 import { getChinaTime } from '../utils/timezone';
-import { IdipClient } from './gmport';
+import { createGameServerClient, type Platform } from './gameServerClient';
 import { getByIdentifier as getGameServerByIdentifier } from '../model/gameServers';
 
-// 按区服动态创建 IdipClient（优先使用 GameServers.webhost）
-const createIdipClientForServer = async (identifier: string): Promise<IdipClient> => {
+// 根据区服动态创建 GameServerClient
+const createClientForServer = async (identifier: string) => {
   const cfg = await getGameServerByIdentifier(identifier).catch(() => null);
-  const rawBase = (cfg?.webhost || process.env.GM_BASE_URL || '').replace(/\/+$/, '');
-  const baseURL = rawBase.includes('/script') ? rawBase : `${rawBase}/script`;
+  const webhost = (cfg?.webhost || process.env.GM_BASE_URL || '').replace(/\/+$/, '');
   const timeoutMs = parseInt(process.env.GM_TIMEOUT_MS || '10000');
-  return new IdipClient({ baseURL, directMode: true, timeoutMs });
+  return createGameServerClient(webhost, 'idip', timeoutMs);
 };
 
 // 根据 server 参数解析 GameServers 配置
@@ -181,22 +180,17 @@ export const redeem = async (evt: H3Event) => {
 
       // 发放物资
       try {
-        const idipClient = await createIdipClientForServer(String(server));
-        const partition = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
-        let platId: 1 | 2 = 1;
-        if (typeof platform === 'string') {
-          platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-        } else {
-          platId = Number(platform) === 2 ? 2 : 1;
-        }
-        await idipClient.sendItems({
-          partition,
-          platId,
+        const client = await createClientForServer(String(server));
+        const serverId = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
+        const plat: Platform = (typeof platform === 'string' ? platform.toLowerCase() === 'ios' : Number(platform) === 2) ? 'ios' : 'android';
+        await client.sendItemMail({
           openId: player.openid,
+          serverId,
+          platform: plat,
           roleId: playerId,
-          title: cdkType.title,
-          content: cdkType.content,
-          items: cdkType.items,
+          mailTitle: cdkType.title,
+          mailContent: cdkType.content,
+          items: cdkType.items.map((i: any) => ({ itemId: Number(i.ItemId), itemCount: Number(i.ItemNum) })),
         });
       } catch (e: any) {
         console.error(`[CDK][redeem][data] 发放失败`, { server, playerId, code: String(code) }, e);
@@ -253,22 +247,17 @@ export const redeem = async (evt: H3Event) => {
 
   // 6) 调用 GM 发放物资
   try {
-    const idipClient = await createIdipClientForServer(String(server));
-    const partition = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
-    let platId: 1 | 2 = 1;
-    if (typeof platform === 'string') {
-      platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-    } else {
-      platId = Number(platform) === 2 ? 2 : 1;
-    }
-    await idipClient.sendItems({
-      partition,
-      platId,
+    const client = await createClientForServer(String(server));
+    const serverId = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
+    const plat: Platform = (typeof platform === 'string' ? platform.toLowerCase() === 'ios' : Number(platform) === 2) ? 'ios' : 'android';
+    await client.sendItemMail({
       openId: player.openid,
+      serverId,
+      platform: plat,
       roleId: playerId,
-      title: cdkType.title,
-      content: cdkType.content,
-      items: cdkType.items,
+      mailTitle: cdkType.title,
+      mailContent: cdkType.content,
+      items: cdkType.items.map((i: any) => ({ itemId: Number(i.ItemId), itemCount: Number(i.ItemNum) })),
     });
   } catch (e: any) {
     throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });

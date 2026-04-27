@@ -17,28 +17,28 @@ export default defineNuxtConfig({
       ]
     }
   },
-  
+
   nitro: {
     externals: {
       inline: ["lru-cache"]
     }
   },
-  
+
   runtimeConfig: {
     baseUrl: process.env.BASE_URL || 'http://localhost:3003',
     adminLoginIpWhitelist: process.env.ADMIN_LOGIN_IP_WHITELIST || '*',
-    
+
     public: {
       apiBaseURL: process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:3003',
       baseUrl: process.env.BASE_URL || 'http://localhost:3003',
-      apiSignKey: process.env.API_SIGN_KEY || process.env.PUBLIC_API_SIGN_KEY || 'fasdjhkfh2348!@#$!617'
+      apiSignKey: process.env.API_SIGN_KEY || process.env.PUBLIC_API_SIGN_KEY || 'q12eiedu24fi3rf434g34g'
     }
   },
 
   compatibilityDate: '2024-04-03',
 
-  devtools: { 
-    enabled: true 
+  devtools: {
+    enabled: true
   },
 
   modules: [

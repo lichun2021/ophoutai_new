@@ -72,7 +72,7 @@ export const switchPaymentChannel = async (evt: H3Event) => {
         // 更新系统参数
         const { sql } = await import('../db');
         await sql({
-            query: 'UPDATE SystemParams SET content = ? WHERE `key` = ?',
+            query: 'UPDATE systemparams SET content = ? WHERE `key` = ?',
             values: [channel_id, 'payment']
         });
         
@@ -99,7 +99,7 @@ export const getPaymentChannelStats = async (evt: H3Event) => {
                     SUM(CASE WHEN payment_status = 3 THEN 1 ELSE 0 END) as success_count,
                     SUM(CASE WHEN payment_status = 3 THEN amount ELSE 0 END) as success_amount,
                     SUM(amount) as total_amount
-                FROM Payment
+                FROM paymentrecords
                 WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
                 GROUP BY payment_way
             `
@@ -177,7 +177,7 @@ export const createPlatformCoinOrder = async (evt: H3Event) => {
         const paymentWay = PAYMENT_WAY_LABEL[payType] || payType;
 
         const userRows = await sql({
-            query: 'SELECT id, username, channel_code, game_code FROM Users WHERE id = ? LIMIT 1',
+            query: 'SELECT id, username, channel_code, game_code FROM users WHERE id = ? LIMIT 1',
             values: [userId]
         }) as Array<{ id: number; username: string; channel_code?: string; game_code?: string }>;
 

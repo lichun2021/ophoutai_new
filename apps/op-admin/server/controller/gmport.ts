@@ -1,3 +1,8 @@
+/**
+ * @deprecated 此文件已废弃，请使用 ./gameServerClient.ts 中的 GameServerClient 替代。
+ * IdipClient 使用 IDIP 协议数字命令ID(4107/4147/4283等)，仅适用于特定游戏服务器。
+ * GameServerClient 使用标准 REST API 命名，同时向后兼容 IDIP 协议。
+ */
 // 使用Node.js内置的fetch API替代axios
 
 export type Plat = 1 | 2; // 1=Android, 2=iOS

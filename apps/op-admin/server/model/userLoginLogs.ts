@@ -1,4 +1,4 @@
-import {sql} from '../db';
+﻿import {sql} from '../db';
 import { getChinaDateString } from '../utils/timezone';
 
 export type UserLoginLog = {
@@ -104,7 +104,7 @@ export const recordLogin = async (loginData: Omit<UserLoginLog, 'id'>) => {
     const normalizedIp = '';
     
     const result = await sql({
-        query: `INSERT INTO UserLoginLogs 
+        query: `INSERT INTO userloginlogs 
                 (username, sub_user_id, sub_user_name, game_code, login_time, imei, ip_address, device, channel_code) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         values: [
@@ -178,7 +178,7 @@ export const getLoginLogs = async (page: number = 1, pageSize: number = 20, filt
         values.push(filters.endDate + ' 23:59:59');
     }
     
-    let query = 'SELECT * FROM UserLoginLogs';
+    let query = 'SELECT * FROM userloginlogs';
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
@@ -248,7 +248,7 @@ export const getLoginLogsCount = async (filters?: {
         values.push(filters.endDate + ' 23:59:59');
     }
     
-    let query = 'SELECT COUNT(*) as total FROM UserLoginLogs';
+    let query = 'SELECT COUNT(*) as total FROM userloginlogs';
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
@@ -269,7 +269,7 @@ export const getTodayLoginStats = async () => {
         query: `SELECT 
                     COUNT(*) as total_logins,
                     COUNT(DISTINCT username) as unique_users
-                FROM UserLoginLogs 
+                FROM userloginlogs 
                 WHERE DATE(login_time) = ?`,
         values: [today],
     }) as any;
@@ -301,7 +301,7 @@ export const getLoginStatsForDateRange = async (startDate?: string, endDate?: st
     let query = `SELECT 
                     COUNT(*) as total_logins,
                     COUNT(DISTINCT username) as unique_users
-                FROM UserLoginLogs`;
+                FROM userloginlogs`;
     
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');

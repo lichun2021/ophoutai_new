@@ -12,7 +12,7 @@
           placeholder="管理员用户名"
           required
           class="login-input"
-          :disabled="show2FA"
+
         />
         <UInput
           v-model="state.password"
@@ -21,19 +21,7 @@
           required
           class="login-input"
         />
-        
-        <div class="2fa-section">
-          <p class="text-sm text-blue-600 mb-2 font-semibold">Google 身份验证器验证码</p>
-          <UInput
-            v-model="state.google_code"
-            type="text"
-            placeholder="6位动态验证码"
-            required
-            class="login-input"
-            maxlength="6"
-            autocomplete="off"
-          />
-        </div>
+
 
         <UButton type="submit" primary class="login-button" :loading="loading">
           立即登录
@@ -60,12 +48,10 @@ definePageMeta({
 
 const state = reactive({
   username: undefined,
-  password: undefined,
-  google_code: undefined
+  password: undefined
 })
 
 const error = ref('');
-const show2FA = ref(false);
 const loading = ref(false);
 
 const router = useRouter(); 
@@ -79,15 +65,15 @@ const login = async () => {
     error.value = '';
     
     // 检查输入
-    if (!state.username || !state.password || !state.google_code) {
-      const errorMsg = '请输入用户名、密码和 Google 验证码';
+    if (!state.username || !state.password) {
+      const errorMsg = '请输入用户名和密码';
       tips.error(errorMsg);
       error.value = errorMsg;
       return;
     }
 
     loading.value = true;
-    let result = await authStore.logInAdmin(state.username, state.password, state.google_code);
+    let result = await authStore.logInAdmin(state.username, state.password);
     
     // 处理错误返回
     if (result && typeof result === 'object' && result.error) {

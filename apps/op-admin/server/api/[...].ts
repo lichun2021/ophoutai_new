@@ -18,6 +18,7 @@ import * as ServerCfgCtrl from '../controller/serverConfig';
 import * as GmLogsCtrl from '../controller/gmLogs';
 import { getGameDatabases } from '../db/gameDb';
 import { listActive, listCdkRedeemable, extractWorldIdFromBName } from '../model/gameServers';
+import { createGameServerClient } from '../controller/gameServerClient';
 
 const router = createRouter();
 
@@ -1231,65 +1232,30 @@ router.get('/admin/server-status', defineEventHandler(async (event) => {
   }
 
   const servers = (await listActive()).filter(s => (s as any).count_online !== 0);
-  const now = new Date();
-  const pad = (n: number) => (n < 10 ? '0' + n : '' + n);
-  const sendTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
   const results = await Promise.allSettled(servers.map(async (s) => {
     const worldId = ((s as any).server_id ?? extractWorldIdFromBName(s.bname || '')) || s.id || 1;
     const areaId = Number(worldId);
-    const partition = 10000 + Number(worldId);
-    const url = `${(s.webhost || '').replace(/\/$/, '')}/script/idip/4295`;
 
     try {
-      // 获取服务器在线数据 (PlatId: 1 返回所有平台的总在线数)
-      console.log(`[服务器状态] ${s.name} - 请求在线数据`);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          head: {
-            Cmdid: 10282085,
-            Seqid: 1,
-            ServiceName: 'idip',
-            SendTime: sendTime,
-            PlatId: 1, // PlatId 不区分平台，返回总在线数
-            AreaId: areaId,
-            Partition: partition
-          },
-          body: {}
-        }),
-        signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(3000) : undefined
-      });
+      const webhost = (s.webhost || '').replace(/\/$/, '');
+      const client = createGameServerClient(webhost, 'idip', 3000);
+      const resp = await client.getServerStatus({ serverId: String(worldId), areaId });
+      const data = resp.data || {} as any;
 
-      const json = await res.json().catch(() => ({}));
-      const body: any = (json && json.body) || {};
-      
-      const registerNum = Number(body.RegisterNum || 0);
-      const onlineNum = Number(body.OnlineNum || 0);
-      
-      // 兼容新版本的 IosOnlineNum 和 AndroidOnlineNum 参数
-      // 如果没有这些参数，默认为 0
-      const onlineIOS = Number(body.IosOnlineNum || 0);
-      const onlineAndroid = Number(body.AndroidOnlineNum || 0);
-      
-      console.log(`[服务器状态] ${s.name} - 总在线: ${onlineNum}, iOS: ${onlineIOS}, Android: ${onlineAndroid}, 注册数: ${registerNum}`);
-      
-      const svrNameRaw = body.SvrName || '';
-      let svrName = String(svrNameRaw);
-      try { svrName = decodeURIComponent(svrNameRaw); } catch {}
+      console.log(`[服务器状态] ${s.name} - 总在线: ${data.onlineCount}, iOS: ${data.onlineIOS}, Android: ${data.onlineAndroid}, 注册数: ${data.registerCount}`);
 
       return {
         id: s.id,
         name: s.name,
         bname: s.bname,
         webhost: s.webhost,
-        areaId: body.AreaId ?? areaId,
-        register: registerNum,
-        online: onlineNum,
-        onlineAndroid: onlineAndroid,
-        onlineIOS: onlineIOS,
-        svrName
+        areaId,
+        register: data.registerCount || 0,
+        online: data.onlineCount || 0,
+        onlineAndroid: data.onlineAndroid || 0,
+        onlineIOS: data.onlineIOS || 0,
+        svrName: data.serverName || s.name
       };
     } catch (err: any) {
       return {

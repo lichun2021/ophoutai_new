@@ -2,7 +2,7 @@ import {H3Event, readBody, readMultipartFormData, createError, defineEventHandle
 import * as AdminModel from '../model/admin';
 import * as PlatformCoinsModel from '../model/platformCoins';
 import * as PaymentModel from '../model/payment';
-import { generate2FASecret, verify2FAToken } from '../utils/auth';
+import { generate2FASecret, verify2FAToken } from '../utils/auth'; // 2FA 仅保留管理接口使用
 import crypto from 'crypto';
 import {sql} from '../db';
 import { getItemName, formatGiftItemsDisplay } from '../utils/itemConfig';
@@ -196,38 +196,7 @@ export const login = async(evt:H3Event) => {
                 return { data: null };
             }
 
-            // 🔐 Google 2FA 强制校验
-            const google_code = String(body?.google_code || '').trim();
-            
-            // 强制检查：如果账号还没绑定 2FA 密钥，直接拦截
-            if (!admin.google_2fa_secret) {
-                return { 
-                    code: 403, 
-                    message: '您的账号尚未开启 Google 二步验证，请联系超级管理员获取绑定二维码', 
-                    data: null 
-                };
-            }
-
-            if (!google_code) {
-                // 返回特殊状态码，提示前端需要输入 2FA 验证码
-                return { 
-                    code: 202, 
-                    message: 'NEED_2FA', 
-                    data: { 
-                        require_2fa: true,
-                        admin_id: admin.id 
-                    } 
-                };
-            }
-            
-            const is2faValid = verify2FAToken(google_code, admin.google_2fa_secret);
-            if (!is2faValid) {
-                return { 
-                    code: 401, 
-                    message: '2FA验证码错误', 
-                    data: null 
-                };
-            }
+            // 代理后台不要求 Google 2FA 校验，密码验证通过即可登录
 
             // 获取管理员的完整权限信息（包含持久化的channelCodes）
             const adminWithPermissions = await AdminModel.getAdminWithPermissions(admin.id);
@@ -541,7 +510,7 @@ export const confirm2FABinding = async (evt: H3Event) => {
 
         // 存入数据库
         await sql({
-            query: 'UPDATE Admins SET google_2fa_secret = ? WHERE id = ?',
+            query: 'UPDATE admins SET google_2fa_secret = ? WHERE id = ?',
             values: [secret, targetAdminId]
         });
 
@@ -571,7 +540,7 @@ export const unbind2FA = async (evt: H3Event) => {
         }
 
         await sql({
-            query: 'UPDATE Admins SET google_2fa_secret = NULL WHERE id = ?',
+            query: 'UPDATE admins SET google_2fa_secret = NULL WHERE id = ?',
             values: [targetAdminId]
         });
 
@@ -938,7 +907,7 @@ export const createPromoter = async(evt:H3Event) => {
 
         // 唯一性重查：name 与 channel_code
         const dupByName = await sql({
-            query: 'SELECT id FROM Admins WHERE name = ? LIMIT 1',
+            query: 'SELECT id FROM admins WHERE name = ? LIMIT 1',
             values: [name]
         }) as any[];
         if (dupByName.length > 0) {
@@ -946,7 +915,7 @@ export const createPromoter = async(evt:H3Event) => {
         }
 
         const dupByChannel = await sql({
-            query: 'SELECT id FROM Admins WHERE channel_code = ? LIMIT 1',
+            query: 'SELECT id FROM admins WHERE channel_code = ? LIMIT 1',
             values: [cleanChannelCode]
         }) as any[];
         if (dupByChannel.length > 0) {
@@ -1909,7 +1878,7 @@ export const getChildChannels = async(evt:H3Event) => {
                 // 根据下级渠道代码获取管理员详细信息
                 const channelPlaceholders = childChannelCodes.map(() => '?').join(',');
                 const childAdminsResult = await sql({
-                    query: `SELECT id, name, channel_code, level FROM Admins 
+                    query: `SELECT id, name, channel_code, level FROM admins 
                             WHERE channel_code IN (${channelPlaceholders}) AND is_active = 1
                             ORDER BY name`,
                     values: childChannelCodes
@@ -1973,7 +1942,7 @@ export const getChildChannels = async(evt:H3Event) => {
             
             // 查询直接下一级的管理员
             const childAdminsResult = await sql({
-                query: `SELECT id, name, channel_code, level FROM Admins 
+                query: `SELECT id, name, channel_code, level FROM admins 
                         WHERE level = ? AND is_active = 1 AND channel_code IS NOT NULL
                         ORDER BY name`,
                 values: [targetLevel]
@@ -2156,7 +2125,7 @@ export const changeUserPassword = async (evt: H3Event) => {
 
         // 更新密码（以明文或后续可替换为hash）
         await sql({
-            query: 'UPDATE Users SET password = ? WHERE id = ? LIMIT 1',
+            query: 'UPDATE users SET password = ? WHERE id = ? LIMIT 1',
             values: [new_password, user_id]
         });
         return { success: true, message: '密码已更新' };
@@ -2188,7 +2157,7 @@ export const changeUserChannel = async (evt: H3Event) => {
 
         // 可选校验：渠道代码必须存在于 Admins 表
         const channelRows = await sql({
-            query: 'SELECT id FROM Admins WHERE channel_code = ? LIMIT 1',
+            query: 'SELECT id FROM admins WHERE channel_code = ? LIMIT 1',
             values: [new_channel_code]
         }) as any[];
         if (!channelRows.length) {
@@ -2196,7 +2165,7 @@ export const changeUserChannel = async (evt: H3Event) => {
         }
 
         const result = await sql({
-            query: 'UPDATE Users SET channel_code = ? WHERE id = ? LIMIT 1',
+            query: 'UPDATE users SET channel_code = ? WHERE id = ? LIMIT 1',
             values: [new_channel_code, user_id]
         }) as any;
 
@@ -2227,7 +2196,7 @@ export const getChannelCodeOptions = async (evt: H3Event) => {
         const rows = await sql({
             query: `
                 SELECT DISTINCT channel_code
-                FROM Admins
+                FROM admins
                 WHERE channel_code IS NOT NULL
                   AND channel_code <> ''
                   AND is_active = 1
@@ -2275,7 +2244,7 @@ export const verifyUserPassword = async (evt: H3Event) => {
         }
 
         const rows = await sql({
-            query: 'SELECT password FROM Users WHERE id = ? LIMIT 1',
+            query: 'SELECT password FROM users WHERE id = ? LIMIT 1',
             values: [user_id]
         }) as any[];
 
@@ -2338,7 +2307,7 @@ const getUsersWithFilters = async (page: number, pageSize: number, filters: any,
         values.push(filters.endDate);
     }
     
-    let query = 'SELECT id, username, iphone, thirdparty_uid, channel_code, game_code, platform_coins, status, created_at FROM Users';
+    let query = 'SELECT id, username, iphone, thirdparty_uid, channel_code, game_code, platform_coins, status, created_at FROM users';
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
@@ -2400,7 +2369,7 @@ const getUsersCount = async (filters: any, allowedChannelCodes: string[] = []) =
         values.push(filters.endDate);
     }
     
-    let query = 'SELECT COUNT(*) as total FROM Users';
+    let query = 'SELECT COUNT(*) as total FROM users';
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
@@ -2418,7 +2387,7 @@ const getUserStatsForDateRange = async (startDate?: string, endDate?: string, al
     const today = getChinaDateString();
     
     // 今日注册统计
-    let todayQuery = `SELECT COUNT(*) as today_register_count FROM Users WHERE DATE(created_at) = ?`;
+    let todayQuery = `SELECT COUNT(*) as today_register_count FROM users WHERE DATE(created_at) = ?`;
     let todayValues = [today];
     
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -2433,7 +2402,7 @@ const getUserStatsForDateRange = async (startDate?: string, endDate?: string, al
     }) as any;
     
     // 总用户数
-    let totalQuery = 'SELECT COUNT(*) as total_users FROM Users';
+    let totalQuery = 'SELECT COUNT(*) as total_users FROM users';
     let totalValues: any[] = [];
     
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -2470,7 +2439,7 @@ export const getChannelPaymentStats = async (evt: H3Event) => {
                 payment_id,
                 COUNT(*) as count,
                 SUM(amount) as amount
-            FROM PaymentRecords
+            FROM paymentrecords
             WHERE DATE(created_at) >= ? AND DATE(created_at) <= ? 
             AND payment_status = 3
             AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')
@@ -2795,12 +2764,12 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
         COALESCE(su.wuid, pr.wuid) as role_id_from_join,
         gc.character_name as role_name,
         ps.payment_channel
-    FROM PaymentRecords pr 
-    LEFT JOIN Users u ON pr.user_id = u.id 
-    LEFT JOIN Games g ON u.game_code = g.game_code
-    LEFT JOIN SubUsers su ON pr.sub_user_id = su.id
-    LEFT JOIN GameCharacters gc ON pr.role_id = gc.uuid
-    LEFT JOIN PaymentSettings ps ON pr.payment_id = ps.id`;
+    FROM paymentrecords pr 
+    LEFT JOIN users u ON pr.user_id = u.id 
+    LEFT JOIN games g ON u.game_code = g.game_code
+    LEFT JOIN subusers su ON pr.sub_user_id = su.id
+    LEFT JOIN gamecharacters gc ON pr.role_id = gc.uuid
+    LEFT JOIN paymentsettings ps ON pr.payment_id = ps.id`;
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
@@ -2903,10 +2872,10 @@ const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[
     }
     
     let query = `SELECT COUNT(*) as total 
-    FROM PaymentRecords pr 
-    LEFT JOIN Users u ON pr.user_id = u.id 
-    LEFT JOIN Games g ON u.game_code = g.game_code
-    LEFT JOIN SubUsers su ON pr.sub_user_id = su.id`;
+    FROM paymentrecords pr 
+    LEFT JOIN users u ON pr.user_id = u.id 
+    LEFT JOIN games g ON u.game_code = g.game_code
+    LEFT JOIN subusers su ON pr.sub_user_id = su.id`;
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
@@ -2994,10 +2963,10 @@ const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] 
     let query = `SELECT 
         COUNT(*) as count,
         COALESCE(SUM(pr.amount), 0) as amount 
-    FROM PaymentRecords pr 
-    LEFT JOIN Users u ON pr.user_id = u.id 
-    LEFT JOIN Games g ON u.game_code = g.game_code
-    LEFT JOIN SubUsers su ON pr.sub_user_id = su.id`;
+    FROM paymentrecords pr 
+    LEFT JOIN users u ON pr.user_id = u.id 
+    LEFT JOIN games g ON u.game_code = g.game_code
+    LEFT JOIN subusers su ON pr.sub_user_id = su.id`;
     
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
@@ -3027,8 +2996,8 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             SELECT 
                 COUNT(*) as count,
                 COALESCE(SUM(pr.amount), 0) as amount 
-            FROM PaymentRecords pr 
-            LEFT JOIN Users u ON pr.user_id = u.id 
+            FROM paymentrecords pr 
+            LEFT JOIN users u ON pr.user_id = u.id 
             WHERE DATE(pr.created_at) = ? AND pr.payment_status = 3
             AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
         `;
@@ -3037,8 +3006,8 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             SELECT 
                 COUNT(*) as count,
                 COALESCE(SUM(pr.amount), 0) as amount 
-            FROM PaymentRecords pr 
-            LEFT JOIN Users u ON pr.user_id = u.id 
+            FROM paymentrecords pr 
+            LEFT JOIN users u ON pr.user_id = u.id 
             WHERE DATE(pr.created_at) = ?
         `;
         
@@ -3172,10 +3141,10 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             SELECT 
                 COUNT(*) as count,
                 COALESCE(SUM(pr.amount), 0) as amount 
-            FROM PaymentRecords pr 
-            LEFT JOIN Users u ON pr.user_id = u.id 
-            LEFT JOIN Games g ON u.game_code = g.game_code
-            LEFT JOIN SubUsers su ON pr.sub_user_id = su.id
+            FROM paymentrecords pr 
+            LEFT JOIN users u ON pr.user_id = u.id 
+            LEFT JOIN games g ON u.game_code = g.game_code
+            LEFT JOIN subusers su ON pr.sub_user_id = su.id
             WHERE ${successConditions}
         `;
         
@@ -3183,10 +3152,10 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             SELECT 
                 COUNT(*) as count,
                 COALESCE(SUM(pr.amount), 0) as amount 
-            FROM PaymentRecords pr 
-            LEFT JOIN Users u ON pr.user_id = u.id 
-            LEFT JOIN Games g ON u.game_code = g.game_code
-            LEFT JOIN SubUsers su ON pr.sub_user_id = su.id
+            FROM paymentrecords pr 
+            LEFT JOIN users u ON pr.user_id = u.id 
+            LEFT JOIN games g ON u.game_code = g.game_code
+            LEFT JOIN subusers su ON pr.sub_user_id = su.id
             WHERE ${allConditions}
         `;
         
@@ -3353,10 +3322,10 @@ const getGameCharactersWithFilters = async (page: number, pageSize: number, filt
             u.channel_code,
             su.username as subuser_name,
             g.game_name
-        FROM GameCharacters gc 
-        LEFT JOIN Users u ON gc.user_id = u.id 
-        LEFT JOIN SubUsers su ON gc.subuser_id = su.id
-        LEFT JOIN Games g ON gc.game_id = g.id
+        FROM gamecharacters gc 
+        LEFT JOIN users u ON gc.user_id = u.id 
+        LEFT JOIN subusers su ON gc.subuser_id = su.id
+        LEFT JOIN games g ON gc.game_id = g.id
     `;
     
     if (whereConditions.length > 0) {
@@ -3432,10 +3401,10 @@ const getGameCharactersCount = async (filters: any, allowedChannelCodes: string[
     
     let query = `
         SELECT COUNT(*) as total 
-        FROM GameCharacters gc 
-        LEFT JOIN Users u ON gc.user_id = u.id 
-        LEFT JOIN SubUsers su ON gc.subuser_id = su.id
-        LEFT JOIN Games g ON gc.game_id = g.id
+        FROM gamecharacters gc 
+        LEFT JOIN users u ON gc.user_id = u.id 
+        LEFT JOIN subusers su ON gc.subuser_id = su.id
+        LEFT JOIN games g ON gc.game_id = g.id
     `;
     
     if (whereConditions.length > 0) {
@@ -3457,8 +3426,8 @@ const getCharacterStatsForDateRange = async (startDate?: string, endDate?: strin
     // 今日创建角色统计
     let todayQuery = `
         SELECT COUNT(*) as today_character_count
-        FROM GameCharacters gc
-        LEFT JOIN Users u ON gc.user_id = u.id
+        FROM gamecharacters gc
+        LEFT JOIN users u ON gc.user_id = u.id
         WHERE DATE(gc.created_at) = ?
     `;
     let todayValues = [today];
@@ -3477,8 +3446,8 @@ const getCharacterStatsForDateRange = async (startDate?: string, endDate?: strin
     // 总角色数
     let totalQuery = `
         SELECT COUNT(*) as total_characters 
-        FROM GameCharacters gc
-        LEFT JOIN Users u ON gc.user_id = u.id
+        FROM gamecharacters gc
+        LEFT JOIN users u ON gc.user_id = u.id
     `;
     let totalValues: any[] = [];
     
@@ -3573,7 +3542,7 @@ export const getDataOverview = async(evt: H3Event) => {
             
             // 获取游戏代码
             const gameResult = await sql({
-                query: "SELECT game_code FROM Games WHERE id = ?",
+                query: "SELECT game_code FROM games WHERE id = ?",
                 values: [parseInt(gameId)]
             }) as any;
             
@@ -3599,7 +3568,7 @@ export const getDataOverview = async(evt: H3Event) => {
         } else if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0) {
             // 代理用户需要过滤游戏权限
             const gameCodesResult = await sql({
-                query: `SELECT game_code FROM Games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
+                query: `SELECT game_code FROM games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
                 values: currentUserInfo.allowed_game_ids
             }) as any;
             
@@ -3625,7 +3594,7 @@ export const getDataOverview = async(evt: H3Event) => {
                 COALESCE(AVG(ds.active_arpu), 0) as totalArpu,
                 COALESCE(AVG(ds.new_arpu), 0) as newArpu,
                 COALESCE(AVG(ds.new_pay_arpu), 0) as newPayArpu
-            FROM DailyStats ds
+            FROM dailystats ds
             WHERE ${conditions.join(' AND ')}
         `;
 
@@ -3651,7 +3620,7 @@ export const getDataOverview = async(evt: H3Event) => {
         } else if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0) {
             // 代理用户需要过滤游戏权限
             const gameCodesResult = await sql({
-                query: `SELECT game_code FROM Games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
+                query: `SELECT game_code FROM games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
                 values: currentUserInfo.allowed_game_ids
             }) as any;
             
@@ -3672,8 +3641,8 @@ export const getDataOverview = async(evt: H3Event) => {
                 COALESCE(SUM(ds.pay_users), 0) as pay_users,
                 COALESCE(AVG(ds.pay_rate), 0) as pay_rate,
                 COALESCE(AVG(ds.active_arpu), 0) as arpu
-            FROM DailyStats ds
-            JOIN Games g ON ds.game_code = g.game_code
+            FROM dailystats ds
+            JOIN games g ON ds.game_code = g.game_code
             WHERE g.is_active = 1 AND ${gameStatsConditions.join(' AND ')}
             GROUP BY g.id, g.game_name, ds.game_code
             ORDER BY recharge_amount DESC, g.game_name
@@ -3814,7 +3783,7 @@ export const getDailyReportDetails = async(evt: H3Event) => {
             
             // 获取游戏代码
             const gameResult = await sql({
-                query: "SELECT game_code FROM Games WHERE id = ?",
+                query: "SELECT game_code FROM games WHERE id = ?",
                 values: [parseInt(gameId)]
             }) as any;
             
@@ -3840,7 +3809,7 @@ export const getDailyReportDetails = async(evt: H3Event) => {
         } else if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0) {
             // 代理用户需要过滤游戏权限
             const gameCodesResult = await sql({
-                query: `SELECT game_code FROM Games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
+                query: `SELECT game_code FROM games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
                 values: currentUserInfo.allowed_game_ids
             }) as any;
             
@@ -3877,8 +3846,8 @@ export const getDailyReportDetails = async(evt: H3Event) => {
                 COALESCE(AVG(ltv.ltv3_arpu), 0) as ltv3,
                 COALESCE(AVG(ltv.ltv5_arpu), 0) as ltv5,
                 COALESCE(AVG(ltv.ltv7_arpu), 0) as ltv7
-            FROM DailyStats ds
-            LEFT JOIN LTVStats ltv ON ds.stat_date = ltv.stat_date 
+            FROM dailystats ds
+            LEFT JOIN ltvstats ltv ON ds.stat_date = ltv.stat_date 
                 AND ds.channel_code = ltv.channel_code 
                 AND ds.game_code = ltv.game_code
             WHERE ${conditions.join(' AND ')}
@@ -3998,8 +3967,8 @@ export const getDataOverviewDetails = async(evt: H3Event) => {
                     ${groupField} as group_key,
                     COUNT(*) as new_users,
                     COUNT(DISTINCT ul.username) as active_users
-                FROM Users u
-                LEFT JOIN UserLoginLogs ul ON u.username = ul.username 
+                FROM users u
+                LEFT JOIN userloginlogs ul ON u.username = ul.username 
                     AND DATE(ul.login_time) BETWEEN ? AND ?
                 WHERE DATE(u.created_at) BETWEEN ? AND ?
                 ${channelFilter}
@@ -4012,13 +3981,13 @@ export const getDataOverviewDetails = async(evt: H3Event) => {
                     SUM(pr.amount) as pay_amount,
                     COUNT(DISTINCT CASE WHEN first_pay.first_pay_date BETWEEN ? AND ? THEN pr.user_id END) as new_pay_users,
                     SUM(CASE WHEN first_pay.first_pay_date BETWEEN ? AND ? THEN pr.amount ELSE 0 END) as new_pay_amount
-                FROM Users u
-                LEFT JOIN PaymentRecords pr ON u.id = pr.user_id AND pr.payment_status = 3
+                FROM users u
+                LEFT JOIN paymentrecords pr ON u.id = pr.user_id AND pr.payment_status = 3
                     AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
                     AND DATE(pr.created_at) BETWEEN ? AND ?
                 LEFT JOIN (
                     SELECT user_id, DATE(MIN(created_at)) as first_pay_date
-                    FROM PaymentRecords 
+                    FROM paymentrecords 
                     WHERE payment_status = 3
                     AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')
                     GROUP BY user_id
@@ -4065,7 +4034,7 @@ export const getDataOverviewDetails = async(evt: H3Event) => {
         // 获取总数
         const countQuery = `
             SELECT COUNT(DISTINCT ${groupField}) as total
-            FROM Users u
+            FROM users u
             WHERE DATE(u.created_at) BETWEEN ? AND ?
             ${channelFilter}
         `;
@@ -4334,7 +4303,7 @@ export const getLTVData = async(evt: H3Event) => {
                 END as ltv30_arpu,
                 '汇总数据' as channel_name,
                 '汇总数据' as game_display_name
-            FROM LTVStats ls
+            FROM ltvstats ls
             ${whereClause}
             GROUP BY ls.stat_date
             ORDER BY ls.stat_date DESC
@@ -4344,7 +4313,7 @@ export const getLTVData = async(evt: H3Event) => {
         // 查询总数 - 按日期分组后的记录数
         const countQuery = `
             SELECT COUNT(DISTINCT ls.stat_date) as total
-            FROM LTVStats ls
+            FROM ltvstats ls
             ${whereClause}
         `;
 
@@ -4374,7 +4343,7 @@ export const getLTVData = async(evt: H3Event) => {
                 SUM(ls.ltv3_amount) as total_ltv3_amount,
                 SUM(ls.ltv7_amount) as total_ltv7_amount,
                 SUM(ls.ltv30_amount) as total_ltv30_amount
-            FROM LTVStats ls
+            FROM ltvstats ls
             ${whereClause}
         `;
 
@@ -4511,7 +4480,7 @@ export const getLTVTrendData = async(evt: H3Event) => {
                     THEN ROUND(SUM(ls.ltv30_amount) / SUM(ls.new_users), 2)
                     ELSE 0 
                 END as ltv30_arpu
-            FROM LTVStats ls
+            FROM ltvstats ls
             ${whereClause}
             GROUP BY ls.stat_date
             ORDER BY ls.stat_date
@@ -4814,7 +4783,7 @@ export const checkUserChannel = async(evt: H3Event) => {
         
         // 获取管理员信息
         const adminResult = await sql({
-            query: 'SELECT level, allowed_channel_codes FROM Admins WHERE channel_code = ? AND is_active = 1',
+            query: 'SELECT level, allowed_channel_codes FROM admins WHERE channel_code = ? AND is_active = 1',
             values: [admin_channel_code]
         }) as any[];
         
@@ -4832,7 +4801,7 @@ export const checkUserChannel = async(evt: H3Event) => {
         if (adminLevel === 0) {
             // 仍需要验证玩家是否存在
             const userResult = await sql({
-                query: 'SELECT channel_code FROM Users WHERE id = ?',
+                query: 'SELECT channel_code FROM users WHERE id = ?',
                 values: [parsedUserId]
             }) as any[];
             
@@ -4854,7 +4823,7 @@ export const checkUserChannel = async(evt: H3Event) => {
         
         // 普通代理需要验证渠道权限
         const userResult = await sql({
-            query: 'SELECT channel_code FROM Users WHERE id = ?',
+            query: 'SELECT channel_code FROM users WHERE id = ?',
             values: [parsedUserId]
         }) as any[];
         
@@ -4987,7 +4956,7 @@ export const getChannelData = async(evt: H3Event) => {
                 SUM(recharge_users) as recharge_users,
                 SUM(real_recharge_amount) as real_recharge_amount,
                 SUM(high_value_recharge_amount) as high_value_recharge_amount
-            FROM DailyStats
+            FROM dailystats
             WHERE ${conditions.join(' AND ')}
             GROUP BY stat_date
             ORDER BY stat_date DESC
@@ -4997,7 +4966,7 @@ export const getChannelData = async(evt: H3Event) => {
         // 计算总数 - 按日期分组后的记录数
         const countQuery = `
             SELECT COUNT(DISTINCT stat_date) as total
-            FROM DailyStats
+            FROM dailystats
             WHERE ${conditions.join(' AND ')}
         `;
 
@@ -5077,7 +5046,7 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
         if (currentAdmin.level === 0) {
             // 超级管理员：显示所有1级代理
             const result = await sql({
-                query: `SELECT * FROM Admins 
+                query: `SELECT * FROM admins 
                        WHERE level = 1 AND is_active = 1 
                        ORDER BY name`,
                 values: []
@@ -5105,7 +5074,7 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
                     
                     // 只查找指定级别的直接下级代理
                     const result = await sql({
-                        query: `SELECT * FROM Admins 
+                        query: `SELECT * FROM admins 
                                WHERE channel_code IN (${placeholders}) 
                                AND is_active = 1 
                                AND level = ?
@@ -5175,8 +5144,8 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
             // 昨日流水
             const yesterdayPayments = await sql({
                 query: `SELECT COALESCE(SUM(amount), 0) as total
-                       FROM PaymentRecords pr
-                       LEFT JOIN Users u ON pr.user_id = u.id
+                       FROM paymentrecords pr
+                       LEFT JOIN users u ON pr.user_id = u.id
                        WHERE u.channel_code IN (${placeholders})
                        AND DATE(pr.created_at) = ?
                        AND pr.payment_status = 3
@@ -5187,8 +5156,8 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
             // 今日流水
             const todayPayments = await sql({
                 query: `SELECT COALESCE(SUM(amount), 0) as total
-                       FROM PaymentRecords pr
-                       LEFT JOIN Users u ON pr.user_id = u.id
+                       FROM paymentrecords pr
+                       LEFT JOIN users u ON pr.user_id = u.id
                        WHERE u.channel_code IN (${placeholders})
                        AND DATE(pr.created_at) = ?
                        AND pr.payment_status = 3
@@ -5199,8 +5168,8 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
             // 总流水
             const totalPayments = await sql({
                 query: `SELECT COALESCE(SUM(amount), 0) as total
-                       FROM PaymentRecords pr
-                       LEFT JOIN Users u ON pr.user_id = u.id
+                       FROM paymentrecords pr
+                       LEFT JOIN users u ON pr.user_id = u.id
                        WHERE u.channel_code IN (${placeholders})
                        AND pr.payment_status = 3
                        AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')`,
@@ -5436,9 +5405,9 @@ const getGiftPackageRecordsWithFilters = async (page: number, pageSize: number, 
             END as server_info,
             -- 礼包类型直接使用category字段
             egp.category as gift_type
-        FROM GiftPackagePurchaseRecords gpr
-        LEFT JOIN ExternalGiftPackages egp ON gpr.package_id = egp.id
-        LEFT JOIN Users u ON gpr.user_id = u.id
+        FROM giftpackagepurchaserecords gpr
+        LEFT JOIN externalgiftpackages egp ON gpr.package_id = egp.id
+        LEFT JOIN users u ON gpr.user_id = u.id
         ${whereClause}
         ORDER BY gpr.created_at DESC 
         LIMIT ?, ?
@@ -5515,9 +5484,9 @@ const getGiftPackageRecordsCount = async (filters: any, allowedChannelCodes: str
     
     const query = `
         SELECT COUNT(*) as total 
-        FROM GiftPackagePurchaseRecords gpr
-        LEFT JOIN Users u ON gpr.user_id = u.id
-        LEFT JOIN ExternalGiftPackages egp ON gpr.package_id = egp.id
+        FROM giftpackagepurchaserecords gpr
+        LEFT JOIN users u ON gpr.user_id = u.id
+        LEFT JOIN externalgiftpackages egp ON gpr.package_id = egp.id
         ${whereClause}
     `;
     
@@ -5599,8 +5568,8 @@ const getGiftPackageRecordsStats = async (filters: any, allowedChannelCodes: str
             COALESCE(SUM(gpr.total_amount), 0) as totalAmount,
             COUNT(CASE WHEN gpr.status = 'delivered' THEN 1 END) as deliveredCount,
             COUNT(DISTINCT gpr.user_id) as uniqueUsers
-        FROM GiftPackagePurchaseRecords gpr
-        LEFT JOIN Users u ON gpr.user_id = u.id
+        FROM giftpackagepurchaserecords gpr
+        LEFT JOIN users u ON gpr.user_id = u.id
         ${whereClause}
     `;
     

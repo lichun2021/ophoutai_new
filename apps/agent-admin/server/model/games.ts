@@ -16,7 +16,7 @@ export type Game = {
 
 export const findByGameName = async (game_name: string) => {
     const result = await sql({
-        query: 'SELECT * FROM Games WHERE game_name = ?',
+        query: 'SELECT * FROM games WHERE game_name = ?',
         values: [game_name],
     }) as any;
     return result.length === 1 ? result[0] as Game : null;
@@ -24,7 +24,7 @@ export const findByGameName = async (game_name: string) => {
 
 export const findById = async (id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM Games WHERE id = ?',
+        query: 'SELECT * FROM games WHERE id = ?',
         values: [id],
     }) as any;
     return result.length === 1 ? result[0] as Game : null;
@@ -32,7 +32,7 @@ export const findById = async (id: number) => {
 
 export const findByDevice = async (device: string) => {
     const result = await sql({
-        query: 'SELECT * FROM Games WHERE supported_devices = ? OR supported_devices = "All" ORDER BY created_at DESC',
+        query: 'SELECT * FROM games WHERE supported_devices = ? OR supported_devices = "All" ORDER BY created_at DESC',
         values: [device],
     }) as any;
     return result as Game[];
@@ -40,14 +40,14 @@ export const findByDevice = async (device: string) => {
 
 export const findActive = async () => {
     const result = await sql({
-        query: 'SELECT * FROM Games WHERE is_active = 1 ORDER BY created_at DESC',
+        query: 'SELECT * FROM games WHERE is_active = 1 ORDER BY created_at DESC',
     }) as any;
     return result as Game[];
 };
 
 export const read = async () => {
     const games = await sql({
-        query: 'SELECT * FROM Games ORDER BY created_at DESC',
+        query: 'SELECT * FROM games ORDER BY created_at DESC',
     });
     return games as Game[];
 };
@@ -56,7 +56,7 @@ export const readPage = async (pageIndex: number, pageSize: number = 10, is_acti
     const offset = (pageIndex - 1) * pageSize;
     
     let _sql = {
-        query: 'SELECT * FROM Games',
+        query: 'SELECT * FROM games',
         values: [] as (string | number)[],
     };
     
@@ -86,7 +86,7 @@ export const readPage = async (pageIndex: number, pageSize: number = 10, is_acti
 export const count = async (is_active?: number, supported_devices?: string) => {
     try {
         let _sql = {
-            query: 'SELECT COUNT(*) AS total FROM Games',
+            query: 'SELECT COUNT(*) AS total FROM games',
             values: [] as (string | number)[],
         };
         
@@ -117,7 +117,7 @@ export const count = async (is_active?: number, supported_devices?: string) => {
 
 export const insert = async (gameData: Omit<Game, 'id' | 'created_at' | 'updated_at'>) => {
     const result = await sql({
-        query: 'INSERT INTO Games (game_name, icon_url, supported_devices, register_url, ios_download_url, android_download_url, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        query: 'INSERT INTO games (game_name, icon_url, supported_devices, register_url, ios_download_url, android_download_url, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         values: [
             gameData.game_name,
             gameData.icon_url,
@@ -174,7 +174,7 @@ export const update = async (id: number, gameData: Partial<Omit<Game, 'id' | 'cr
         values.push(id);
         
         await sql({
-            query: `UPDATE Games SET ${fields.join(', ')} WHERE id = ?`,
+            query: `UPDATE games SET ${fields.join(', ')} WHERE id = ?`,
             values: values,
         });
     }
@@ -182,14 +182,14 @@ export const update = async (id: number, gameData: Partial<Omit<Game, 'id' | 'cr
 
 export const updateStatus = async (id: number, is_active: number) => {
     await sql({
-        query: 'UPDATE Games SET is_active = ?, updated_at = NOW() WHERE id = ?',
+        query: 'UPDATE games SET is_active = ?, updated_at = NOW() WHERE id = ?',
         values: [is_active, id],
     });
 };
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM Games WHERE id = ?',
+        query: 'DELETE FROM games WHERE id = ?',
         values: [id],
     });
 }; 

@@ -44,7 +44,7 @@ export const generateRandomCode = (length = 8) => {
 // ========== 类型 ==========
 export const createType = async (data: Omit<CDKType, 'id' | 'created_at' | 'updated_at'>) => {
   const result = await sql({
-    query: `INSERT INTO CDKTypes (title, content, type, items) VALUES (?, ?, ?, ?)`,
+    query: `INSERT INTO cdktypes (title, content, type, items) VALUES (?, ?, ?, ?)`,
     values: [data.title, data.content, data.type, JSON.stringify(data.items)],
   }) as any;
   return { insertId: result.insertId };
@@ -60,19 +60,19 @@ export const updateType = async (id: number, data: Partial<CDKType>) => {
   if (fields.length === 0) return { affectedRows: 0 };
   values.push(id);
   const result = await sql({
-    query: `UPDATE CDKTypes SET ${fields.join(', ')} WHERE id = ?`,
+    query: `UPDATE cdktypes SET ${fields.join(', ')} WHERE id = ?`,
     values,
   }) as any;
   return { affectedRows: result.affectedRows };
 };
 
 export const getTypes = async () => {
-  const rows = await sql({ query: `SELECT * FROM CDKTypes ORDER BY id DESC` }) as any[];
+  const rows = await sql({ query: `SELECT * FROM cdktypes ORDER BY id DESC` }) as any[];
   return rows.map(r => ({ ...r, items: safeParseJson(r.items) }));
 };
 
 export const getTypeById = async (id: number) => {
-  const rows = await sql({ query: `SELECT * FROM CDKTypes WHERE id = ?`, values: [id] }) as any[];
+  const rows = await sql({ query: `SELECT * FROM cdktypes WHERE id = ?`, values: [id] }) as any[];
   if (rows.length === 0) return null;
   const row = rows[0];
   row.items = safeParseJson(row.items);
@@ -80,7 +80,7 @@ export const getTypeById = async (id: number) => {
 };
 
 export const getLatestTypeByType = async (type: 'universal' | 'unique' | 'data') => {
-  const rows = await sql({ query: `SELECT * FROM CDKTypes WHERE type = ? ORDER BY id DESC LIMIT 1`, values: [type] }) as any[];
+  const rows = await sql({ query: `SELECT * FROM cdktypes WHERE type = ? ORDER BY id DESC LIMIT 1`, values: [type] }) as any[];
   if (rows.length === 0) return null;
   const row = rows[0];
   row.items = safeParseJson(row.items);
@@ -104,13 +104,13 @@ export const createCodes = async (cdk_type_id: number, count = 1, customCodes?: 
     values.push(code, cdk_type_id);
   }
 
-  const query = `INSERT IGNORE INTO CDKCodes (code, cdk_type_id, is_used, used_by_player_id, used_at) VALUES ${placeholders.join(',')}`;
+  const query = `INSERT IGNORE INTO cdkcodes (code, cdk_type_id, is_used, used_by_player_id, used_at) VALUES ${placeholders.join(',')}`;
   const result = await sql({ query, values }) as any;
   return { inserted: result.affectedRows, total: codes.length, codesInserted: codes };
 };
 
 export const getCode = async (code: string) => {
-  const rows = await sql({ query: `SELECT * FROM CDKCodes WHERE code = ?`, values: [code] }) as any[];
+  const rows = await sql({ query: `SELECT * FROM cdkcodes WHERE code = ?`, values: [code] }) as any[];
   return rows.length > 0 ? rows[0] as CDKCode : null;
 };
 
@@ -126,12 +126,12 @@ export const listCodes = async (filters: { cdk_type_id?: number; code?: string; 
   const offset = (page - 1) * pageSize;
 
   const rows = await sql({
-    query: `SELECT * FROM CDKCodes ${whereClause} ORDER BY id DESC LIMIT ?, ?`,
+    query: `SELECT * FROM cdkcodes ${whereClause} ORDER BY id DESC LIMIT ?, ?`,
     values: [...values, offset, pageSize],
   }) as any[];
 
   const countRows = await sql({
-    query: `SELECT COUNT(*) as total FROM CDKCodes ${whereClause}`,
+    query: `SELECT COUNT(*) as total FROM cdkcodes ${whereClause}`,
     values,
   }) as any[];
 
@@ -140,7 +140,7 @@ export const listCodes = async (filters: { cdk_type_id?: number; code?: string; 
 
 export const markCodeUsed = async (code: string, player_id: string) => {
   const result = await sql({
-    query: `UPDATE CDKCodes SET is_used = 1, used_by_player_id = ?, used_at = NOW() WHERE code = ? AND is_used = 0`,
+    query: `UPDATE cdkcodes SET is_used = 1, used_by_player_id = ?, used_at = NOW() WHERE code = ? AND is_used = 0`,
     values: [player_id, code],
   }) as any;
   return { affectedRows: result.affectedRows };
@@ -149,7 +149,7 @@ export const markCodeUsed = async (code: string, player_id: string) => {
 // ========== 领取记录 ==========
 export const hasRedeemed = async (player_id: string, cdk_type_id: number) => {
   const rows = await sql({
-    query: `SELECT id FROM CDKRedemptions WHERE player_id = ? AND cdk_type_id = ? LIMIT 1`,
+    query: `SELECT id FROM cdkredemptions WHERE player_id = ? AND cdk_type_id = ? LIMIT 1`,
     values: [player_id, cdk_type_id],
   }) as any[];
   return rows.length > 0;
@@ -158,7 +158,7 @@ export const hasRedeemed = async (player_id: string, cdk_type_id: number) => {
 // data 类型按天幂等：玩家 + 类型 + code(YYYYMMDD)
 export const hasRedeemedByTypeAndCode = async (player_id: string, cdk_type_id: number, code: string) => {
   const rows = await sql({
-    query: `SELECT id FROM CDKRedemptions WHERE player_id = ? AND cdk_type_id = ? AND code = ? LIMIT 1`,
+    query: `SELECT id FROM cdkredemptions WHERE player_id = ? AND cdk_type_id = ? AND code = ? LIMIT 1`,
     values: [player_id, cdk_type_id, code],
   }) as any[];
   return rows.length > 0;
@@ -166,7 +166,7 @@ export const hasRedeemedByTypeAndCode = async (player_id: string, cdk_type_id: n
 
 export const insertRedemption = async (data: Omit<CDKRedemption, 'id' | 'created_at'>) => {
   const result = await sql({
-    query: `INSERT INTO CDKRedemptions (player_id, server, code, cdk_type_id, open_id, platform)
+    query: `INSERT INTO cdkredemptions (player_id, server, code, cdk_type_id, open_id, platform)
             VALUES (?, ?, ?, ?, ?, ?)`,
     values: [data.player_id, data.server, data.code, data.cdk_type_id, data.open_id || null, data.platform?.toString() || null],
   }) as any;
@@ -185,12 +185,12 @@ export const listRedemptions = async (filters: { player_id?: string; code?: stri
   const offset = (page - 1) * pageSize;
 
   const rows = await sql({
-    query: `SELECT * FROM CDKRedemptions ${whereClause} ORDER BY id DESC LIMIT ?, ?`,
+    query: `SELECT * FROM cdkredemptions ${whereClause} ORDER BY id DESC LIMIT ?, ?`,
     values: [...values, offset, pageSize],
   }) as any[];
 
   const countRows = await sql({
-    query: `SELECT COUNT(*) as total FROM CDKRedemptions ${whereClause}`,
+    query: `SELECT COUNT(*) as total FROM cdkredemptions ${whereClause}`,
     values,
   }) as any[];
 

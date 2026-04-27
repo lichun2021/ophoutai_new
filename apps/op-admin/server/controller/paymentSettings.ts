@@ -1,4 +1,4 @@
-import * as PaymentSettingsModel from '../model/paymentSettings';
+﻿import * as PaymentSettingsModel from '../model/paymentSettings';
 import { H3Event } from 'h3';
 import { sql } from '../db';
 import { sdkMessages } from '../utils/i18n';
@@ -338,7 +338,7 @@ export const getPayWay = async (evt: H3Event) => {
                 
                 // 直接通过username查询Users表
                 const userResult = await sql({
-                    query: 'SELECT id, username, platform_coins FROM Users WHERE username = ? LIMIT 1',
+                    query: 'SELECT id, username, platform_coins FROM users WHERE username = ? LIMIT 1',
                     values: [username]
                 }) as any[];
                 
@@ -355,7 +355,7 @@ export const getPayWay = async (evt: H3Event) => {
                     
                     // 如果直接查询username没找到，再试试查询所有用户看看数据情况
                     const allUsersResult = await sql({
-                        query: 'SELECT id, username, platform_coins FROM Users LIMIT 5',
+                        query: 'SELECT id, username, platform_coins FROM users LIMIT 5',
                         values: []
                     }) as any[];
                     console.log(`数据库中前5个用户:`, allUsersResult);

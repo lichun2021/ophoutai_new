@@ -21,7 +21,7 @@ export type PlatformCoinRechargeRecord = {
 // 创建平台币充值记录
 export const createRechargeRecord = async (record: Omit<PlatformCoinRechargeRecord, 'id' | 'created_at' | 'updated_at'>) => {
     const result = await sql({
-        query: `INSERT INTO PlatformCoinRechargeRecords 
+        query: `INSERT INTO platformcoinrechargerecords 
                 (user_id, thirdparty_uid, recharge_type, amount, balance_before, balance_after, 
                  payment_record_id, admin_id, source_type, source_data, remark, status) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -48,7 +48,7 @@ export const getRechargeRecordsByThirdpartyUid = async (thirdparty_uid: string, 
     const offset = (page - 1) * pageSize;
     
     const records = await sql({
-        query: `SELECT * FROM PlatformCoinRechargeRecords 
+        query: `SELECT * FROM platformcoinrechargerecords 
                 WHERE thirdparty_uid = ? 
                 ORDER BY created_at DESC 
                 LIMIT ?, ?`,
@@ -61,7 +61,7 @@ export const getRechargeRecordsByThirdpartyUid = async (thirdparty_uid: string, 
 // 获取充值记录总数
 export const getRechargeRecordsCount = async (thirdparty_uid: string) => {
     const result = await sql({
-        query: 'SELECT COUNT(*) as total FROM PlatformCoinRechargeRecords WHERE thirdparty_uid = ?',
+        query: 'SELECT COUNT(*) as total FROM platformcoinrechargerecords WHERE thirdparty_uid = ?',
         values: [thirdparty_uid],
     }) as any[];
     
@@ -71,7 +71,7 @@ export const getRechargeRecordsCount = async (thirdparty_uid: string) => {
 // 获取用户总充值金额
 export const getTotalRechargeAmount = async (thirdparty_uid: string) => {
     const result = await sql({
-        query: 'SELECT SUM(amount) as total FROM PlatformCoinRechargeRecords WHERE thirdparty_uid = ? AND status = "completed"',
+        query: 'SELECT SUM(amount) as total FROM platformcoinrechargerecords WHERE thirdparty_uid = ? AND status = "completed"',
         values: [thirdparty_uid],
     }) as any[];
     
@@ -82,7 +82,7 @@ export const getTotalRechargeAmount = async (thirdparty_uid: string) => {
 export const getRechargeStatsByType = async (thirdparty_uid: string) => {
     const result = await sql({
         query: `SELECT recharge_type, COUNT(*) as count, SUM(amount) as total_amount 
-                FROM PlatformCoinRechargeRecords 
+                FROM platformcoinrechargerecords 
                 WHERE thirdparty_uid = ? AND status = "completed" 
                 GROUP BY recharge_type`,
         values: [thirdparty_uid],
@@ -94,7 +94,7 @@ export const getRechargeStatsByType = async (thirdparty_uid: string) => {
 // 根据用户ID获取用户总充值金额
 export const getTotalRechargeAmountByUserId = async (user_id: number) => {
     const result = await sql({
-        query: 'SELECT SUM(amount) as total FROM PlatformCoinRechargeRecords WHERE user_id = ? AND status = "completed"',
+        query: 'SELECT SUM(amount) as total FROM platformcoinrechargerecords WHERE user_id = ? AND status = "completed"',
         values: [user_id],
     }) as any[];
     
@@ -105,7 +105,7 @@ export const getTotalRechargeAmountByUserId = async (user_id: number) => {
 export const getRechargeStatsByTypeByUserId = async (user_id: number) => {
     const result = await sql({
         query: `SELECT recharge_type, COUNT(*) as count, SUM(amount) as total_amount 
-                FROM PlatformCoinRechargeRecords 
+                FROM platformcoinrechargerecords 
                 WHERE user_id = ? AND status = "completed" 
                 GROUP BY recharge_type`,
         values: [user_id],

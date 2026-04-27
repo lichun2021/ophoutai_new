@@ -1,4 +1,4 @@
-import { defineEventHandler, readBody, createError, getHeader } from 'h3';
+﻿import { defineEventHandler, readBody, createError, getHeader } from 'h3';
 import * as AdminModel from '../../model/admin';
 import { sql } from '../../db';
 
@@ -98,7 +98,7 @@ async function handleGetSalesData(event: any) {
       COUNT(DISTINCT r.user_id) as unique_buyers,
       AVG(p.price_real_money * r.quantity) as avg_price
     FROM giftpackagepurchaserecords r
-    INNER JOIN ExternalGiftPackages p ON r.package_id = p.id
+    INNER JOIN externalgiftpackages p ON r.package_id = p.id
     ${whereClause}
     GROUP BY p.id, p.package_code, p.package_name, p.category
     ORDER BY total_sales DESC
@@ -115,7 +115,7 @@ async function handleGetSalesData(event: any) {
   const countQuery = `
     SELECT COUNT(DISTINCT p.id) as total
     FROM giftpackagepurchaserecords r
-    INNER JOIN ExternalGiftPackages p ON r.package_id = p.id
+    INNER JOIN externalgiftpackages p ON r.package_id = p.id
     ${whereClause}
   `;
   
@@ -147,7 +147,7 @@ async function handleGetSalesData(event: any) {
       SUM(p.price_real_money * r.quantity) as query_amount,
       COUNT(DISTINCT r.user_id) as unique_users
     FROM giftpackagepurchaserecords r
-    INNER JOIN ExternalGiftPackages p ON r.package_id = p.id
+    INNER JOIN externalgiftpackages p ON r.package_id = p.id
     ${whereClause}
   `;
   
@@ -165,7 +165,7 @@ async function handleGetSalesData(event: any) {
     categoryTotalQuery = `
       SELECT COUNT(*) as category_total
       FROM giftpackagepurchaserecords r
-      INNER JOIN ExternalGiftPackages p ON r.package_id = p.id
+      INNER JOIN externalgiftpackages p ON r.package_id = p.id
       WHERE p.category = ?
     `;
     categoryTotalValues = [category];

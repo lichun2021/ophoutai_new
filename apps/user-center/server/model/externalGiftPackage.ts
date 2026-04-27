@@ -54,7 +54,7 @@ export type GiftPackagePurchaseRecord = {
 // 获取所有可用的礼包（排除自动发放类型）
 export const getAllActiveGiftPackages = async () => {
     const packages = await sql({
-        query: `SELECT * FROM ExternalGiftPackages 
+        query: `SELECT * FROM externalgiftpackages 
                 WHERE is_active = 1 
                 AND (start_time IS NULL OR start_time <= NOW()) 
                 AND (end_time IS NULL OR end_time >= NOW()) 
@@ -80,7 +80,7 @@ export const getAllActiveGiftPackages = async () => {
 // 根据分类获取礼包
 export const getGiftPackagesByCategory = async (category: string) => {
     const packages = await sql({
-        query: `SELECT * FROM ExternalGiftPackages 
+        query: `SELECT * FROM externalgiftpackages 
                 WHERE is_active = 1 AND category = ?
                 AND (start_time IS NULL OR start_time <= NOW()) 
                 AND (end_time IS NULL OR end_time >= NOW()) 
@@ -108,7 +108,7 @@ export const getGiftPackagesByCategory = async (category: string) => {
 // 根据ID获取单个礼包
 export const getGiftPackageById = async (id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM ExternalGiftPackages WHERE id = ?',
+        query: 'SELECT * FROM externalgiftpackages WHERE id = ?',
         values: [id],
     }) as ExternalGiftPackage[];
 
@@ -118,7 +118,7 @@ export const getGiftPackageById = async (id: number) => {
 // 根据代码获取单个礼包
 export const getGiftPackageByCode = async (package_code: string) => {
     const result = await sql({
-        query: 'SELECT * FROM ExternalGiftPackages WHERE package_code = ?',
+        query: 'SELECT * FROM externalgiftpackages WHERE package_code = ?',
         values: [package_code],
     }) as ExternalGiftPackage[];
 
@@ -227,7 +227,7 @@ export const getUserPackagePurchaseCount = async (
         where.push('DATE(created_at) = CURDATE()');
     }
 
-    const query = `SELECT SUM(quantity) as total FROM GiftPackagePurchaseRecords 
+    const query = `SELECT SUM(quantity) as total FROM giftpackagepurchaserecords 
                 WHERE ${where.join(' AND ')}`;
 
     console.log(`[购买次数查询] SQL: ${query}, 参数: [${values.join(', ')}]`);
@@ -263,7 +263,7 @@ export const createPurchaseRecord = async (record: Omit<GiftPackagePurchaseRecor
     }
 
     const result = await sql({
-        query: `INSERT INTO GiftPackagePurchaseRecords 
+        query: `INSERT INTO giftpackagepurchaserecords 
                 (user_id, thirdparty_uid, mch_order_id, package_id, package_code, package_name, quantity, 
                  unit_price, total_amount, balance_before, balance_after, gift_items, 
                  status, game_delivery_status, remark) 
@@ -296,7 +296,7 @@ export const getUserPurchaseRecords = async (thirdparty_uid: string, page = 1, p
     const offset = (page - 1) * pageSize;
 
     const records = await sql({
-        query: `SELECT * FROM GiftPackagePurchaseRecords 
+        query: `SELECT * FROM giftpackagepurchaserecords 
                 WHERE thirdparty_uid = ? 
                 ORDER BY created_at DESC 
                 LIMIT ?, ?`,
@@ -309,7 +309,7 @@ export const getUserPurchaseRecords = async (thirdparty_uid: string, page = 1, p
 // 获取用户购买记录总数
 export const getUserPurchaseRecordsCount = async (thirdparty_uid: string) => {
     const result = await sql({
-        query: 'SELECT COUNT(*) as total FROM GiftPackagePurchaseRecords WHERE thirdparty_uid = ?',
+        query: 'SELECT COUNT(*) as total FROM giftpackagepurchaserecords WHERE thirdparty_uid = ?',
         values: [thirdparty_uid],
     }) as any[];
 
@@ -319,7 +319,7 @@ export const getUserPurchaseRecordsCount = async (thirdparty_uid: string) => {
 // 根据用户ID获取用户购买记录总数
 export const getUserPurchaseRecordsCountByUserId = async (user_id: number) => {
     const result = await sql({
-        query: 'SELECT COUNT(*) as total FROM GiftPackagePurchaseRecords WHERE user_id = ?',
+        query: 'SELECT COUNT(*) as total FROM giftpackagepurchaserecords WHERE user_id = ?',
         values: [user_id],
     }) as any[];
 
@@ -328,7 +328,7 @@ export const getUserPurchaseRecordsCountByUserId = async (user_id: number) => {
 
 // 更新购买记录状态
 export const updatePurchaseRecordStatus = async (id: number, status: string, game_delivery_status?: string, remark?: string) => {
-    let query = 'UPDATE GiftPackagePurchaseRecords SET status = ?';
+    let query = 'UPDATE giftpackagepurchaserecords SET status = ?';
     const values = [status];
 
     if (game_delivery_status) {
@@ -406,9 +406,9 @@ export const getPlayerGiftPackageRecords = async (
             END as server_info,
             -- 礼包类型直接使用category字段
             egp.category as gift_type
-        FROM GiftPackagePurchaseRecords gpr
-        LEFT JOIN ExternalGiftPackages egp ON gpr.package_id = egp.id
-        LEFT JOIN Users u ON gpr.user_id = u.id
+        FROM giftpackagepurchaserecords gpr
+        LEFT JOIN externalgiftpackages egp ON gpr.package_id = egp.id
+        LEFT JOIN users u ON gpr.user_id = u.id
         ${whereClause}
         ORDER BY gpr.created_at DESC 
         LIMIT ?, ?
@@ -455,8 +455,8 @@ export const getPlayerGiftPackageRecordsCount = async (
 
     const query = `
         SELECT COUNT(*) as total 
-        FROM GiftPackagePurchaseRecords gpr
-        LEFT JOIN ExternalGiftPackages egp ON gpr.package_id = egp.id
+        FROM giftpackagepurchaserecords gpr
+        LEFT JOIN externalgiftpackages egp ON gpr.package_id = egp.id
         ${whereClause}
     `;
 
@@ -471,7 +471,7 @@ export const getPlayerGiftPackageRecordsCount = async (
 // 更新礼包销售数量
 export const updatePackageSoldQuantity = async (package_id: number, quantity: number) => {
     const result = await sql({
-        query: 'UPDATE ExternalGiftPackages SET sold_quantity = sold_quantity + ? WHERE id = ?',
+        query: 'UPDATE externalgiftpackages SET sold_quantity = sold_quantity + ? WHERE id = ?',
         values: [quantity, package_id],
     });
 
@@ -488,7 +488,7 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
         // 获取购买记录
         console.log(`[deliverPackageToGame] 查询购买记录...`);
         const purchaseRecord = await sql({
-            query: 'SELECT * FROM GiftPackagePurchaseRecords WHERE id = ?',
+            query: 'SELECT * FROM giftpackagepurchaserecords WHERE id = ?',
             values: [purchaseRecordId],
         }) as GiftPackagePurchaseRecord[];
 
@@ -568,7 +568,7 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
         // 增加发放尝试次数
         console.log(`[deliverPackageToGame] 更新发放尝试次数和响应数据...`);
         await sql({
-            query: 'UPDATE GiftPackagePurchaseRecords SET delivery_attempts = delivery_attempts + 1, game_delivery_data = ? WHERE id = ?',
+            query: 'UPDATE giftpackagepurchaserecords SET delivery_attempts = delivery_attempts + 1, game_delivery_data = ? WHERE id = ?',
             values: [JSON.stringify(respData), purchaseRecordId],
         });
 
@@ -585,7 +585,7 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
 
                         // 同时更新状态和 thirdparty_uid
                         await sql({
-                            query: 'UPDATE GiftPackagePurchaseRecords SET status = ?, game_delivery_status = ?, remark = ?, thirdparty_uid = ?, delivered_at = NOW() WHERE id = ?',
+                            query: 'UPDATE giftpackagepurchaserecords SET status = ?, game_delivery_status = ?, remark = ?, thirdparty_uid = ?, delivered_at = NOW() WHERE id = ?',
                             values: ['delivered', 'success', '发放成功', successItem.u, purchaseRecordId],
                         });
 
@@ -630,7 +630,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
     try {
         // 获取购买记录
         const purchaseRecord = await sql({
-            query: 'SELECT * FROM GiftPackagePurchaseRecords WHERE id = ?',
+            query: 'SELECT * FROM giftpackagepurchaserecords WHERE id = ?',
             values: [purchaseRecordId],
         }) as any[];
 
@@ -677,7 +677,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         if (sendItemList.length === 0) {
             await sql({
-                query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, remark = CONCAT(remark, " | 发放失败: 物资列表为空或无效") WHERE id = ?',
+                query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | 发放失败: 物资列表为空或无效") WHERE id = ?',
                 values: ['failed', purchaseRecordId],
             });
             return { success: false, message: '物资列表为空或无效' };
@@ -685,7 +685,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         // 更新状态为正在发送
         await sql({
-            query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, delivery_attempts = delivery_attempts + 1 WHERE id = ?',
+            query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, delivery_attempts = delivery_attempts + 1 WHERE id = ?',
             values: ['sent', purchaseRecordId],
         });
 
@@ -704,7 +704,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
             const errorMsg = `未找到角色信息: uuid=${actualRoleId}`;
             console.error(`[deliverPackageToGameViaIDIP] ${errorMsg}`);
             await sql({
-                query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
+                query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
                 values: ['failed', errorMsg, purchaseRecordId],
             });
             return { success: false, message: errorMsg };
@@ -722,7 +722,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
             const errorMsg = `未找到服务器配置: world_id=${actualServerId}`;
             console.error(`[deliverPackageToGameViaIDIP] ${errorMsg}`);
             await sql({
-                query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
+                query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
                 values: ['failed', errorMsg, purchaseRecordId],
             });
             return { success: false, message: errorMsg };
@@ -798,7 +798,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
             if (isTimeout) {
                 // 超时视为“待确认”，避免误判失败
                 await sql({
-                    query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
+                    query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
                     values: ['sent', logMessage, purchaseRecordId],
                 });
                 return { success: false, message: logMessage, timeout: true };
@@ -806,7 +806,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
             // 更新礼包购买记录
             await sql({
-                query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
+                query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | ", ?) WHERE id = ?',
                 values: ['failed', logMessage, purchaseRecordId],
             });
 
@@ -823,7 +823,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         // 更新游戏响应数据
         await sql({
-            query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_data = ? WHERE id = ?',
+            query: 'UPDATE giftpackagepurchaserecords SET game_delivery_data = ? WHERE id = ?',
             values: [JSON.stringify(respData), purchaseRecordId],
         });
 
@@ -831,7 +831,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
         if (resultCode === 0) {
             // 发放成功
             await sql({
-                query: 'UPDATE GiftPackagePurchaseRecords SET status = ?, game_delivery_status = ?, delivered_at = NOW() WHERE id = ?',
+                query: 'UPDATE giftpackagepurchaserecords SET status = ?, game_delivery_status = ?, delivered_at = NOW() WHERE id = ?',
                 values: ['delivered', 'success', purchaseRecordId],
             });
             console.log(`[deliverPackageToGameViaIDIP] 礼包发放成功: 记录ID=${purchaseRecordId}`);
@@ -839,7 +839,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
         } else {
             const errMsg = respData?.body?.RetMsg || 'IDIP发放失败';
             await sql({
-                query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, remark = CONCAT(remark, " | 发放失败: ", ?) WHERE id = ?',
+                query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | 发放失败: ", ?) WHERE id = ?',
                 values: ['failed', errMsg, purchaseRecordId],
             });
             console.error(`[deliverPackageToGameViaIDIP] 礼包发放失败: 记录ID=${purchaseRecordId}, 错误: ${errMsg}`);
@@ -850,7 +850,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         // 更新状态为失败
         await sql({
-            query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, remark = CONCAT(remark, " | 发放异常: ", ?) WHERE id = ?',
+            query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | 发放异常: ", ?) WHERE id = ?',
             values: ['failed', error.message, purchaseRecordId],
         });
 
@@ -863,7 +863,7 @@ export const retryFailedDeliveries = async () => {
     try {
         // 获取所有发放失败的记录
         const failedRecords = await sql({
-            query: `SELECT id FROM GiftPackagePurchaseRecords 
+            query: `SELECT id FROM giftpackagepurchaserecords 
                    WHERE status = 'paid' AND game_delivery_status = 'failed' 
                    AND delivery_attempts < 3`,
         }) as any[];

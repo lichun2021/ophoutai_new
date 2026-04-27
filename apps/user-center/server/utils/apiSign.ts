@@ -1,7 +1,7 @@
 import { H3Event, createError } from 'h3';
 import { getRedisCluster } from './redis-cluster';
 
-const DEFAULT_SALT = process.env.API_SIGN_KEY || 'fasdjhkfh2348!@#$!617';
+const DEFAULT_SALT = process.env.API_SIGN_KEY || 'q12eiedu24fi3rf434g34g';
 const DEFAULT_SKEW_SECONDS = parseInt(process.env.API_SIGN_SKEW_SEC || '60', 10); // 1 分钟
 
 // 使用与前端完全一致的 MD5 实现

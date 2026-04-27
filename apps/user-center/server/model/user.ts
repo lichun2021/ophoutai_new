@@ -1,4 +1,4 @@
-import { sql } from '../db';
+﻿import { sql } from '../db';
 import { RowDataPacket } from 'mysql2';
 import * as SubUsersModel from './subUsers';
 
@@ -20,7 +20,7 @@ export type User = {
 // 根据用户ID查找用户
 export const findById = async (id: number) => {
     const result = await sql({
-        query: 'SELECT * FROM Users WHERE id = ?',
+        query: 'SELECT * FROM users WHERE id = ?',
         values: [id],
     }) as any;
     return result.length === 1 ? result[0] as User : null;
@@ -29,7 +29,7 @@ export const findById = async (id: number) => {
 // 添加根据 thirdparty_uid 查找用户
 export const findByThirdpartyUid = async (thirdparty_uid: string) => {
     const result = await sql({
-        query: 'SELECT * FROM Users WHERE thirdparty_uid = ?',
+        query: 'SELECT * FROM users WHERE thirdparty_uid = ?',
         values: [thirdparty_uid],
     }) as any;
     return result.length === 1 ? result[0] as User : null;
@@ -39,7 +39,7 @@ export const findByThirdpartyUid = async (thirdparty_uid: string) => {
 export const login = async (username: string, password: string) => {
     try {
         const result = await sql({
-            query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
+            query: 'SELECT * FROM users WHERE username = ? AND password = ?',
             values: [username, password],
         }) as any;
         return result.length === 1 ? result[0] as User : null;
@@ -59,14 +59,14 @@ export const upsertUserByThirdparty = async (thirdparty_uid: string, access_toke
     if (existingUser) {
         // 用户存在，更新 access_token
         await sql({
-            query: 'UPDATE Users SET access_token = ? WHERE thirdparty_uid = ?',
+            query: 'UPDATE users SET access_token = ? WHERE thirdparty_uid = ?',
             values: [access_token, thirdparty_uid],
         });
         return { ...existingUser, access_token };
     } else {
         // 用户不存在，插入新用户，其他字段使用默认值
         const result = await sql({
-            query: `INSERT INTO Users 
+            query: `INSERT INTO users 
                 (username, iphone, password, channel_code, thirdparty_uid, platform_coins, status, created_at) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             values: [
@@ -92,7 +92,7 @@ export const upsertUserByThirdparty = async (thirdparty_uid: string, access_toke
 
 export const detailByUserID = async (thirdparty_uid: string) => {
     let _sql = {
-        query: 'SELECT * FROM Users WHERE thirdparty_uid = ? ',
+        query: 'SELECT * FROM users WHERE thirdparty_uid = ? ',
         values: [thirdparty_uid],
     }
 
@@ -107,7 +107,7 @@ export const detailByUserID = async (thirdparty_uid: string) => {
 
 export const detail = async (mob: string, pwd: string) => {
     const result = await sql({
-        query: 'SELECT * FROM Users WHERE iphone = ? and password = ?',
+        query: 'SELECT * FROM users WHERE iphone = ? and password = ?',
         values: [mob, pwd],
     }) as any;
     return result.length === 1 ? result[0] as User : null;
@@ -115,7 +115,7 @@ export const detail = async (mob: string, pwd: string) => {
 
 export const read = async () => {
     const users = await sql({
-        query: 'SELECT * FROM Users',
+        query: 'SELECT * FROM users',
     });
     return users as User[];
 }
@@ -126,7 +126,7 @@ export const readPage = async (pageIndex: any, permissions: any, mobile?: any, s
     const offset = (pageIndex - 1) * pageSize; // 计算起始位置
 
     let _sql = {
-        query: 'SELECT * FROM Users ',
+        query: 'SELECT * FROM users ',
         values: [] as (string | number | Date)[],
     }
 
@@ -192,7 +192,7 @@ export const readPage = async (pageIndex: any, permissions: any, mobile?: any, s
 
 export const getchannel = async (userId: number) => {
     let _sql = {
-        query: 'SELECT channel_code FROM Users where id = ?',
+        query: 'SELECT channel_code FROM users where id = ?',
         values: [userId],
     }
     const result = await sql(_sql) as any;
@@ -204,7 +204,7 @@ export const getchannel = async (userId: number) => {
 export const count = async (permissions: any, mobile?: any, start_time?: any, end_time?: any, userid?: any) => {
     try {
         let _sql = {
-            query: 'SELECT COUNT(*) AS total FROM Users',
+            query: 'SELECT COUNT(*) AS total FROM users',
             values: [] as (string | number | Date)[],
         }
 
@@ -267,14 +267,14 @@ export const count = async (permissions: any, mobile?: any, start_time?: any, en
 }
 export const updatePhone = async (id: number, data: Pick<User, "iphone">) => {
     await sql({
-        query: 'UPDATE Users SET iphone = ? WHERE id = ?',
+        query: 'UPDATE users SET iphone = ? WHERE id = ?',
         values: [data.iphone, id],
     });
 }
 
 // 函数已废弃：uid 字段已被删除
 // export const isUidEmpty = async (thirdparty_uid: string): Promise<boolean> => {
-//     const query = 'SELECT COUNT(*) as count FROM Users WHERE thirdparty_uid = ? AND (uid IS NULL OR uid = "")';
+//     const query = 'SELECT COUNT(*) as count FROM users WHERE thirdparty_uid = ? AND (uid IS NULL OR uid = "")';
 //     const result = await sql({
 //         query,
 //         values: [thirdparty_uid],
@@ -285,14 +285,14 @@ export const updatePhone = async (id: number, data: Pick<User, "iphone">) => {
 export const updateByUserId = async (userData: User) => {
 
     await sql({
-        query: 'UPDATE Users SET username = ? , iphone = ? , password = ?, channel_code = ?, game_code = ?, platform_coins = ?  WHERE thirdparty_uid = ?',
+        query: 'UPDATE users SET username = ? , iphone = ? , password = ?, channel_code = ?, game_code = ?, platform_coins = ?  WHERE thirdparty_uid = ?',
         values: [userData.username, userData.iphone, userData.password, userData.channel_code, userData.game_code, userData.platform_coins, userData.thirdparty_uid],
     });
 }
 
 export const remove = async (id: number) => {
     await sql({
-        query: 'DELETE FROM Users WHERE id = ?',
+        query: 'DELETE FROM users WHERE id = ?',
         values: [id],
     });
 }
@@ -307,7 +307,7 @@ export const insert = async (userData: Omit<User, 'id' | 'created_at'>) => {
 
         // 插入用户数据
         const userResult = await sql({
-            query: 'INSERT INTO Users (username, iphone, password, channel_code, game_code, thirdparty_uid, platform_coins, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            query: 'INSERT INTO users (username, iphone, password, channel_code, game_code, thirdparty_uid, platform_coins, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             values: [userData.username, userData.iphone, userData.password, userData.channel_code, userData.game_code, userData.thirdparty_uid, userData.platform_coins || 0.00, userData.status || 0],
         }) as any;
 
@@ -349,7 +349,7 @@ export const insert = async (userData: Omit<User, 'id' | 'created_at'>) => {
 // 获取用户平台币余额
 export const getPlatformCoins = async (user_id: number): Promise<number> => {
     const result = await sql({
-        query: 'SELECT platform_coins FROM Users WHERE id = ?',
+        query: 'SELECT platform_coins FROM users WHERE id = ?',
         values: [user_id],
     }) as any[];
     return result.length > 0 ? parseFloat(result[0].platform_coins) : 0;
@@ -358,7 +358,7 @@ export const getPlatformCoins = async (user_id: number): Promise<number> => {
 // 通过第三方用户ID获取平台币余额
 export const getPlatformCoinsByThirdpartyUid = async (thirdparty_uid: string): Promise<number> => {
     const result = await sql({
-        query: 'SELECT platform_coins FROM Users WHERE thirdparty_uid = ?',
+        query: 'SELECT platform_coins FROM users WHERE thirdparty_uid = ?',
         values: [thirdparty_uid],
     }) as any[];
     return result.length > 0 ? parseFloat(result[0].platform_coins) : 0;
@@ -410,7 +410,7 @@ export const updatePlatformCoinsUnified = async (
 
         // 更新余额
         await sql({
-            query: 'UPDATE Users SET platform_coins = ? WHERE id = ?',
+            query: 'UPDATE users SET platform_coins = ? WHERE id = ?',
             values: [newBalance, userId],
         });
 
@@ -446,7 +446,7 @@ export const updateUserStatus = async (user_id: number, status: number): Promise
 
         // 更新用户状态
         await sql({
-            query: 'UPDATE Users SET status = ? WHERE id = ?',
+            query: 'UPDATE users SET status = ? WHERE id = ?',
             values: [status, user_id],
         });
 
@@ -485,7 +485,7 @@ export const updateUserStatusByThirdpartyUid = async (thirdparty_uid: string, st
 export const checkUserStatus = async (user_id: number): Promise<{ isBanned: boolean; status: number }> => {
     try {
         const result = await sql({
-            query: 'SELECT status FROM Users WHERE id = ?',
+            query: 'SELECT status FROM users WHERE id = ?',
             values: [user_id],
         }) as any[];
 
@@ -505,7 +505,7 @@ export const checkUserStatus = async (user_id: number): Promise<{ isBanned: bool
 export const checkUserStatusByThirdpartyUid = async (thirdparty_uid: string): Promise<{ isBanned: boolean; status: number }> => {
     try {
         const result = await sql({
-            query: 'SELECT status FROM Users WHERE thirdparty_uid = ?',
+            query: 'SELECT status FROM users WHERE thirdparty_uid = ?',
             values: [thirdparty_uid],
         }) as any[];
 
