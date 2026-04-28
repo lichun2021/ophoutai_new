@@ -123,19 +123,15 @@ export const useAuthStore = defineStore('auth', {
           return false;
         }
     },
-    async logInAdmin(username: string, password: string, googleCode?: string) {
+    async logInAdmin(username: string, password: string) {
       try {
         const response = await $fetch('/api/admin/login', {
           method: 'POST',
-          body: { "name":username, "password":password, "google_code": googleCode }
+          body: { "name":username, "password":password }
         }) as any;
 
         console.log("代理登录response:", response)
         
-        // 处理 2FA 校验需求
-        if (response.code === 202 && response.data?.require_2fa) {
-          return { require2FA: true };
-        }
 
         if (response.data) {
             this.isLoggedIn = true; 

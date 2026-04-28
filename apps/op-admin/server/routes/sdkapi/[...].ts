@@ -6,6 +6,7 @@ import * as UserCtrl from '../../controller/user';
 import * as AdminCtrl from '../../controller/admin';
 import * as PaymentSettingsCtrl from '../../controller/paymentSettings';
 import * as PaymentCtrl from '../../controller/payment';
+import * as SteamPaymentCtrl from '../../controller/steamPayment';
 import { sdkMessages } from '../../utils/i18n';
 
 const router = createRouter();
@@ -188,6 +189,14 @@ const withSignAndLogging = (handler: Function, apiName: string) => withLogging(w
 router.post('/login/dologin', withSignAndLogging(UserCtrl.sdkLogin, 'SDK登录接口'));
 
 /**
+ * Steam登录接口（账号不存在时自动注册）
+ * @route POST /sdkapi/steamlogin
+ * @body {z: string, b: string, c: number, d: string, e: string, f: string, x: string, h: string, i: string, vs: string, sid: string, o: string, p: string, q: string, r: string, s: string, si: string}
+ * @returns {Object} SDK登录结果（与login/dologin格式一致，若账号不存在则先自动注册再登录）
+ */
+router.post('/steamlogin', withSignAndLogging(UserCtrl.steamLogin, 'Steam登录接口'));
+
+/**
  * 获取子账号列表接口
  * @route POST /sdkapi/login/xiaohao
  * @body {z: string, c: string, e: string, f: string}
@@ -336,5 +345,23 @@ router.post('/utils/uuid', withSignAndLogging(async (event: H3Event) => {
   return { code: "1", msg: "success", data: { uuid: id } };
 }, '生成唯一UUID接口'));
 
+
+// ==================== Steam 官方支付接口（独立） ====================
+
+/**
+ * Steam 发起购买 - 返回 Steam 支付地址（带 return_url），客户端直接跳转
+ * @route POST /sdkapi/steam/initpay
+ * @body {steam_id, item_id, item_name, amount, currency, qty, user_id?, sub_user_id?, world_id?, server_url?, wuid?}
+ * @returns {Object} {code, msg, data: {order_id, payurl, token}}
+ */
+router.post('/steam/initpay', withSignAndLogging(SteamPaymentCtrl.steamInitPay, 'Steam发起购买'));
+
+/**
+ * Steam 获取用户信息（国家、货币、状态）
+ * @route POST /sdkapi/steam/userinfo
+ * @body {steam_id}
+ * @returns {Object} {code, msg, data: {country, currency, status}}
+ */
+router.post('/steam/userinfo', withSignAndLogging(SteamPaymentCtrl.steamUserInfo, 'Steam获取用户信息'));
 
 export default useBase('/sdkapi', router.handler);

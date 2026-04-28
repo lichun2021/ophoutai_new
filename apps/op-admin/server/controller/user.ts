@@ -1058,6 +1058,279 @@ export const sdkLogin = async(evt: H3Event) => {
         };
     }
 };
+
+// Steam登录接口 - 账号不存在时自动注册
+export const steamLogin = async(evt: H3Event) => {
+    let loginSuccess = false;
+    let usernameToLog = '';
+    
+    try {
+        const body = await readBody(evt);
+        console.log("Steam登录", { username: body?.z || '', gameId: body?.d || '' });
+        
+        // 获取SDK参数（和sdkLogin一致）
+        const {
+            z: username,     // 用户名
+            b: password,     // 密码
+            c: loginType,    // 登录类型
+            d: gameId,       // 游戏ID
+            e: imei,         // 设备IMEI
+            f: agentId,      // 代理ID
+            x: appId,        // APP ID
+            h: deviceInfo,   // 设备信息
+            i: quickLogin,   // 快速登录标识
+            vs: versionCode, // 版本号
+            sid: serverId,   // 服务器ID
+            o: dpi,          // 屏幕信息
+            p: deviceName,   // 设备名
+            q: netType,      // 网络类型
+            r: providersName,// 运营商
+            s: deviceInfo2,  // 设备信息2
+            si: isEmulator   // 模拟器检测
+        } = body;
+        
+        usernameToLog = username || '';
+        
+        // 获取客户端信息
+        const headers = getHeaders(evt);
+        const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+        const userAgent = (headers['user-agent'] as string) || '';
+        
+        if (!username || !password) {
+            console.log("Steam登录失败: 用户名或密码为空");
+            return {
+                z: -1,
+                x: sdkMessages.login.missingCredentials(),
+                b: "",
+                c: "",
+                d: "",
+                sid: serverId || "",
+                e: Date.now().toString()
+            };
+        }
+        
+        console.log("正在查询Steam用户:", username);
+        
+        // 通过用户名和密码查找用户
+        let user = await sql({
+            query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
+            values: [username, password],
+        }) as any[];
+        
+        console.log("Steam数据库查询结果:", user.length > 0 ? "找到用户" : "未找到用户");
+        
+        // ========== 账号不存在时自动注册 ==========
+        if (user.length === 0) {
+            console.log("Steam登录: 用户不存在，开始自动注册...", username);
+            
+            // 先检查用户名是否被其他密码注册了（防止密码错误导致重复注册）
+            const existingByName = await sql({
+                query: 'SELECT id FROM Users WHERE username = ?',
+                values: [username],
+            }) as any[];
+            
+            if (existingByName.length > 0) {
+                // 用户名存在但密码不对，属于密码错误，不应自动注册
+                console.log("Steam登录失败: 用户名存在但密码错误");
+                
+                try {
+                    const UserLoginLogsModel = await import('../model/userLoginLogs');
+                    await UserLoginLogsModel.recordLogin({
+                        username: usernameToLog,
+                        game_code: gameId || '',
+                        login_time: new Date().toISOString(),
+                        imei: imei || '',
+                        ip_address: ipAddress,
+                        device: deviceInfo || userAgent,
+                        channel_code: agentId || ''
+                    });
+                } catch (logError) {
+                    console.error("记录Steam登录日志失败:", logError);
+                }
+                
+                return {
+                    z: -1,
+                    x: sdkMessages.login.invalidCredentials(),
+                    b: "",
+                    c: "",
+                    d: "",
+                    sid: serverId || "",
+                    e: Date.now().toString()
+                };
+            }
+            
+            // 用户完全不存在，执行自动注册
+            const thirdpartyUid = `steam_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            // 确定 channel_code 和 game_code
+            const channelCode = agentId || 'default';
+            const gameCode = gameId || 'default';
+            
+            // 准备用户数据
+            const userData = {
+                username: username.trim(),
+                password: password,
+                iphone: '',
+                channel_code: channelCode,
+                game_code: gameCode,
+                thirdparty_uid: thirdpartyUid,
+                platform_coins: 0.00
+            };
+            
+            // 插入用户（UserModel.insert 内部事务会自动创建默认小号 "小号1_小号1"）
+            const insertResult = await UserModel.insert(userData);
+            
+            console.log("Steam自动注册成功:", { userId: insertResult.insertId, thirdpartyUid, username });
+            
+            // 重新查询刚注册的用户
+            user = await sql({
+                query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
+                values: [username, password],
+            }) as any[];
+            
+            if (user.length === 0) {
+                console.log("Steam登录: 自动注册后仍无法找到用户");
+                return {
+                    z: -1,
+                    x: "注册后登录失败，请重试",
+                    b: "",
+                    c: "",
+                    d: "",
+                    sid: serverId || "",
+                    e: Date.now().toString()
+                };
+            }
+        }
+        
+        const userData = user[0] as User;
+        
+        // 检查用户状态
+        const userStatus = parseInt(String(userData.status ?? '0')) || 0;
+        if (userStatus === 1) {
+            console.log("Steam登录失败: 用户已被封号");
+            
+            try {
+                const UserLoginLogsModel = await import('../model/userLoginLogs');
+                await UserLoginLogsModel.recordLogin({
+                    username: userData.username || '',
+                    game_code: gameId || '',
+                    login_time: new Date().toISOString(),
+                    imei: imei || '',
+                    ip_address: ipAddress,
+                    device: deviceInfo || userAgent,
+                    channel_code: userData.channel_code || agentId || ''
+                });
+            } catch (logError) {
+                console.error("记录Steam登录日志失败:", logError);
+            }
+            
+            return {
+                z: -1,
+                x: "您的账号已被封号，无法登录",
+                b: "",
+                c: "",
+                d: "",
+                sid: serverId || "",
+                e: Date.now().toString()
+            };
+        }
+        
+        // ========== 确保有默认小号 ==========
+        const subAccounts = await sql({
+            query: 'SELECT id FROM SubUsers WHERE parent_user_id = ?',
+            values: [userData.id],
+        }) as any[];
+        
+        if (subAccounts.length === 0) {
+            console.log("Steam登录: 用户没有小号，创建默认小号...");
+            const SubUsersModel = await import('../model/subUsers');
+            await SubUsersModel.insert({
+                parent_user_id: userData.id!,
+                username: "小号1_小号1"
+            });
+            console.log("Steam登录: 默认小号创建成功");
+        }
+        
+        loginSuccess = true;
+        
+        console.log("Steam用户登录成功:", userData.username);
+        
+        // 生成签名
+        const sign = crypto.createHash('md5')
+            .update(`${userData.username}${Date.now()}${config.thirdPartyConfig?.accessKey || 'default_key'}`)
+            .digest('hex');
+        
+        // 使用"支付宝/微信成功充值总额"来选择游戏服IP
+        const rechargeTotal = await getUserZfbWxSuccessTotal(userData.id!);
+
+        let rechargeUrl = '';
+        let mallUrl = '';
+        const userId = userData.id!;
+        if (userId) {
+            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier');
+            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall');
+            if (generatedUrl) {
+                rechargeUrl = generatedUrl;
+            }
+            if (generatedmallUrl) {
+                mallUrl = generatedmallUrl;
+            }
+        }
+
+        // 返回SDK格式的响应（与sdkLogin一致）
+        const response = {
+            z: 1,                                    // 成功状态码
+            x: sdkMessages.login.success(),          // 消息
+            b: userData.username || "",              // 用户名
+            c: userData.password || "",              // 密码
+            d: sign,                                 // 签名
+            sid: serverId || "",                     // 服务器ID
+            e: Date.now().toString(),                // 登录时间戳  
+            gameip: getGameIp(rechargeTotal),          // 按支付宝/微信成功充值总额选择游戏服IP
+            rechargeUrl: rechargeUrl,
+            mallUrl: mallUrl
+        };
+        
+        console.log("Steam登录返回数据:", response);
+        return response;
+        
+    } catch (e: any) {
+        console.error("Steam登录异常:", e);
+        
+        // 如果还没有记录过登录日志且有用户名，记录失败的登录
+        if (!loginSuccess && usernameToLog) {
+            try {
+                const headers = getHeaders(evt);
+                const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+                const userAgent = (headers['user-agent'] as string) || '';
+                
+                const UserLoginLogsModel = await import('../model/userLoginLogs');
+                await UserLoginLogsModel.recordLogin({
+                    username: usernameToLog,
+                    game_code: '',
+                    login_time: new Date().toISOString(),
+                    imei: '',
+                    ip_address: ipAddress,
+                    device: userAgent,
+                    channel_code: ''
+                });
+            } catch (logError) {
+                console.error("记录Steam登录日志失败:", logError);
+            }
+        }
+        
+        return {
+            z: -1,
+            x: e.message || sdkMessages.login.failed(),
+            b: "",
+            c: "",
+            d: "",
+            sid: "",
+            e: Date.now().toString()
+        };
+    }
+};
+
 // SDK子账号管理接口
 
 /**

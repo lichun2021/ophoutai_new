@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 import { sql } from '../db';
 import { getSystemParam } from './systemConfig';
 
@@ -826,8 +826,8 @@ const meidaProvider: PaymentProvider = {
 
 const sxjzszConfig = {
     baseUrl: 'https://payment.sxjzsz.com/v1/pay/create',
-    pid: '100131',
-    md5Key: 'XL5bNCUdYIaNvU9ZoEdLZaYaf4fBwo31'
+    pid: '100179',
+    md5Key: 'GAviMBFhYtTg75Tfp09mswX6MOJu7csh'
 };
 
 const sxjzszProvider: PaymentProvider = {
@@ -1004,9 +1004,8 @@ export const gatewayParamSets: Record<string, GatewayParamSet & { supportQuery?:
         isOpen: true,
         credentials: {
             baseUrl: 'https://payment.sxjzsz.com/v1/pay/create',
-            pid: '100131',
-            merchantId: '696891cb161ebac77ca2538f',
-            md5Key: 'XL5bNCUdYIaNvU9ZoEdLZaYaf4fBwo31'
+            pid: '100179',
+            md5Key: 'GAviMBFhYtTg75Tfp09mswX6MOJu7csh'
         }
     },
     // payment=6 接入 meidaPay

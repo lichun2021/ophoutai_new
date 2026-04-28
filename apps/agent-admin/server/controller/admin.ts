@@ -196,40 +196,7 @@ export const login = async(evt:H3Event) => {
                 return { data: null };
             }
 
-            // 🔐 Google 2FA 强制校验
-            const google_code = String(body?.google_code || '').trim();
-            
-            // 强制检查：如果账号还没绑定 2FA 密钥，直接拦截
-            if (!admin.google_2fa_secret) {
-                return { 
-                    code: 403, 
-                    message: '您的账号尚未开启 Google 二步验证，请联系超级管理员获取绑定二维码', 
-                    data: null 
-                };
-            }
-
-            if (!google_code) {
-                // 返回特殊状态码，提示前端需要输入 2FA 验证码
-                return { 
-                    code: 202, 
-                    message: 'NEED_2FA', 
-                    data: { 
-                        require_2fa: true,
-                        admin_id: admin.id 
-                    } 
-                };
-            }
-            
-            const is2faValid = verify2FAToken(google_code, admin.google_2fa_secret);
-            if (!is2faValid) {
-                return { 
-                    code: 401, 
-                    message: '2FA验证码错误', 
-                    data: null 
-                };
-            }
-
-            // 获取管理员的完整权限信息（包含持久化的channelCodes）
+            // 密码验证通过，获取管理员的完整权限信息
             const adminWithPermissions = await AdminModel.getAdminWithPermissions(admin.id);
             
             if (!adminWithPermissions) {

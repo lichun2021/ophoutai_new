@@ -100,6 +100,7 @@ export function shouldBypass(pathname: string): boolean {
   const bypassList = [
     '/api/payment/third-party-notify',
     '/api/payment/cashier-notify',
+    '/api/payment/steam-notify',
     '/api/client/cdk/redeem',
     '/api/internal/',  // 内部API（供后台脚本调用）
   ];

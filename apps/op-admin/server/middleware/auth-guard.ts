@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
       // 支付回调（仅这两类回调对外开放）
       path.startsWith('/api/payment/third-party-notify') ||
       path.startsWith('/api/payment/cashier-notify') ||
+      path.startsWith('/api/payment/steam-notify') ||
       // 内部API（供后台脚本调用，无需认证）
       path.startsWith('/api/internal/') ||
       // 登录/注册/校验（对外开放以便登录流程）

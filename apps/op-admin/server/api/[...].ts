@@ -13,6 +13,7 @@ import * as PlayerDetailCtrl from '../controller/playerDetail';
 import * as SystemParamsCtrl from '../controller/systemParams';
 import * as SettlementsCtrl from '../controller/settlements';
 import * as GMCtrl from '../controller/gm';
+import * as SteamPaymentCtrl from '../controller/steamPayment';
 import * as CDKCtrl from '../controller/cdk';
 import * as ServerCfgCtrl from '../controller/serverConfig';
 import * as GmLogsCtrl from '../controller/gmLogs';
@@ -1084,6 +1085,16 @@ router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPar
  * @returns {string} 处理结果(success/fail)
  */
 router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知接口'));
+
+/**
+ * Steam 支付回调通知接口
+ * Steam 支付完成后回调此地址，通过 token 参数从 Redis 读取订单，验证 + FinalizeTxn + 通知游戏服
+ * @route GET /api/payment/steam-notify
+ * @query {token: string} - 订单 token（initpay 时生成并存入 Redis）
+ * @returns {string} 处理结果(success/FAIL)
+ */
+router.get('/payment/steam-notify', withLogging(SteamPaymentCtrl.handleSteamNotify, 'Steam支付回调通知'));
+router.post('/payment/steam-notify', withLogging(SteamPaymentCtrl.handleSteamNotify, 'Steam支付回调通知'));
 
 /**
  * 根据交易ID获取支付信息
