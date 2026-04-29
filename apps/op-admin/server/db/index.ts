@@ -1,8 +1,8 @@
-import mysql, {  ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import mysql, { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 interface Options {
-    query: string;
-    values?: any[];
+  query: string;
+  values?: any[];
 }
 
 // 数据库配置 - 使用环境变量，带默认值
@@ -25,7 +25,7 @@ const pool = mysql.createPool({
   user: dbConfig.user,
   password: dbConfig.password,
   database: dbConfig.database,
-  
+
   waitForConnections: true,
   connectionLimit: dbConfig.connectionLimit,
   queueLimit: dbConfig.queueLimit
