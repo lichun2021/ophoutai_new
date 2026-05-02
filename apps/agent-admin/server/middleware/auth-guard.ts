@@ -39,9 +39,6 @@ export default defineEventHandler(async (event) => {
       path === '/api/user/register' ||
       path === '/api/user/check-channel' ||
       path === '/api/user/check' ||
-      // Google 2FA 绑定（对外开放以便初始化流程）
-      path === '/api/admin/2fa/generate' ||
-      path === '/api/admin/2fa/confirm' ||
       // 第三方 token 下发（外部触发的快速注册）
       path === '/api/user/token' ||
       // CDK 兑换（对外开放）

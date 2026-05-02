@@ -46,9 +46,7 @@ const withLogging = (handler: Function, apiName: string) => {
         const pathname = url.pathname.replace(/\/$/, '');
 
         const skipSignature = (
-          pathname === '/api/admin/login' ||
-          pathname === '/api/admin/2fa/generate' ||
-          pathname === '/api/admin/2fa/confirm'
+          pathname === '/api/admin/login'
         );
         if (!skipSignature) {
           await verifyApiSignature(event, url.pathname, method, queryParams, requestBody);
@@ -144,11 +142,6 @@ router.post('/admin/refresh-permissions', adminWrap(AdminCtrl.refreshPermissions
 router.post('/admin/update-profile', adminWrap(AdminCtrl.updateProfile, '管理员更新个人信息'));
 router.post('/admin/get-profile', adminWrap(AdminCtrl.getProfile, '获取管理员个人信息'));
 
-// 2FA
-router.get('/admin/2fa/generate', withLogging(AdminCtrl.generate2FABinding, '生成2FA绑定信息(GET)'));
-router.post('/admin/2fa/generate', withLogging(AdminCtrl.generate2FABinding, '生成2FA绑定信息(POST)'));
-router.post('/admin/2fa/confirm', withLogging(AdminCtrl.confirm2FABinding, '确认绑定2FA'));
-router.post('/admin/2fa/unbind', adminWrap(AdminCtrl.unbind2FA, '解绑2FA'));
 
 // ========== 代理功能接口 ==========
 

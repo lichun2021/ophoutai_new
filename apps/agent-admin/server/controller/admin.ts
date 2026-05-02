@@ -2,7 +2,6 @@ import {H3Event, readBody, readMultipartFormData, createError, defineEventHandle
 import * as AdminModel from '../model/admin';
 import * as PlatformCoinsModel from '../model/platformCoins';
 import * as PaymentModel from '../model/payment';
-import { generate2FASecret, verify2FAToken } from '../utils/auth'; // 2FA 仅保留管理接口使用
 import crypto from 'crypto';
 import {sql} from '../db';
 import { getItemName, formatGiftItemsDisplay } from '../utils/itemConfig';
@@ -441,114 +440,7 @@ export const getFilteredGames = async(evt:H3Event) => {
     }
 }
 
-/**
- * 生成 2FA 绑定信息 (支持外部密钥校验)
- */
-export const generate2FABinding = async (evt: H3Event) => {
-    try {
-        const query = getQuery(evt);
-        const admin_id_param = query.admin_id;
-        const master_key = query.master_key;
 
-        // 安全校验：要么是已登录用户给自己生成，要么是持有 master_key 的外部调用
-        let targetAdminId: number | null = null;
-        const MASTER_KEY = process.env.ADMIN_2FA_MASTER_KEY || 'QUANTUM_2FA_SAFE_KEY_2026';
-
-        if (master_key === MASTER_KEY && admin_id_param) {
-            targetAdminId = parseInt(String(admin_id_param));
-        } else {
-            const authorizationHeader = getHeader(evt, 'authorization');
-            targetAdminId = authorizationHeader ? parseInt(authorizationHeader) : null;
-        }
-
-        if (!targetAdminId) throw createError({ statusCode: 401, message: '未授权或缺少参数' });
-
-        const admin = await AdminModel.getAdminWithPermissions(targetAdminId);
-        if (!admin) throw createError({ statusCode: 404, message: '管理员不存在' });
-
-        const { secret, qrCodeUrl } = await generate2FASecret(admin.name);
-        
-        return {
-            success: true,
-            data: {
-                admin_name: admin.name,
-                secret,
-                qrCodeUrl, // 这就是 Base64 图片字符串，可直接在浏览器打开或发给别人
-                tip: '请将 qrCodeUrl 发送给管理员扫码，或手动输入 secret'
-            }
-        };
-    } catch (e: any) {
-        throw createError({ status: 500, message: e.message || '生成2FA失败' });
-    }
-};
-
-/**
- * 确认绑定 2FA (支持外部密钥校验)
- */
-export const confirm2FABinding = async (evt: H3Event) => {
-    try {
-        const body = await readBody(evt);
-        const { secret, code, admin_id, master_key } = body;
-
-        if (!secret || !code) throw createError({ statusCode: 400, message: '参数不完整' });
-
-        // 安全校验：要么是已登录用户给自己绑定，要么是持有 master_key 的外部调用
-        let targetAdminId: number | null = null;
-        const MASTER_KEY = process.env.ADMIN_2FA_MASTER_KEY || 'QUANTUM_2FA_SAFE_KEY_2026';
-
-        if (master_key === MASTER_KEY && admin_id) {
-            targetAdminId = parseInt(String(admin_id));
-        } else {
-            const authorizationHeader = getHeader(evt, 'authorization');
-            targetAdminId = authorizationHeader ? parseInt(authorizationHeader) : null;
-        }
-
-        if (!targetAdminId) throw createError({ statusCode: 401, message: '未授权或缺少参数' });
-
-        const isValid = verify2FAToken(code, secret);
-        if (!isValid) throw createError({ statusCode: 400, message: '验证码错误' });
-
-        // 存入数据库
-        await sql({
-            query: 'UPDATE admins SET google_2fa_secret = ? WHERE id = ?',
-            values: [secret, targetAdminId]
-        });
-
-        return { success: true, message: '绑定成功' };
-    } catch (e: any) {
-        throw createError({ status: 500, message: e.message || '绑定2FA失败' });
-    }
-};
-
-/**
- * 解绑 2FA (仅限超级管理员或本人验证后)
- */
-export const unbind2FA = async (evt: H3Event) => {
-    try {
-        const authorizationHeader = getHeader(evt, 'authorization');
-        const adminId = authorizationHeader ? parseInt(authorizationHeader) : null;
-        if (!adminId) throw createError({ statusCode: 401, message: '未授权' });
-
-        const body = await readBody(evt);
-        const targetAdminId = body.admin_id || adminId;
-
-        const currentAdmin = await AdminModel.getAdminWithPermissions(adminId);
-        if (!currentAdmin) throw createError({ statusCode: 404, message: '管理员不存在' });
-        
-        if (currentAdmin.level !== 0 && targetAdminId !== adminId) {
-            throw createError({ statusCode: 403, message: '无权操作' });
-        }
-
-        await sql({
-            query: 'UPDATE admins SET google_2fa_secret = NULL WHERE id = ?',
-            values: [targetAdminId]
-        });
-
-        return { success: true, message: '解绑成功' };
-    } catch (e: any) {
-        throw createError({ status: 500, message: e.message || '解绑2FA失败' });
-    }
-};
 
 // 更新管理员游戏权限
 export const updateGamePermissions = async(evt:H3Event) => {

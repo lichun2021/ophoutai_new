@@ -47,10 +47,15 @@ export default defineNuxtConfig({
     "@nuxtjs/tailwindcss"
   ],
 
-  // 避免 SSR 在线拉取 Iconify 导致 heroicons 图标超时
+  // 避免 SSR/CSR 在线拉取 Iconify 导致 heroicons 图标超时
   icon: {
     serverBundle: {
       collections: ['heroicons']
-    }
+    },
+    clientBundle: {
+      icons: [],
+      scan: true
+    },
+    fallbackToApi: false
   },
 })
