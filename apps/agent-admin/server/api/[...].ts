@@ -15,13 +15,13 @@ const withLogging = (handler: Function, apiName: string) => {
   return defineEventHandler(async (event: H3Event) => {
     const startTime = Date.now();
     const requestId = `req_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const headers = getHeaders(event);
     const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
     const userAgent = (headers['user-agent'] as string) || 'unknown';
     const method = getMethod(event);
     const url = getRequestURL(event);
-    
+
     let requestBody: any = {};
     let queryParams: any = {};
     try {
@@ -32,13 +32,13 @@ const withLogging = (handler: Function, apiName: string) => {
     } catch (e) {
       requestBody = {};
     }
-    
+
     console.log(`[API] ${method} ${url.pathname} | IP: ${ipAddress.split(',')[0]}`);
 
     let response: any = {};
     let error: any = null;
     let statusCode = 200;
-    
+
     try {
       try {
         const url = getRequestURL(event);
@@ -65,14 +65,14 @@ const withLogging = (handler: Function, apiName: string) => {
         message: e.statusMessage || e.message || "系统错误",
         data: null
       };
-      try { setResponseStatus(event, statusCode); } catch {}
+      try { setResponseStatus(event, statusCode); } catch { }
     }
-    
+
     if (error) {
       console.error(`[API] 错误: ${error.message}`);
     }
     console.log('==========================================');
-    
+
     return response;
   });
 };
@@ -90,20 +90,20 @@ const adminWrap = (handler: Function, apiName: string) => {
     if (qId !== undefined && String(qId) !== String(v.adminId)) {
       throw createError({ statusCode: 403, statusMessage: 'Forbidden: adminId mismatch' });
     }
-    if (['POST','PUT','PATCH','DELETE'].includes((getMethod(event) || 'GET').toUpperCase())) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes((getMethod(event) || 'GET').toUpperCase())) {
       try {
         const body: any = await readBody(event);
         const bId = body?.adminId ?? body?.admin_id;
         if (bId !== undefined && String(bId) !== String(v.adminId)) {
           throw createError({ statusCode: 403, statusMessage: 'Forbidden: adminId mismatch' });
         }
-      } catch {}
+      } catch { }
     }
     try {
       delete event.node.req.headers['authorization'];
       delete event.node.req.headers['Authorization'];
       event.node.req.headers['authorization'] = String(v.adminId);
-    } catch {}
+    } catch { }
     return await handler(event);
   }, apiName);
 };
@@ -135,7 +135,7 @@ router.post('/admin/login', defineEventHandler(async (event) => {
         `admin_sid=${sid}; Path=/; HttpOnly; SameSite=Lax`
       ]);
     }
-  } catch {}
+  } catch { }
   return result;
 }));
 

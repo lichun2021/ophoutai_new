@@ -5,10 +5,10 @@ const DEFAULT_SALT = process.env.API_SIGN_KEY || 'fasdjhkfh2348!@#$!617';
 const DEFAULT_SKEW_SECONDS = parseInt(process.env.API_SIGN_SKEW_SEC || '60', 10); // 1 分钟
 
 // 启动时打印一次，确认运行时使用的 salt 值
-console.log('[API_SIGN][INIT] ================================');
-console.log('[API_SIGN][INIT] process.env.API_SIGN_KEY =', process.env.API_SIGN_KEY ? `"${process.env.API_SIGN_KEY}"` : '(未设置，使用默认值)');
-console.log('[API_SIGN][INIT] DEFAULT_SALT =', `"${DEFAULT_SALT}"`);
-console.log('[API_SIGN][INIT] ================================');
+// console.log('[API_SIGN][INIT] ================================');
+// console.log('[API_SIGN][INIT] process.env.API_SIGN_KEY =', process.env.API_SIGN_KEY ? `"${process.env.API_SIGN_KEY}"` : '(未设置，使用默认值)');
+// console.log('[API_SIGN][INIT] DEFAULT_SALT =', `"${DEFAULT_SALT}"`);
+// console.log('[API_SIGN][INIT] ================================');
 
 // 使用与前端完全一致的 MD5 实现
 function md5(input: string): string {
@@ -132,18 +132,18 @@ export async function verifyApiSignature(
 
 
   if (!ts || !providedSign) {
-    console.error('[API_SIGN][FAIL] 缺少 ts 或 sign!', { ts, providedSign });
+    // console.error('[API_SIGN][FAIL] 缺少 ts 或 sign!', { ts, providedSign });
     throw createError({ statusCode: 401, statusMessage: 'missing_ts_or_sign' });
   }
   if (!nonce) {
-    console.error('[API_SIGN][FAIL] 缺少 nonce!');
+    // console.error('[API_SIGN][FAIL] 缺少 nonce!');
     throw createError({ statusCode: 401, statusMessage: 'missing_nonce' });
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
   const skewDiff = Math.abs(nowSec - ts);
   if (skewDiff > skew) {
-    console.error('[API_SIGN][FAIL] 时间偏差过大!', { nowSec, ts, diff: skewDiff, skew });
+    // console.error('[API_SIGN][FAIL] 时间偏差过大!', { nowSec, ts, diff: skewDiff, skew });
     throw createError({ statusCode: 401, statusMessage: 'ts_skew' });
   }
 
@@ -157,18 +157,10 @@ export async function verifyApiSignature(
   if (expected !== providedSign) {
     const base = buildSignBase({ ts, nonce });
     const ymd = formatYmd(dateForToken);
-    console.warn('[API_SIGN][server] invalid_sign', {
-      path: pathname,
-      method,
-      ts,
-      salt,
-      nonce,
-      expected,
-      provided: providedSign,
-      token,
-      base,
-      ymd
-    });
+    // console.warn('[API_SIGN][server] invalid_sign', {
+    //   path: pathname, method, ts, salt, nonce,
+    //   expected, provided: providedSign, token, base, ymd
+    // });
     throw createError({ statusCode: 401, statusMessage: 'invalid_sign' });
   }
 

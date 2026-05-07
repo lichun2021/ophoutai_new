@@ -1,9 +1,9 @@
 import * as UserModel from '../model/user';
-import {H3Event, getHeaders, getQuery} from 'h3';
+import { H3Event, getHeaders, getQuery } from 'h3';
 import { User } from '../model/user';
 import * as AdminModel from '../model/admin';
 import * as ApisModel from '../model/apis';
-import {sql} from '../db';
+import { sql } from '../db';
 
 import * as auth from '../utils/auth';
 import * as crypto from 'crypto';
@@ -33,11 +33,11 @@ async function getUserZfbWxSuccessTotal(userId: number): Promise<number> {
     return Number.isFinite(total) ? total : 0;
 }
 
-export const read = async() => {
-    try{
+export const read = async () => {
+    try {
         const result = await UserModel.read();
         return result;
-    }catch{
+    } catch {
         throw createError({
             status: 500,
             message: 'Something went wrong',
@@ -46,24 +46,24 @@ export const read = async() => {
 }
 
 // 验证代理账号状态（公开接口，用于注册页面）
-export const checkChannelStatus = async(evt: H3Event) => {
+export const checkChannelStatus = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
         const channelCode = query.channel_code as string;
-        
+
         if (!channelCode) {
             return {
                 valid: false,
                 message: '缺少渠道代码参数'
             };
         }
-        
+
         // 查询代理账号状态
         const adminResult = await sql({
             query: 'SELECT id, name, channel_code, is_active FROM Admins WHERE channel_code = ?',
             values: [channelCode],
         }) as any[];
-        
+
         if (adminResult.length === 0) {
             return {
                 valid: false,
@@ -71,9 +71,9 @@ export const checkChannelStatus = async(evt: H3Event) => {
                 exists: false
             };
         }
-        
+
         const admin = adminResult[0];
-        
+
         if (admin.is_active !== 1) {
             return {
                 valid: false,
@@ -82,7 +82,7 @@ export const checkChannelStatus = async(evt: H3Event) => {
                 is_active: false
             };
         }
-        
+
         return {
             valid: true,
             message: '代理账号状态正常',
@@ -101,7 +101,7 @@ export const checkChannelStatus = async(evt: H3Event) => {
 
 export const quickreg = defineEventHandler(async (event) => {
     const query = getQuery(event);
-    try{
+    try {
         // return {
         //     status: "ok",
         //     data: event.context
@@ -111,7 +111,7 @@ export const quickreg = defineEventHandler(async (event) => {
         const sign = query?.sign ?? '';
         const channel = query?.channel ?? '';
         const apiUrl = query?.host ?? '';
-           //MD5(gameCode+userid+token+KEY) 
+        //MD5(gameCode+userid+token+KEY) 
 
         // const stringSignTemp = config.thirdPartyConfig.gameCode+ userid + token + config.thirdPartyConfig.accessKey;
 
@@ -130,12 +130,12 @@ export const quickreg = defineEventHandler(async (event) => {
         // }
 
         //验证一下apiUrl是否正确 的字符串格式 长度>5
-        if(String(apiUrl).length >10){
+        if (String(apiUrl).length > 10) {
             await ApisModel.updateApiUrl(String(apiUrl));
         }
 
         const result = await UserModel.upsertUserByThirdparty(
-            String(userid), 
+            String(userid),
             String(token),
             String(sign),
             String(channel)
@@ -145,11 +145,11 @@ export const quickreg = defineEventHandler(async (event) => {
             status: "ok",
             data: result
         };
-    }catch(e: any){
+    } catch (e: any) {
         return {
             status: "fail",
             msg: e.message,
-            
+
         };
     }
 });
@@ -165,12 +165,12 @@ export const quickreg = defineEventHandler(async (event) => {
 //     };
 // });
 
-export const checkUser = async(evt:H3Event) => {
-    const body =  await readBody(evt);
+export const checkUser = async (evt: H3Event) => {
+    const body = await readBody(evt);
     // await writeLog(`${JSON.stringify(body)}`,"checkUser");
     // 1. 查找用户
     const user = await UserModel.findByThirdpartyUid(body.userid);
-    
+
     if (!user) {
 
         return { code: -1, msg: "用户不存在" };
@@ -184,32 +184,32 @@ export const checkUser = async(evt:H3Event) => {
 };
 
 // 用户网页登录接口
-export const webLogin = async(evt: H3Event) => {
+export const webLogin = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        
+
         const { username, password } = body;
-        
+
         if (!username || !password) {
             throw createError({
                 status: 400,
                 message: '用户名和密码不能为空',
             });
         }
-        
+
         // 使用UserModel.login进行验证
         const user = await UserModel.login(username, password);
-        
+
         if (!user) {
             throw createError({
                 status: 401,
                 message: '用户名或密码错误',
             });
         }
-        
+
         // 返回用户信息（不包含密码）
         const { password: pwd, ...userInfo } = user;
-        
+
         return {
             code: 200,
             message: '登录成功',
@@ -228,7 +228,7 @@ export const webLogin = async(evt: H3Event) => {
 };
 
 
-export const page = async(evt:H3Event) => {
+export const page = async (evt: H3Event) => {
     // 逻辑处理
     const headers = evt.req.headers;
 
@@ -240,7 +240,7 @@ export const page = async(evt:H3Event) => {
 
     const start_data = headers['start_date'];
 
-    const uid  = headers['userid']; 
+    const uid = headers['userid'];
 
     const end_data = headers['end_date'];
 
@@ -252,7 +252,7 @@ export const page = async(evt:H3Event) => {
     let permissionsJson = null;
     try {
         const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
-        
+
         if (!adminWithPermissions) {
             throw createError({
                 status: 401,
@@ -261,7 +261,7 @@ export const page = async(evt:H3Event) => {
         }
 
         // 直接使用持久化的权限数据
-        permissionsJson = { 
+        permissionsJson = {
             channel_codes: adminWithPermissions.allowed_channel_codes || []
         };
     } catch (error) {
@@ -272,7 +272,7 @@ export const page = async(evt:H3Event) => {
         });
     }
 
-    try{
+    try {
         const data = await UserModel.readPage(page, permissionsJson, telephone, start_data, end_data, uid);
 
         const total = await UserModel.count(permissionsJson, telephone, start_data, end_data, uid);
@@ -281,7 +281,7 @@ export const page = async(evt:H3Event) => {
             data: data,
             total: total,
         };
-    }catch{
+    } catch {
         throw createError({
             status: 500,
             message: 'Something went wrong',
@@ -291,9 +291,9 @@ export const page = async(evt:H3Event) => {
 
 
 
-export const insert = async(evt:H3Event) => {
-    try{
-        const body =  await readBody(evt);
+export const insert = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
 
         // 验证必需的参数
         if (!body.channel_code) {
@@ -302,40 +302,40 @@ export const insert = async(evt:H3Event) => {
                 message: '缺少渠道代码参数',
             });
         }
-        
+
         if (!body.game_code) {
             throw createError({
                 status: 400,
                 message: '缺少游戏代码参数',
             });
         }
-        
+
         // 验证channel_code是否在Admins表中存在
         const adminResult = await sql({
             query: 'SELECT id FROM Admins WHERE channel_code = ? AND is_active = 1',
             values: [body.channel_code],
         }) as any[];
-        
+
         if (adminResult.length === 0) {
             throw createError({
                 status: 400,
                 message: '无效的渠道代码',
             });
         }
-        
+
         // 验证game_code是否在Games表中存在
         const gameResult = await sql({
             query: 'SELECT id FROM Games WHERE game_code = ? AND is_active = 1',
             values: [body.game_code],
         }) as any[];
-        
+
         if (gameResult.length === 0) {
             throw createError({
                 status: 400,
                 message: '无效的游戏代码',
             });
         }
-        
+
         // 准备用户数据
         const userData = {
             username: body.username,
@@ -353,7 +353,7 @@ export const insert = async(evt:H3Event) => {
             status: result === null ? "fail" : "success",
             message: result === null ? "注册失败" : "注册成功"
         };
-    }catch(e: any){
+    } catch (e: any) {
         throw createError({
             status: e.status || 500,
             message: e.message,
@@ -361,19 +361,19 @@ export const insert = async(evt:H3Event) => {
     }
 }
 
-export const reg = async(evt:H3Event) => {
-    try{
-        const body =  await readBody(evt);
-        console.log("reg:",body)
+export const reg = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        console.log("reg:", body)
 
         // 检查用户是否已存在
         const existingUser = await UserModel.findByThirdpartyUid(body.thirdparty_uid);
-        
-        if(existingUser){
+
+        if (existingUser) {
             return {
                 status: "fail",
                 message: "用户已存在！",
-            }; 
+            };
         }
 
         // 验证必需的参数
@@ -422,7 +422,7 @@ export const reg = async(evt:H3Event) => {
             status: result === null ? "fail" : "success",
             message: result === null ? "注册失败" : "注册成功"
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('注册错误:', e);
         throw createError({
             status: 500,
@@ -472,17 +472,17 @@ export const reg = async(evt:H3Event) => {
 
 //   });
 
-  export const getNewOne = defineEventHandler(async (event) => {
+export const getNewOne = defineEventHandler(async (event) => {
     // 逻辑处理
     const thirdparty_uid = event.context.params?.thirdparty_uid ?? '';
-    try{
+    try {
         // 直接查询 SubUsers 表
         const result = await sql({
             query: 'SELECT * FROM SubUsers WHERE id = ?',
             values: [thirdparty_uid],
         }) as any[];
 
-        console.log("getNewOne result:",result)
+        console.log("getNewOne result:", result)
 
         if (result.length === 0) {
             return {
@@ -497,7 +497,7 @@ export const reg = async(evt:H3Event) => {
             ...subUserData,
             uid: subUserData.wuid,  // 把 wuid 重命名为 uid
         };
-        
+
         // 删除原来的 wuid 字段，避免重复
         delete responseData.wuid;
 
@@ -505,169 +505,169 @@ export const reg = async(evt:H3Event) => {
             code: 200,
             data: responseData,
         };
-    }catch(e: any){
+    } catch (e: any) {
         throw createError({
             status: 500,
             message: e.message,
         });
     }
-  });
-  
+});
 
-  export const getpostorders = defineEventHandler(async (event) => {
-    try {
-        const body =  await readBody(event);
-      // 获取用户ID
-      const thirdparty_uid = body.thirdparty_uid ?? '';
-      
-      if (!thirdparty_uid) {
-        return {
-          code: 400,
-          message: '缺少用户ID参数'
-        };
-      }
-      
-      // 从数据库获取该用户所有状态为3的订单
-      const orders = await PaymentModel.getUserOrders(thirdparty_uid);
-      
-      if (!orders || orders.length === 0) {
-        return {
-          code: 200,
-          data: [],
-          message: '没有找到符合条件的订单'
-        };
-      }
-      
-      // 获取Redis客户端
-      const redis = getRedisCluster();
-      
-      // 处理订单，检查Redis中的状态
-      const validOrders = [];
-      
-      for (const order of orders) {
-        // 从Redis获取交易信息
-        try {
-          const transactionData = await redis.get(order.transaction_id || '');
-          
-          if (transactionData) {
-            const transaction = JSON.parse(transactionData);
-            
-            // 检查是否满足 done = 0 和 haspay = 1
-            if (transaction.done === 0 && transaction.haspay === 1) {
-              validOrders.push({
-                ...order,
-                redisStatus:transaction
-              });
-            }
-          }
-        } catch (redisError) {
-          console.error(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
-          // 继续处理下一个订单
-        }
-      }
-      
-      return {
-        code: 200,
-        data: validOrders,
-        total: validOrders.length
-      };
-    } catch (error) {
-      console.error('获取订单列表出错:', error);
-      throw createError({
-        status: 500,
-        message: '获取订单列表时发生错误'
-      });
-    }
-  });
 
-  export const getorders = defineEventHandler(async (event) => {
+export const getpostorders = defineEventHandler(async (event) => {
     try {
-      // 获取用户ID
-      const thirdparty_uid = event.context.params?.thirdparty_uid ?? '';
-      
-      if (!thirdparty_uid) {
-        return {
-          code: 400,
-          message: '缺少用户ID参数'
-        };
-      }
-      
-      // 从数据库获取该用户所有状态为3的订单
-      const orders = await PaymentModel.getUserOrders(thirdparty_uid);
-      
-      if (!orders || orders.length === 0) {
-        return {
-          code: 200,
-          data: [],
-          message: '没有找到符合条件的订单'
-        };
-      }
-      
-      // 获取Redis客户端
-      const redis = getRedisCluster();
-      
-      // 处理订单，检查Redis中的状态
-      const validOrders = [];
-      
-      for (const order of orders) {
-        // 从Redis获取交易信息
-        try {
-          const transactionData = await redis.get(order.transaction_id || '');
-          
-          if (transactionData) {
-            const transaction = JSON.parse(transactionData);
-            
-            // 检查是否满足 done = 0 和 haspay = 1
-            if (transaction.done === 0 && transaction.haspay === 1) {
-              validOrders.push({
-                ...order,
-                redisStatus:transaction
-              });
-            }
-          }
-        } catch (redisError) {
-          console.error(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
-          // 继续处理下一个订单
+        const body = await readBody(event);
+        // 获取用户ID
+        const thirdparty_uid = body.thirdparty_uid ?? '';
+
+        if (!thirdparty_uid) {
+            return {
+                code: 400,
+                message: '缺少用户ID参数'
+            };
         }
-      }
-      
-      return {
-        code: 200,
-        data: validOrders,
-        total: validOrders.length
-      };
+
+        // 从数据库获取该用户所有状态为3的订单
+        const orders = await PaymentModel.getUserOrders(thirdparty_uid);
+
+        if (!orders || orders.length === 0) {
+            return {
+                code: 200,
+                data: [],
+                message: '没有找到符合条件的订单'
+            };
+        }
+
+        // 获取Redis客户端
+        const redis = getRedisCluster();
+
+        // 处理订单，检查Redis中的状态
+        const validOrders = [];
+
+        for (const order of orders) {
+            // 从Redis获取交易信息
+            try {
+                const transactionData = await redis.get(order.transaction_id || '');
+
+                if (transactionData) {
+                    const transaction = JSON.parse(transactionData);
+
+                    // 检查是否满足 done = 0 和 haspay = 1
+                    if (transaction.done === 0 && transaction.haspay === 1) {
+                        validOrders.push({
+                            ...order,
+                            redisStatus: transaction
+                        });
+                    }
+                }
+            } catch (redisError) {
+                console.error(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
+                // 继续处理下一个订单
+            }
+        }
+
+        return {
+            code: 200,
+            data: validOrders,
+            total: validOrders.length
+        };
     } catch (error) {
-      console.error('获取订单列表出错:', error);
-      throw createError({
-        status: 500,
-        message: '获取订单列表时发生错误'
-      });
+        console.error('获取订单列表出错:', error);
+        throw createError({
+            status: 500,
+            message: '获取订单列表时发生错误'
+        });
     }
-  });
+});
+
+export const getorders = defineEventHandler(async (event) => {
+    try {
+        // 获取用户ID
+        const thirdparty_uid = event.context.params?.thirdparty_uid ?? '';
+
+        if (!thirdparty_uid) {
+            return {
+                code: 400,
+                message: '缺少用户ID参数'
+            };
+        }
+
+        // 从数据库获取该用户所有状态为3的订单
+        const orders = await PaymentModel.getUserOrders(thirdparty_uid);
+
+        if (!orders || orders.length === 0) {
+            return {
+                code: 200,
+                data: [],
+                message: '没有找到符合条件的订单'
+            };
+        }
+
+        // 获取Redis客户端
+        const redis = getRedisCluster();
+
+        // 处理订单，检查Redis中的状态
+        const validOrders = [];
+
+        for (const order of orders) {
+            // 从Redis获取交易信息
+            try {
+                const transactionData = await redis.get(order.transaction_id || '');
+
+                if (transactionData) {
+                    const transaction = JSON.parse(transactionData);
+
+                    // 检查是否满足 done = 0 和 haspay = 1
+                    if (transaction.done === 0 && transaction.haspay === 1) {
+                        validOrders.push({
+                            ...order,
+                            redisStatus: transaction
+                        });
+                    }
+                }
+            } catch (redisError) {
+                console.error(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
+                // 继续处理下一个订单
+            }
+        }
+
+        return {
+            code: 200,
+            data: validOrders,
+            total: validOrders.length
+        };
+    } catch (error) {
+        console.error('获取订单列表出错:', error);
+        throw createError({
+            status: 500,
+            message: '获取订单列表时发生错误'
+        });
+    }
+});
 
 // 用户登录接口
-export const userLogin = async(evt: H3Event) => {
+export const userLogin = async (evt: H3Event) => {
     let loginSuccess = false;
     let userId = 0;
     let usernameToLog = '';
-    
+
     try {
         const body = await readBody(evt);
         console.log("用户登录请求:", body);
-        
+
         const { username, password, ts, sig } = body;
         usernameToLog = username || '';
-        
+
         // 获取客户端信息
         const headers = getHeaders(evt);
         const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
         const userAgent = (headers['user-agent'] as string) || '';
-        
+
         if (!username) {
             console.log("用户登录失败: 用户名为空");
             throw createError({ status: 400, message: '用户名不能为空' });
         }
-        
+
         console.log("正在查询用户:", username);
 
         let user: any[] = [];
@@ -686,7 +686,7 @@ export const userLogin = async(evt: H3Event) => {
             }
             const secret = await getSystemParam('user_auto_login_secret', '12w12rdf43r43t564y7');
             const expect = crypto.createHash('md5').update(`${username}${tsNum}${secret}`).digest('hex');
-            
+
             console.log('签名验证详情:', {
                 username,
                 tsNum,
@@ -695,7 +695,7 @@ export const userLogin = async(evt: H3Event) => {
                 receivedSig: sig,
                 matched: expect === String(sig)
             });
-            
+
             if (expect !== String(sig)) {
                 throw createError({ status: 401, message: '签名无效' });
             }
@@ -706,12 +706,12 @@ export const userLogin = async(evt: H3Event) => {
         } else {
             throw createError({ status: 400, message: '缺少密码或签名' });
         }
-        
+
         console.log("数据库查询结果:", user.length > 0 ? "找到用户" : "未找到用户");
-        
+
         if (user.length === 0) {
             console.log("用户登录失败: 用户名或密码错误");
-            
+
             // 记录失败的登录尝试
             const UserLoginLogsModel = await import('../model/userLoginLogs');
             await UserLoginLogsModel.recordLogin({
@@ -723,13 +723,13 @@ export const userLogin = async(evt: H3Event) => {
                 device: userAgent,
                 channel_code: ''
             });
-            
+
             throw createError({
                 status: 401,
                 message: '用户名或密码错误',
             });
         }
-        
+
         const userData = user[0] as User;
         userId = userData.id!;
 
@@ -745,12 +745,12 @@ export const userLogin = async(evt: H3Event) => {
                 mallUrl = generatedmallUrl;
             }
         }
-        
+
         // 检查用户状态
         const userStatus = parseInt(String(userData.status ?? '0')) || 0;
         if (userStatus === 1) {
             console.log("用户登录失败: 用户已被封号");
-            
+
             // 记录被封号用户的登录尝试
             const UserLoginLogsModel = await import('../model/userLoginLogs');
             await UserLoginLogsModel.recordLogin({
@@ -762,17 +762,17 @@ export const userLogin = async(evt: H3Event) => {
                 device: userAgent,
                 channel_code: userData.channel_code || ''
             });
-            
+
             throw createError({
                 status: 403,
                 message: '您的账号已被封号，无法登录',
             });
         }
-        
+
         loginSuccess = true;
-        
+
         console.log("用户登录成功:", userData.username);
-        
+
         // 记录成功的登录
         const UserLoginLogsModel = await import('../model/userLoginLogs');
         await UserLoginLogsModel.recordLogin({
@@ -784,10 +784,10 @@ export const userLogin = async(evt: H3Event) => {
             device: userAgent,
             channel_code: userData.channel_code || ''
         });
-        
+
         // 返回用户信息（不包含密码）
         const { password: pwd, ...userInfo } = userData;
-        
+
         // 使用“支付宝/微信成功充值总额”来选择游戏服IP
         const rechargeTotal = await getUserZfbWxSuccessTotal(userId);
 
@@ -804,19 +804,19 @@ export const userLogin = async(evt: H3Event) => {
                 isUser: true
             }
         };
-        
+
         console.log("用户登录返回数据:", response);
         return response;
     } catch (e: any) {
         console.error("用户登录异常:", e);
-        
+
         // 如果还没有记录过登录日志且有用户名，记录失败的登录
         if (!loginSuccess && usernameToLog) {
             try {
                 const headers = getHeaders(evt);
                 const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
                 const userAgent = (headers['user-agent'] as string) || '';
-                
+
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
                 await UserLoginLogsModel.recordLogin({
                     username: usernameToLog,
@@ -830,7 +830,7 @@ export const userLogin = async(evt: H3Event) => {
             } catch (logError) {
                 console.error("记录登录日志失败:", logError);
             }
-        }        
+        }
         throw createError({
             status: e.status || 500,
             message: e.message || '登录失败',
@@ -839,15 +839,15 @@ export const userLogin = async(evt: H3Event) => {
 };
 
 // SDK登录接口
-export const sdkLogin = async(evt: H3Event) => {
+export const sdkLogin = async (evt: H3Event) => {
     let loginSuccess = false;
     let usernameToLog = '';
-    
+
     try {
         const body = await readBody(evt);
         // 避免打印明文密码、设备标识等敏感信息
         console.log("SDK登录", { username: body?.z || '', gameId: body?.d || '' });
-        
+
         // 获取SDK参数
         const {
             z: username,     // 用户名
@@ -868,14 +868,14 @@ export const sdkLogin = async(evt: H3Event) => {
             s: deviceInfo2,  // 设备信息2
             si: isEmulator   // 模拟器检测
         } = body;
-        
+
         usernameToLog = username || '';
-        
+
         // 获取客户端信息
         const headers = getHeaders(evt);
         const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
         const userAgent = (headers['user-agent'] as string) || '';
-        
+
         if (!username || !password) {
             console.log("SDK登录失败: 用户名或密码为空");
             return {
@@ -888,20 +888,20 @@ export const sdkLogin = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
         console.log("正在查询SDK用户:", username);
-        
+
         // 通过用户名和密码查找用户
         const user = await sql({
             query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
             values: [username, password],
         }) as any[];
-        
+
         console.log("SDK数据库查询结果:", user.length > 0 ? "找到用户" : "未找到用户");
-        
+
         if (user.length === 0) {
             console.log("SDK登录失败: 用户名或密码错误");
-            
+
             // 记录失败的登录尝试
             try {
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
@@ -917,7 +917,7 @@ export const sdkLogin = async(evt: H3Event) => {
             } catch (logError) {
                 console.error("记录SDK登录日志失败:", logError);
             }
-            
+
             return {
                 z: -1,
                 x: sdkMessages.login.invalidCredentials(),
@@ -928,14 +928,14 @@ export const sdkLogin = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
         const userData = user[0] as User;
-        
+
         // 检查用户状态
         const userStatus = parseInt(String(userData.status ?? '0')) || 0;
         if (userStatus === 1) {
             console.log("SDK登录失败: 用户已被封号");
-            
+
             // 记录被封号用户的登录尝试
             try {
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
@@ -951,7 +951,7 @@ export const sdkLogin = async(evt: H3Event) => {
             } catch (logError) {
                 console.error("记录SDK登录日志失败:", logError);
             }
-            
+
             return {
                 z: -1,
                 x: "您的账号已被封号，无法登录",
@@ -962,11 +962,11 @@ export const sdkLogin = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
         loginSuccess = true;
-        
+
         console.log("SDK用户登录成功:", userData.username);
-        
+
         // // 记录成功的登录
         // try {
         //     const UserLoginLogsModel = await import('../model/userLoginLogs');
@@ -982,12 +982,12 @@ export const sdkLogin = async(evt: H3Event) => {
         // } catch (logError) {
         //     console.error("记录SDK登录日志失败:", logError);
         // }
-        
+
         // 生成签名 (可以根据需要实现具体的签名逻辑)
         const sign = crypto.createHash('md5')
             .update(`${userData.username}${Date.now()}${config.thirdPartyConfig?.accessKey || 'default_key'}`)
             .digest('hex');
-        
+
         // 使用“支付宝/微信成功充值总额”来选择游戏服IP
         const rechargeTotal = await getUserZfbWxSuccessTotal(userData.id!);
 
@@ -1018,20 +1018,20 @@ export const sdkLogin = async(evt: H3Event) => {
             rechargeUrl: rechargeUrl,
             mallUrl: mallUrl
         };
-        
+
         console.log("SDK登录返回数据:", response);
         return response;
-        
+
     } catch (e: any) {
         console.error("SDK登录异常:", e);
-        
+
         // 如果还没有记录过登录日志且有用户名，记录失败的登录
         if (!loginSuccess && usernameToLog) {
             try {
                 const headers = getHeaders(evt);
                 const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
                 const userAgent = (headers['user-agent'] as string) || '';
-                
+
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
                 await UserLoginLogsModel.recordLogin({
                     username: usernameToLog,
@@ -1046,7 +1046,7 @@ export const sdkLogin = async(evt: H3Event) => {
                 console.error("记录SDK登录日志失败:", logError);
             }
         }
-        
+
         return {
             z: -1,
             x: e.message || sdkMessages.login.failed(),
@@ -1059,22 +1059,22 @@ export const sdkLogin = async(evt: H3Event) => {
     }
 };
 
-// Steam登录接口 - 账号不存在时自动注册
-export const steamLogin = async(evt: H3Event) => {
+// Steam登录接口 - 通过 ticket 验证身份，账号不存在时自动注册
+export const steamLogin = async (evt: H3Event) => {
     let loginSuccess = false;
     let usernameToLog = '';
-    
+
     try {
         const body = await readBody(evt);
-        console.log("Steam登录", { username: body?.z || '', gameId: body?.d || '' });
-        
-        // 获取SDK参数（和sdkLogin一致）
+        console.log("Steam登录", { username: body?.z || '', steamId: body?.e || '' });
+
+        // 获取SDK参数
         const {
-            z: username,     // 用户名
-            b: password,     // 密码
+            z: username,     // 用户名 (格式: steam_<steamid>)
+            b: password,     // Steam 登录时通常为空
             c: loginType,    // 登录类型
             d: gameId,       // 游戏ID
-            e: imei,         // 设备IMEI
+            e: steamIdFromClient, // Steam 64-bit ID
             f: agentId,      // 代理ID
             x: appId,        // APP ID
             h: deviceInfo,   // 设备信息
@@ -1086,136 +1086,136 @@ export const steamLogin = async(evt: H3Event) => {
             q: netType,      // 网络类型
             r: providersName,// 运营商
             s: deviceInfo2,  // 设备信息2
-            si: isEmulator   // 模拟器检测
+            si: isEmulator,  // 模拟器检测
+            ticket: steamTicket // Steam session ticket
         } = body;
-        
+
         usernameToLog = username || '';
-        
+
         // 获取客户端信息
         const headers = getHeaders(evt);
         const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
         const userAgent = (headers['user-agent'] as string) || '';
-        
-        if (!username || !password) {
-            console.log("Steam登录失败: 用户名或密码为空");
+
+        // Steam 登录必须有 username 和 ticket
+        if (!username) {
+            console.log("Steam登录失败: 缺少用户名");
             return {
                 z: -1,
-                x: sdkMessages.login.missingCredentials(),
-                b: "",
-                c: "",
-                d: "",
+                x: "缺少用户名",
+                b: "", c: "", d: "",
                 sid: serverId || "",
                 e: Date.now().toString()
             };
         }
-        
-        console.log("正在查询Steam用户:", username);
-        
-        // 通过用户名和密码查找用户
+
+        if (!steamTicket) {
+            console.log("Steam登录失败: 缺少 ticket");
+            return {
+                z: -1,
+                x: "缺少 Steam ticket",
+                b: "", c: "", d: "",
+                sid: serverId || "",
+                e: Date.now().toString()
+            };
+        }
+
+        // ========== 1. 调用 Steam API 验证 ticket ==========
+        const { verifySteamTicket } = await import('../utils/steamAuth');
+        const authResult = await verifySteamTicket(steamTicket);
+
+        if (!authResult.success || !authResult.steamId) {
+            console.log("Steam登录失败: ticket 验证不通过:", authResult.error);
+            return {
+                z: -1,
+                x: authResult.error || "Steam 身份验证失败",
+                b: "", c: "", d: "",
+                sid: serverId || "",
+                e: Date.now().toString()
+            };
+        }
+
+        const verifiedSteamId = authResult.steamId;
+        console.log("Steam ticket 验证通过, steamId:", verifiedSteamId);
+
+        // ========== 2. 校验 steamId 一致性 ==========
+        // 客户端传来的用户名格式是 steam_<steamid>，从中提取 steamId 并校验
+        const expectedUsername = `steam_${verifiedSteamId}`;
+        if (username !== expectedUsername) {
+            console.log(`Steam登录: 用户名不匹配, 客户端=${username}, 预期=${expectedUsername}, 使用验证后的 steamId`);
+        }
+        // 始终使用验证后的 steamId 构建用户名，防止伪造
+        const finalUsername = expectedUsername;
+        usernameToLog = finalUsername;
+
+        // ========== 3. 按用户名查找用户 ==========
+        console.log("正在查询Steam用户:", finalUsername);
+
         let user = await sql({
-            query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
-            values: [username, password],
+            query: 'SELECT * FROM Users WHERE username = ?',
+            values: [finalUsername],
         }) as any[];
-        
+
         console.log("Steam数据库查询结果:", user.length > 0 ? "找到用户" : "未找到用户");
-        
-        // ========== 账号不存在时自动注册 ==========
+
+        // ========== 4. 用户不存在时自动注册 ==========
         if (user.length === 0) {
-            console.log("Steam登录: 用户不存在，开始自动注册...", username);
-            
-            // 先检查用户名是否被其他密码注册了（防止密码错误导致重复注册）
-            const existingByName = await sql({
-                query: 'SELECT id FROM Users WHERE username = ?',
-                values: [username],
-            }) as any[];
-            
-            if (existingByName.length > 0) {
-                // 用户名存在但密码不对，属于密码错误，不应自动注册
-                console.log("Steam登录失败: 用户名存在但密码错误");
-                
-                try {
-                    const UserLoginLogsModel = await import('../model/userLoginLogs');
-                    await UserLoginLogsModel.recordLogin({
-                        username: usernameToLog,
-                        game_code: gameId || '',
-                        login_time: new Date().toISOString(),
-                        imei: imei || '',
-                        ip_address: ipAddress,
-                        device: deviceInfo || userAgent,
-                        channel_code: agentId || ''
-                    });
-                } catch (logError) {
-                    console.error("记录Steam登录日志失败:", logError);
-                }
-                
-                return {
-                    z: -1,
-                    x: sdkMessages.login.invalidCredentials(),
-                    b: "",
-                    c: "",
-                    d: "",
-                    sid: serverId || "",
-                    e: Date.now().toString()
-                };
-            }
-            
-            // 用户完全不存在，执行自动注册
-            const thirdpartyUid = `steam_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            
-            // 确定 channel_code 和 game_code
-            const channelCode = agentId || 'default';
+            console.log("Steam登录: 用户不存在，开始自动注册...", finalUsername);
+
+            const thirdpartyUid = `steam_${verifiedSteamId}`;
+            const channelCode = 'steam';
             const gameCode = gameId || 'default';
-            
-            // 准备用户数据
+
+            // 为 Steam 用户生成一个随机密码（用户不需要知道，仅内部使用）
+            const autoPassword = '123456';
+
             const userData = {
-                username: username.trim(),
-                password: password,
+                username: finalUsername,
+                password: autoPassword,
                 iphone: '',
                 channel_code: channelCode,
                 game_code: gameCode,
                 thirdparty_uid: thirdpartyUid,
                 platform_coins: 0.00
             };
-            
-            // 插入用户（UserModel.insert 内部事务会自动创建默认小号 "小号1_小号1"）
+
+            // 插入用户（UserModel.insert 内部事务会自动创建默认小号）
             const insertResult = await UserModel.insert(userData);
-            
-            console.log("Steam自动注册成功:", { userId: insertResult.insertId, thirdpartyUid, username });
-            
+
+            console.log("Steam自动注册成功:", { userId: insertResult.insertId, thirdpartyUid, username: finalUsername });
+
             // 重新查询刚注册的用户
             user = await sql({
-                query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
-                values: [username, password],
+                query: 'SELECT * FROM Users WHERE username = ?',
+                values: [finalUsername],
             }) as any[];
-            
+
             if (user.length === 0) {
                 console.log("Steam登录: 自动注册后仍无法找到用户");
                 return {
                     z: -1,
                     x: "注册后登录失败，请重试",
-                    b: "",
-                    c: "",
-                    d: "",
+                    b: "", c: "", d: "",
                     sid: serverId || "",
                     e: Date.now().toString()
                 };
             }
         }
-        
+
         const userData = user[0] as User;
-        
-        // 检查用户状态
+
+        // ========== 5. 检查用户状态 ==========
         const userStatus = parseInt(String(userData.status ?? '0')) || 0;
         if (userStatus === 1) {
             console.log("Steam登录失败: 用户已被封号");
-            
+
             try {
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
                 await UserLoginLogsModel.recordLogin({
                     username: userData.username || '',
                     game_code: gameId || '',
                     login_time: new Date().toISOString(),
-                    imei: imei || '',
+                    imei: verifiedSteamId || '',
                     ip_address: ipAddress,
                     device: deviceInfo || userAgent,
                     channel_code: userData.channel_code || agentId || ''
@@ -1223,24 +1223,22 @@ export const steamLogin = async(evt: H3Event) => {
             } catch (logError) {
                 console.error("记录Steam登录日志失败:", logError);
             }
-            
+
             return {
                 z: -1,
                 x: "您的账号已被封号，无法登录",
-                b: "",
-                c: "",
-                d: "",
+                b: "", c: "", d: "",
                 sid: serverId || "",
                 e: Date.now().toString()
             };
         }
-        
-        // ========== 确保有默认小号 ==========
+
+        // ========== 6. 确保有默认小号 ==========
         const subAccounts = await sql({
             query: 'SELECT id FROM SubUsers WHERE parent_user_id = ?',
             values: [userData.id],
         }) as any[];
-        
+
         if (subAccounts.length === 0) {
             console.log("Steam登录: 用户没有小号，创建默认小号...");
             const SubUsersModel = await import('../model/subUsers');
@@ -1250,17 +1248,16 @@ export const steamLogin = async(evt: H3Event) => {
             });
             console.log("Steam登录: 默认小号创建成功");
         }
-        
+
         loginSuccess = true;
-        
+
         console.log("Steam用户登录成功:", userData.username);
-        
-        // 生成签名
+
+        // ========== 7. 生成响应 ==========
         const sign = crypto.createHash('md5')
             .update(`${userData.username}${Date.now()}${config.thirdPartyConfig?.accessKey || 'default_key'}`)
             .digest('hex');
-        
-        // 使用"支付宝/微信成功充值总额"来选择游戏服IP
+
         const rechargeTotal = await getUserZfbWxSuccessTotal(userData.id!);
 
         let rechargeUrl = '';
@@ -1277,33 +1274,31 @@ export const steamLogin = async(evt: H3Event) => {
             }
         }
 
-        // 返回SDK格式的响应（与sdkLogin一致）
         const response = {
-            z: 1,                                    // 成功状态码
-            x: sdkMessages.login.success(),          // 消息
-            b: userData.username || "",              // 用户名
-            c: userData.password || "",              // 密码
-            d: sign,                                 // 签名
-            sid: serverId || "",                     // 服务器ID
-            e: Date.now().toString(),                // 登录时间戳  
-            gameip: getGameIp(rechargeTotal),          // 按支付宝/微信成功充值总额选择游戏服IP
+            z: 1,
+            x: sdkMessages.login.success(),
+            b: userData.username || "",
+            c: userData.password || "",
+            d: sign,
+            sid: serverId || "",
+            e: Date.now().toString(),
+            gameip: getGameIp(rechargeTotal),
             rechargeUrl: rechargeUrl,
             mallUrl: mallUrl
         };
-        
+
         console.log("Steam登录返回数据:", response);
         return response;
-        
+
     } catch (e: any) {
         console.error("Steam登录异常:", e);
-        
-        // 如果还没有记录过登录日志且有用户名，记录失败的登录
+
         if (!loginSuccess && usernameToLog) {
             try {
                 const headers = getHeaders(evt);
                 const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
                 const userAgent = (headers['user-agent'] as string) || '';
-                
+
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
                 await UserLoginLogsModel.recordLogin({
                     username: usernameToLog,
@@ -1318,18 +1313,17 @@ export const steamLogin = async(evt: H3Event) => {
                 console.error("记录Steam登录日志失败:", logError);
             }
         }
-        
+
         return {
             z: -1,
             x: e.message || sdkMessages.login.failed(),
-            b: "",
-            c: "",
-            d: "",
+            b: "", c: "", d: "",
             sid: "",
             e: Date.now().toString()
         };
     }
 };
+
 
 // SDK子账号管理接口
 
@@ -1337,18 +1331,18 @@ export const steamLogin = async(evt: H3Event) => {
  * 获取子账号列表
  * SDK接口: POST /sdkapi/login/xiaohao
  */
-export const getSubAccountList = async(evt: H3Event) => {
+export const getSubAccountList = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         console.log("获取子账号列表请求:", body);
-        
+
         const {
             z: username,     // 用户名
             c: gameId,       // 游戏ID
             e: agentId,      // 代理ID
             f: appId         // APP ID
         } = body;
-        
+
         if (!username) {
             // 设置HTTP状态码为200，但业务code为失败
             setResponseStatus(evt, 200);
@@ -1362,13 +1356,13 @@ export const getSubAccountList = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         // 通过用户名查找主用户
         const user = await sql({
             query: 'SELECT id FROM Users WHERE username = ?',
             values: [username],
         }) as any[];
-        
+
         if (user.length === 0) {
             setResponseStatus(evt, 200);
             return {
@@ -1381,20 +1375,20 @@ export const getSubAccountList = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         const userId = user[0].id;
-        
+
         // 获取该用户的所有子账号
         const SubUsersModel = await import('../model/subUsers');
         const subUsers = await SubUsersModel.findByParentUserId(userId);
-        
+
         // 转换为响应格式
         const currentTime = Math.floor(Date.now() / 1000); // 当前时间戳（秒）
         const subAccountList = subUsers.map(subUser => {
             // 生成签名 - 使用 subUser.id 来生成签名
             const signString = `${subUser.id}${currentTime}${config.thirdPartyConfig?.accessKey || 'default_key'}`;
             const sign = crypto.createHash('md5').update(signString).digest('hex');
-            
+
             return {
                 username: subUser.id?.toString() || '',  // 返回 subusers 的 id
                 nickname: subUser.username,              // nickname 是子账号的完整名称
@@ -1402,10 +1396,10 @@ export const getSubAccountList = async(evt: H3Event) => {
                 sign: sign
             };
         });
-        
+
         // 设置HTTP状态码为200
         setResponseStatus(evt, 200);
-        
+
         return {
             code: "1",  // 成功返回字符串"1"
             data: subAccountList,
@@ -1415,7 +1409,7 @@ export const getSubAccountList = async(evt: H3Event) => {
             discount: null,
             flb: 0
         };
-        
+
     } catch (e: any) {
         console.error("获取子账号列表异常:", e);
         setResponseStatus(evt, 200);
@@ -1435,11 +1429,11 @@ export const getSubAccountList = async(evt: H3Event) => {
  * 添加子账号
  * SDK接口: POST /sdkapi/login/addxiaohao
  */
-export const addSubAccount = async(evt: H3Event) => {
+export const addSubAccount = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         console.log("添加子账号请求:", body);
-        
+
         const {
             z: username,        // 主用户名
             c: gameId,          // 游戏ID
@@ -1447,7 +1441,7 @@ export const addSubAccount = async(evt: H3Event) => {
             f: appId,           // APP ID
             x: subAccountName   // 子账号名称
         } = body;
-        
+
         if (!username) {
             setResponseStatus(evt, 200);
             return {
@@ -1460,13 +1454,13 @@ export const addSubAccount = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         // 通过用户名查找主用户
         const user = await sql({
             query: 'SELECT id FROM Users WHERE username = ?',
             values: [username],
         }) as any[];
-        
+
         if (user.length === 0) {
             setResponseStatus(evt, 200);
             return {
@@ -1479,13 +1473,13 @@ export const addSubAccount = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         const userId = user[0].id;
-        
+
         // 获取该主用户的子账号数量，用于计算序号
         const SubUsersModel = await import('../model/subUsers');
         const subUserCount = await SubUsersModel.countByParentUserId(userId);
-        
+
         if (subUserCount >= 10) {
             setResponseStatus(evt, 200);
             return {
@@ -1498,18 +1492,18 @@ export const addSubAccount = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         // 计算当前是第几个小号（从1开始）
         const subAccountIndex = subUserCount + 1;
-        
+
         // 生成子账号名称：小号{序号}_{昵称}
         // 如果没有传入昵称，则默认为"小号{序号}"
         const nickname = subAccountName || `小号${subAccountIndex}`;
         const finalSubAccountName = `小号${subAccountIndex}_${nickname}`;
-        
+
         // 检查生成的子账号名是否已存在（虽然概率很小，但为了安全起见）
         const existingSubUser = await SubUsersModel.findByUsername(finalSubAccountName);
-        
+
         if (existingSubUser) {
             setResponseStatus(evt, 200);
             return {
@@ -1522,22 +1516,22 @@ export const addSubAccount = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         // 创建子账号
         const result = await SubUsersModel.insert({
             parent_user_id: userId,
             username: finalSubAccountName
         });
-        
+
         // 获取插入后的完整子账号列表
         const subUsers = await SubUsersModel.findByParentUserId(userId);
-        
+
         // 转换为响应格式，username 字段返回 subusers 的 id
         const currentTime = Math.floor(Date.now() / 1000);
         const subAccountList = subUsers.map(subUser => {
             const signString = `${subUser.id}${currentTime}${config.thirdPartyConfig?.accessKey || 'default_key'}`;
             const sign = crypto.createHash('md5').update(signString).digest('hex');
-            
+
             return {
                 username: subUser.id?.toString() || '',  // 返回 subusers 的 id
                 nickname: subUser.username,              // nickname 是子账号的完整名称
@@ -1545,7 +1539,7 @@ export const addSubAccount = async(evt: H3Event) => {
                 sign: sign
             };
         });
-        
+
         setResponseStatus(evt, 200);
         return {
             code: "1",  // 成功返回字符串"1"
@@ -1556,10 +1550,10 @@ export const addSubAccount = async(evt: H3Event) => {
             discount: null,
             flb: 0
         };
-        
+
     } catch (e: any) {
         console.error("添加子账号异常:", e);
-        
+
         // 处理数据库触发器错误
         if (e.message && e.message.includes('不能为单个主账号创建超过10个子账号')) {
             setResponseStatus(evt, 200);
@@ -1573,7 +1567,7 @@ export const addSubAccount = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         setResponseStatus(evt, 200);
         return {
             code: "0",
@@ -1591,11 +1585,11 @@ export const addSubAccount = async(evt: H3Event) => {
  * 编辑子账号昵称
  * SDK接口: POST /sdkapi/login/editSubAccount
  */
-export const editSubAccountNickname = async(evt: H3Event) => {
+export const editSubAccountNickname = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         console.log("编辑子账号昵称请求:", body);
-        
+
         const {
             username,           // 主用户名
             gid: gameId,        // 游戏ID
@@ -1604,7 +1598,7 @@ export const editSubAccountNickname = async(evt: H3Event) => {
             nickname,           // 昵称
             subAccount          // 子账号名称
         } = body;
-        
+
         if (!username || !subAccount || !nickname) {
             setResponseStatus(evt, 200);
             return {
@@ -1617,13 +1611,13 @@ export const editSubAccountNickname = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         // 通过用户名查找主用户
         const user = await sql({
             query: 'SELECT id FROM Users WHERE username = ?',
             values: [username],
         }) as any[];
-        
+
         if (user.length === 0) {
             setResponseStatus(evt, 200);
             return {
@@ -1636,15 +1630,15 @@ export const editSubAccountNickname = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         const userId = user[0].id;
-        
+
         // 查找子账号并验证是否属于该主用户
         const subUser = await sql({
             query: 'SELECT id FROM SubUsers WHERE username = ? AND parent_user_id = ?',
             values: [subAccount, userId],
         }) as any[];
-        
+
         if (subUser.length === 0) {
             setResponseStatus(evt, 200);
             return {
@@ -1657,20 +1651,20 @@ export const editSubAccountNickname = async(evt: H3Event) => {
                 flb: 0
             };
         }
-        
+
         const subUserId = subUser[0].id;
-        
+
         // 更新子账号昵称（直接更新username字段，因为username就是nickname）
         await sql({
             query: 'UPDATE SubUsers SET username = ? WHERE id = ?',
             values: [nickname, subUserId],
         });
-        
+
         // 生成签名
         const currentTime = Math.floor(Date.now() / 1000);
         const signString = `${nickname}${currentTime}${config.thirdPartyConfig?.accessKey || 'default_key'}`;
         const sign = crypto.createHash('md5').update(signString).digest('hex');
-        
+
         setResponseStatus(evt, 200);
         return {
             code: "1",  // 成功返回字符串"1"
@@ -1686,7 +1680,7 @@ export const editSubAccountNickname = async(evt: H3Event) => {
             discount: null,
             flb: 0
         };
-        
+
     } catch (e: any) {
         console.error("编辑子账号昵称异常:", e);
         setResponseStatus(evt, 200);
@@ -1706,11 +1700,11 @@ export const editSubAccountNickname = async(evt: H3Event) => {
  * 角色上报接口
  * SDK接口: POST /sdkapi/user/setRole
  */
-export const reportRole = async(evt: H3Event) => {
+export const reportRole = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         console.log("角色上报请求:", body);
-        
+
         const {
             z: username,        // 主用户名
             b: gameId,          // 游戏ID
@@ -1723,7 +1717,7 @@ export const reportRole = async(evt: H3Event) => {
             x: serverName,      // 服务器名称
             h: extData          // 扩展信息
         } = body;
-        
+
         // 参数验证
         if (!username || !gameId || !subUserId || !characterUuid || !roleName || !serverName) {
             setResponseStatus(evt, 200);
@@ -1737,13 +1731,13 @@ export const reportRole = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
         // 查找主用户
         const user = await sql({
             query: 'SELECT id FROM Users WHERE username = ?',
             values: [username],
         }) as any[];
-        
+
         if (user.length === 0) {
             setResponseStatus(evt, 200);
             return {
@@ -1756,13 +1750,13 @@ export const reportRole = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
         const userId = user[0].id;
-        
+
         // 通过子账号ID查找子账号
         const SubUsersModel = await import('../model/subUsers');
         const subUser = await SubUsersModel.findById(parseInt(subUserId));
-        
+
         if (!subUser || subUser.parent_user_id !== userId) {
             setResponseStatus(evt, 200);
             return {
@@ -1775,10 +1769,10 @@ export const reportRole = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
         // 角色上报不需要验证游戏ID，直接使用传入的游戏ID
         // 游戏验证已在前端或其他地方完成
-        
+
         // 解析游戏ID为数字，避免 NaN 写入导致 SQL 报错（Unknown column 'NaN' in 'field list'）
         let gameIdNum = parseInt(gameId as any, 10);
         if (!Number.isFinite(gameIdNum)) {
@@ -1797,30 +1791,30 @@ export const reportRole = async(evt: H3Event) => {
             server_id: parseInt(serverId) || 1,
             ext: extData || null
         };
-        
+
         // 执行角色上报（存在则更新，不存在则插入）
         const GameCharactersModel = await import('../model/gameCharacters');
         const result = await GameCharactersModel.upsertByUuid(characterData);
-        
+
         console.log(`角色上报成功: ${result.isNew ? '新建' : '更新'} 角色ID=${result.id}`);
-        
+
         // 角色上报成功后，自动调用登录日志上报
         try {
             console.log("角色上报成功，开始自动上报登录日志");
-            
+
             // 获取客户端信息
             const headers = getHeaders(evt);
             const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
-            
+
             // 从Users表获取游戏代码和渠道码
             const userInfoResult = await sql({
                 query: 'SELECT game_code, channel_code FROM Users WHERE id = ?',
                 values: [userId],
             }) as any[];
-            
+
             if (userInfoResult.length > 0) {
                 const { game_code: gameCode, channel_code: channelCode } = userInfoResult[0];
-                
+
                 // 准备登录日志数据
                 const loginLogData = {
                     username: subUser.username,  // 使用子账号用户名
@@ -1833,18 +1827,18 @@ export const reportRole = async(evt: H3Event) => {
                     device: 'Unknown', // 角色上报中没有设备类型信息
                     channel_code: channelCode // 从users表获取channel_code
                 };
-                
+
                 // 记录登录日志
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
                 await UserLoginLogsModel.recordLogin(loginLogData);
-                
+
                 console.log(`自动登录日志上报成功: 用户=${loginLogData.username}, 游戏=${gameCode}, 渠道=${channelCode}`);
             }
         } catch (loginLogError: any) {
             // 登录日志上报失败不应该影响角色上报的成功响应
             console.error("自动登录日志上报失败:", loginLogError);
         }
-        
+
         setResponseStatus(evt, 200);
         return {
             z: 0,  // 成功
@@ -1855,7 +1849,7 @@ export const reportRole = async(evt: H3Event) => {
             sid: characterData.server_id?.toString() || "",
             e: Date.now().toString()
         };
-        
+
     } catch (e: any) {
         console.error("角色上报异常:", e);
         setResponseStatus(evt, 200);
@@ -1877,13 +1871,13 @@ export const reportRole = async(evt: H3Event) => {
  * @body {thirdparty_uid: string, wuid: string}
  * @returns {Object} 更新结果
  */
-export const updateSubUserWuid = async(evt: H3Event) => {
+export const updateSubUserWuid = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         console.log("更新子用户wuid请求:", body);
-        
+
         const { thirdparty_uid, uid } = body;
-        
+
         // 参数验证
         if (!thirdparty_uid || !uid) {
             return {
@@ -1891,13 +1885,13 @@ export const updateSubUserWuid = async(evt: H3Event) => {
                 message: '缺少必要参数：thirdparty_uid 和 uid 不能为空'
             };
         }
-        
+
         // 调用模型函数进行更新
         const SubUsersModel = await import('../model/subUsers');
         const result = await SubUsersModel.updateWuidByThirdpartyUid(thirdparty_uid, uid);
-        
+
         return result;
-        
+
     } catch (error) {
         console.error('更新子用户wuid失败:', error);
         return {
@@ -1915,7 +1909,7 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 //     try {
 //         const body = await readBody(evt);
 //         console.log("登录日志上报请求:", body);
-        
+
 //         const {
 //             username,        // 主用户名
 //             cpsId,          // 代理ID
@@ -1923,7 +1917,7 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 //             xh,             // 子账号用户名
 //             login_device    // 登录设备 (2=Android)
 //         } = body;
-        
+
 //         // 参数验证
 //         if (!username || !gid) {
 //             setResponseStatus(evt, 200);
@@ -1937,18 +1931,18 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 //                 e: Date.now().toString()
 //             };
 //         }
-        
+
 //         // 获取客户端信息
 //         const headers = getHeaders(evt);
 //         const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
 //         const userAgent = (headers['user-agent'] as string) || '';
-        
+
 //         // 验证用户是否存在，同时获取game_code和channel_code
 //         const user = await sql({
 //             query: 'SELECT id, channel_code, game_code FROM Users WHERE username = ?',
 //             values: [username],
 //         }) as any[];
-        
+
 //         if (user.length === 0) {
 //             setResponseStatus(evt, 200);
 //             return {
@@ -1961,10 +1955,10 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 //                 e: Date.now().toString()
 //             };
 //         }
-        
+
 //         const userData = user[0];
 //         const gameCode = userData.game_code;
-        
+
 //         // 设备类型映射
 //         const deviceTypeMap: { [key: string]: string } = {
 //             '1': 'Mobile-iOS',
@@ -1973,9 +1967,9 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 //             '4': 'PC-Mac',
 //             '5': 'Web-Browser'
 //         };
-        
+
 //         const deviceType = deviceTypeMap[login_device?.toString()] || 'Unknown';
-        
+
 //         // 准备登录日志数据
 //         const loginLogData = {
 //             username: xh || username,  // 优先使用子账号用户名，没有则使用主用户名
@@ -1986,13 +1980,13 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 //             device: deviceType,
 //             channel_code: cpsId || userData.channel_code || ''
 //         };
-        
+
 //         // 记录登录日志
 //         const UserLoginLogsModel = await import('../model/userLoginLogs');
 //         const result = await UserLoginLogsModel.recordLogin(loginLogData);
-        
+
 //         console.log(`登录日志上报成功: 用户=${loginLogData.username}, 游戏=${gameCode}, 设备=${deviceType}`);
-        
+
 //         setResponseStatus(evt, 200);
 //         return {
 //             z: 0,  // 成功
@@ -2003,7 +1997,7 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 //             sid: cpsId || "",
 //             e: Date.now().toString()
 //         };
-        
+
 //     } catch (e: any) {
 //         console.error("登录日志上报异常:", e);
 //         setResponseStatus(evt, 200);
@@ -2025,11 +2019,11 @@ export const updateSubUserWuid = async(evt: H3Event) => {
  * @body {username: string, password: string, channel_code: string, game_code: string, thirdparty_uid?: string, iphone?: string}
  * @returns {Object} 注册结果
  */
-export const register = async(evt: H3Event) => {
+export const register = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         console.log("用户注册请求:", body);
-        
+
         // 参数验证
         if (!body.username || !body.password) {
             return {
@@ -2037,37 +2031,37 @@ export const register = async(evt: H3Event) => {
                 message: "用户名和密码不能为空"
             };
         }
-        
+
         if (!body.channel_code) {
             return {
                 status: "fail",
                 message: "缺少渠道代码参数"
             };
         }
-        
+
         if (!body.game_code) {
             return {
                 status: "fail",
                 message: "缺少游戏代码参数"
             };
         }
-        
+
         // 生成第三方用户ID（如果未提供）
         const thirdpartyUid = body.thirdparty_uid || `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
+
         // 检查用户名是否已存在
         const existingUserByUsername = await sql({
             query: 'SELECT id FROM Users WHERE username = ?',
             values: [body.username],
         }) as any[];
-        
+
         if (existingUserByUsername.length > 0) {
             return {
                 status: "fail",
                 message: "用户名已存在"
             };
         }
-        
+
         // 检查第三方用户ID是否已存在
         const existingUserByThirdpartyUid = await UserModel.findByThirdpartyUid(thirdpartyUid);
         if (existingUserByThirdpartyUid) {
@@ -2076,33 +2070,33 @@ export const register = async(evt: H3Event) => {
                 message: "该账号已存在"
             };
         }
-        
+
         // 验证channel_code是否在Admins表中存在
         const adminResult = await sql({
             query: 'SELECT id FROM Admins WHERE channel_code = ? AND is_active = 1',
             values: [body.channel_code],
         }) as any[];
-        
+
         if (adminResult.length === 0) {
             return {
                 status: "fail",
                 message: "无效的渠道代码"
             };
         }
-        
+
         // 验证game_code是否在Games表中存在
         const gameResult = await sql({
             query: 'SELECT id FROM Games WHERE game_code = ? AND is_active = 1',
             values: [body.game_code],
         }) as any[];
-        
+
         if (gameResult.length === 0) {
             return {
                 status: "fail",
                 message: "无效的游戏代码"
             };
         }
-        
+
         // 准备用户数据
         const userData = {
             username: body.username.trim(),
@@ -2113,12 +2107,12 @@ export const register = async(evt: H3Event) => {
             thirdparty_uid: thirdpartyUid,
             platform_coins: 0.00
         };
-        
+
         // 插入用户到 Users 表（同时会自动创建一个默认的 SubUser）
         const result = await UserModel.insert(userData);
-        
+
         console.log("用户注册成功:", { userId: result.insertId, thirdpartyUid });
-        
+
         return {
             status: "success",
             message: "注册成功",
@@ -2127,10 +2121,10 @@ export const register = async(evt: H3Event) => {
                 thirdparty_uid: thirdpartyUid
             }
         };
-        
+
     } catch (error) {
         console.error('用户注册失败:', error);
-        
+
         // 处理数据库重复键错误
         if (error instanceof Error) {
             if (error.message.includes('Duplicate') && error.message.includes('username')) {
@@ -2145,7 +2139,7 @@ export const register = async(evt: H3Event) => {
                 };
             }
         }
-        
+
         return {
             status: "fail",
             message: "注册失败，请稍后重试"
@@ -2154,13 +2148,13 @@ export const register = async(evt: H3Event) => {
 };
 
 // 封号/解封用户接口（超级管理员专用）
-export const banUser = async(evt: H3Event) => {
+export const banUser = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         const { user_id, status, admin_id } = body;
-        
+
         console.log("封号/解封用户请求:", body);
-        
+
         // 参数验证
         if (!user_id || status === undefined) {
             return {
@@ -2168,14 +2162,14 @@ export const banUser = async(evt: H3Event) => {
                 message: "缺少用户ID或状态参数"
             };
         }
-        
+
         if (status !== 0 && status !== 1) {
             return {
                 status: "fail",
                 message: "状态值无效，只能是0（解封）或1（封号）"
             };
         }
-        
+
         // 验证管理员权限（只有超级管理员可以封号）
         if (!admin_id) {
             return {
@@ -2183,7 +2177,7 @@ export const banUser = async(evt: H3Event) => {
                 message: "需要管理员授权"
             };
         }
-        
+
         const admin = await AdminModel.getAdminWithPermissions(admin_id);
         if (!admin || admin.level !== 0) {
             return {
@@ -2191,10 +2185,10 @@ export const banUser = async(evt: H3Event) => {
                 message: "只有超级管理员可以封号用户"
             };
         }
-        
+
         // 更新用户状态
         const result = await UserModel.updateUserStatus(user_id, status);
-        
+
         if (result.success) {
             console.log(`用户状态更新成功: 用户ID=${user_id}, 状态=${status}, 操作员=${admin.name}`);
             return {

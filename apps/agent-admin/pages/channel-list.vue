@@ -759,11 +759,11 @@ const toggleStatus = async (promoter) => {
       }
     });
     
-    if (response.success) {
+    if (response && response.success) {
       promoter.is_active = newStatus;
       alert(`代理状态已${newStatus ? '启用' : '禁用'}`);
     } else {
-      alert('状态切换失败：' + (response.message || '未知错误'));
+      alert('状态切换失败：' + (response?.message || '未知错误'));
     }
   } catch (error) {
     console.error('切换代理状态失败:', error);
@@ -896,6 +896,11 @@ const savePromoter = async (event) => {
           current_admin_id: authStore.id // 传递当前用户ID用于权限验证
         }
       });
+      
+      if (!response) {
+        alert('创建失败：服务器返回空响应，请重试');
+        return;
+      }
       
       if (response.success) {
         alert('代理创建成功！');

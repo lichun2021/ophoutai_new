@@ -942,6 +942,7 @@ export const createPromoter = async(evt:H3Event) => {
             values: [name]
         }) as any[];
         if (dupByName.length > 0) {
+            console.warn(`[createPromoter] 名称冲突: name="${name}", 已存在的ID=${dupByName[0]?.id}`);
             throw createError({ status: 400, message: '代理名称已存在' });
         }
 

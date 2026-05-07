@@ -16,6 +16,8 @@ const withLogging = (handler: Function, apiName: string) => {
   return defineEventHandler(async (event) => {
     const startTime = Date.now();
     const requestId = `req_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
+    // 禁用压缩：游戏客户端 libcurl 不支持 gzip/br 编码
+    setResponseHeader(event, 'Content-Encoding', 'identity');
     
     // ========== 访问日志 ==========
     const headers = getHeaders(event);
@@ -153,7 +155,7 @@ const withLogging = (handler: Function, apiName: string) => {
         logEntry.response = response ? {
           code: response.z,
           message: response.x,
-          success: response.z === 0
+          success: response.z === 1
         } : { code: 'undefined', message: 'no response', success: false };
       }
 
@@ -161,6 +163,7 @@ const withLogging = (handler: Function, apiName: string) => {
       console.error('[ERROR] 日志记录失败:', logError);
     }
     
+    console.log('[OUT] 响应体:', JSON.stringify(response));
     return response;
   });
 };

@@ -21,6 +21,9 @@ export default defineNuxtConfig({
   nitro: {
     externals: {
       inline: ["lru-cache"]
+    },
+    routeRules: {
+      '/sdkapi/**': { headers: { 'Content-Encoding': 'identity' } }
     }
   },
   
