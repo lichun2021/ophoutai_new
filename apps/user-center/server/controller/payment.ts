@@ -1705,27 +1705,32 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
 
         // 检查订单状态（先检查，避免查询不必要的订单）
-        console.log(`[${requestId}] 订单状态:`, body.trade_status);
-        if (body.trade_status !== 'TRADE_SUCCESS') {
-            console.log(`[${requestId}] 订单状态不是成功:`, body.trade_status);
+        // 兼容两种格式：
+        //   旧格式: trade_status === 'TRADE_SUCCESS'
+        //   众合支付新格式: state === 1
+        const isPaySuccess = body.trade_status === 'TRADE_SUCCESS' || Number(body.state) === 1;
+        console.log(`[${requestId}] 订单状态:`, { trade_status: body.trade_status, state: body.state, isPaySuccess });
+        if (!isPaySuccess) {
+            console.log(`[${requestId}] 订单状态不是成功`);
             setResponseStatus(evt, 200);
             return 'success'; // 即使不是成功状态也返回success避免重复通知
         }
 
         console.log(`[${requestId}] 订单状态验证成功!`);
 
-        // 查找本地订单 - 使用 trade_no 匹配 mch_order_id
-        console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
+        // 查找本地订单 - 兼容两种字段：旧格式用 trade_no，众合支付用 outTradeNo
+        const notifyOrderNo = body.trade_no || body.outTradeNo || '';
+        console.log(`[${requestId}] 使用订单号查找订单:`, notifyOrderNo);
 
         const result = await sql({
             query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
-            values: [body.trade_no]
+            values: [notifyOrderNo]
         }) as any[];
 
         const localOrder = result.length > 0 ? result[0] : null;
 
         if (!localOrder) {
-            console.error(`[${requestId}] 订单不存在, trade_no:`, body.trade_no);
+            console.error(`[${requestId}] 订单不存在, 订单号:`, notifyOrderNo);
             setResponseStatus(evt, 200);
             return 'fail';
         }
@@ -1766,14 +1771,22 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         // 检查订单是否已经处理过
         console.log(`[${requestId}] 检查订单处理状态:`, localOrder.payment_status);
         if (localOrder.payment_status === 3) {
-            console.log(`[${requestId}] 订单已处理过:`, body.out_trade_no);
+            console.log(`[${requestId}] 订单已处理过:`, notifyOrderNo);
             setResponseStatus(evt, 200);
             return 'success';
         }
 
         // 验证金额
+        // 兼容两种格式：旧格式 money（元），众合支付新格式 amount（分）
         console.log(`[${requestId}] 开始验证金额...`);
-        const notifyAmount = parseFloat(body.money);
+        let notifyAmount: number;
+        if (body.amount !== undefined && body.money === undefined) {
+            // 众合支付格式：amount 单位为分
+            notifyAmount = parseInt(body.amount) / 100;
+        } else {
+            // 旧格式：money 单位为元
+            notifyAmount = parseFloat(body.money);
+        }
         const orderAmount = parseFloat(String(localOrder.amount || 0));
         console.log(`[${requestId}] 通知金额:`, notifyAmount, '订单金额:', orderAmount);
 
@@ -1911,27 +1924,30 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
 
         // 检查订单状态（先检查，避免查询不必要的订单）
-        console.log(`[${requestId}] 订单状态:`, body.trade_status);
-        if (body.trade_status !== 'TRADE_SUCCESS') {
-            console.log(`[${requestId}] 订单状态不是成功:`, body.trade_status);
+        // 兼容两种格式：旧格式 trade_status，众合支付新格式 state
+        const isPaySuccess = body.trade_status === 'TRADE_SUCCESS' || Number(body.state) === 1;
+        console.log(`[${requestId}] 订单状态:`, { trade_status: body.trade_status, state: body.state, isPaySuccess });
+        if (!isPaySuccess) {
+            console.log(`[${requestId}] 订单状态不是成功`);
             setResponseStatus(evt, 200);
             return 'success'; // 即使不是成功状态也返回success避免重复通知
         }
 
         console.log(`[${requestId}] 订单状态验证成功!`);
 
-        // 查找本地订单 - 使用 trade_no 匹配 mch_order_id
-        console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
+        // 查找本地订单 - 兼容 trade_no（旧）和 outTradeNo（众合支付）
+        const notifyOrderNo = body.trade_no || body.outTradeNo || '';
+        console.log(`[${requestId}] 使用订单号查找订单:`, notifyOrderNo);
 
         const result = await sql({
             query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
-            values: [body.trade_no]
+            values: [notifyOrderNo]
         }) as any[];
 
         const localOrder = result.length > 0 ? result[0] : null;
 
         if (!localOrder) {
-            console.error(`[${requestId}] 订单不存在, trade_no:`, body.trade_no);
+            console.error(`[${requestId}] 订单不存在, 订单号:`, notifyOrderNo);
             setResponseStatus(evt, 200);
             return 'fail';
         }
@@ -1978,8 +1994,16 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         }
 
         // 验证金额
+        // 兼容两种格式：旧格式 money（元），众合支付新格式 amount（分）
         console.log(`[${requestId}] 开始验证金额...`);
-        const notifyAmount = parseFloat(body.money);
+        let notifyAmount: number;
+        if (body.amount !== undefined && body.money === undefined) {
+            // 众合支付格式：amount 单位为分
+            notifyAmount = parseInt(body.amount) / 100;
+        } else {
+            // 旧格式：money 单位为元
+            notifyAmount = parseFloat(body.money);
+        }
         const orderAmount = parseFloat(String(localOrder.amount || 0));
         console.log(`[${requestId}] 通知金额:`, notifyAmount, '订单金额:', orderAmount);
 

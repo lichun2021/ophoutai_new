@@ -1,4 +1,4 @@
-﻿import crypto from 'crypto';
+import crypto from 'crypto';
 import { sql } from '../db';
 import { getSystemParam } from './systemConfig';
 
@@ -901,13 +901,159 @@ const sxjzszProvider: PaymentProvider = {
     }
 };
 
+// Provider: 众合支付（ZhongHe Pay）
+// 商户号: M1778146851，通道: 微信8888 / 支付宝9999
+// 接口规则: POST JSON，MD5签名（所有非空参数 ASCII 排序后拼接 &key=密钥，32位小写）
+// 回调成功时返回字符串: SUCCESS（大写）
+const zhonghePayConfig = {
+    baseUrl: 'https://ai2hgfrfpay.zzisadaksjdkhflkalsd.xyz/Pay_Index',
+    queryUrl: 'https://ai2hgfrfpay.zzisadaksjdkhflkalsd.xyz/Pay_Query',
+    mchId: 'M1778146851',
+    md5Key: 'u61tbs49uqbf51d1nq77or6grkied096'
+};
+
+// 众合支付 MD5 签名：所有非空参数 ASCII 排序，末尾拼接 &key=密钥，MD5(32位小写)
+function zhongheSign(params: Record<string, any>, key: string): string {
+    const sorted = Object.keys(params)
+        .filter(k => params[k] !== '' && params[k] !== null && params[k] !== undefined && k !== 'sign')
+        .sort()
+        .map(k => `${k}=${params[k]}`)
+        .join('&');
+    const raw = `${sorted}&key=${key}`;
+    return crypto.createHash('md5').update(raw).digest('hex');
+}
+
+const zhonghePayProvider: PaymentProvider = {
+    key: 'zhonghePay',
+    async execute(req: ThirdPartyRequest, creds?: Record<string, any>): Promise<NormalizedPayResponse> {
+        const cfg = { ...zhonghePayConfig, ...(creds || {}) };
+
+        // 通道编码（wayCode）：微信=8888，支付宝=9999
+        let wayCode = '9999'; // 默认支付宝
+        const t = (req.type || '').toLowerCase();
+        if (t === 'wx' || t === 'weixin' || t === 'wxpay') {
+            wayCode = '8888';
+        }
+
+        const reqTime = Date.now().toString(); // 13位时间戳
+        const params: Record<string, any> = {
+            mchId: cfg.mchId,
+            wayCode,                                           // 文档字段：wayCode
+            outTradeNo: req.out_trade_no,                      // 文档字段：outTradeNo
+            amount: Math.round(parseFloat(req.money) * 100),  // 金额单位：分
+            subject: req.name,
+            notifyUrl: req.notify_url,
+            clientIp: req.clientip,
+            reqTime
+        };
+        // 可选参数：仅非空时加入（影响签名）
+        if (req.return_url) params.returnUrl = req.return_url;
+        if (req.param) params.extParam = req.param;
+
+        params.sign = zhongheSign(params, cfg.md5Key);
+
+        try {
+            console.log('[Pay][zhonghePay] URL:', cfg.baseUrl);
+            console.log('[Pay][zhonghePay] Params:', { ...params, sign: '***' });
+        } catch { }
+
+        const response = await fetch(cfg.baseUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+            body: JSON.stringify(params),
+            signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(30000) : undefined
+        });
+
+        if (!response.ok) {
+            return { code: -1, msg: `HTTP错误: ${response.status}`, thirdParty: true };
+        }
+
+        const result: any = await response.json().catch(() => ({}));
+        console.log('[Pay][zhonghePay] Response:', result);
+
+        // 文档明确：code=0 表示成功，其他失败
+        if (Number(result.code) === 0) {
+            const data = result.data || {};
+            return {
+                code: 1,
+                msg: result.message || result.msg || 'success',
+                trade_no: data.tradeNo || data.outTradeNo || req.out_trade_no, // 文档字段：tradeNo
+                payurl: data.payUrl || null,                                    // 文档字段：payUrl
+                thirdParty: true
+            };
+        }
+
+        return { code: -1, msg: result.message || result.msg || '第三方返回失败', thirdParty: true };
+    },
+    verify(params: Record<string, any>, creds?: Record<string, any>): boolean {
+        const cfg = { ...zhonghePayConfig, ...(creds || {}) };
+        const provided = String(params.sign || '').trim().toLowerCase();
+        const base = { ...params };
+        delete (base as any).sign;
+        const expect = zhongheSign(base, cfg.md5Key);
+        const result = expect === provided;
+        console.log('[Pay][zhonghePay] 验签结果:', result, '期望:', expect, '实际:', provided);
+        return result;
+    },
+    async query(req: QueryOrderRequest, creds?: Record<string, any>): Promise<QueryOrderResponse> {
+        const cfg = { ...zhonghePayConfig, ...(creds || {}) };
+        const reqTime = Date.now().toString();
+
+        // 查询接口必填：mchId + outTradeNo + reqTime + sign
+        const params: Record<string, any> = {
+            mchId: cfg.mchId,
+            outTradeNo: req.out_trade_no || req.trade_no || '', // 文档字段：outTradeNo
+            reqTime
+        };
+
+        params.sign = zhongheSign(params, cfg.md5Key);
+
+        try {
+            const response = await fetch(cfg.queryUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+                body: JSON.stringify(params),
+                signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(15000) : undefined
+            });
+
+            if (!response.ok) {
+                return { code: -1, msg: `HTTP错误: ${response.status}` };
+            }
+
+            const result: any = await response.json().catch(() => ({}));
+            console.log('[Query][zhonghePay] Response:', result);
+
+            // 文档：code=0 为接口调用成功
+            if (Number(result.code) === 0) {
+                const data = result.data || {};
+                // 文档 state：0=待支付，1=支付成功，2=支付失败
+                return {
+                    code: 0,
+                    msg: result.message || result.msg || 'success',
+                    trade_no: data.tradeNo || '',              // 文档字段：tradeNo
+                    out_trade_no: data.outTradeNo || '',       // 文档字段：outTradeNo
+                    status: Number(data.state ?? -1),          // 文档字段：state
+                    money: data.amount ? String(parseInt(data.amount) / 100) : '', // 分→元
+                    addtime: data.createTime || '',
+                    endtime: data.successTime || ''
+                };
+            }
+
+            return { code: -1, msg: result.message || result.msg || '询单失败' };
+        } catch (error: any) {
+            return { code: -1, msg: `查询异常: ${error.message}` };
+        }
+    }
+};
+
 const providers: Record<string, PaymentProvider> = {
     [uzepayV2Provider.key]: uzepayV2Provider,
     [yxinpayProvider.key]: yxinpayProvider,
     [mimmmaProvider.key]: mimmmaProvider,
     [ahqlhProvider.key]: ahqlhProvider,
     [meidaProvider.key]: meidaProvider,
-    [sxjzszProvider.key]: sxjzszProvider
+    [sxjzszProvider.key]: sxjzszProvider,
+    [zhonghePayProvider.key]: zhonghePayProvider
 };
 
 export type RoutingContext = {
@@ -1020,6 +1166,21 @@ export const gatewayParamSets: Record<string, GatewayParamSet & { supportQuery?:
             apiUrl: 'https://a115a.xtpay.xyz/api.php',
             pid: '6525',
             md5Key: 'PnyQyCt959qpGCqNqNN15w04laa154T5'
+        }
+    },
+    // payment=7 接入众合支付（ZhongHe Pay）
+    // 商户号: M1778146851，通道: 微信8888 / 支付宝9999
+    '7': {
+        providerKey: 'zhonghePay',
+        name: '众合支付',
+        remark: '众合支付 RA_Allies_001',
+        supportQuery: true,
+        isOpen: true,
+        credentials: {
+            baseUrl: 'https://ai2hgfrfpay.zzisadaksjdkhflkalsd.xyz/Pay_Index',
+            queryUrl: 'https://ai2hgfrfpay.zzisadaksjdkhflkalsd.xyz/Pay_Query',
+            mchId: 'M1778146851',
+            md5Key: 'u61tbs49uqbf51d1nq77or6grkied096'
         }
     }
 };
