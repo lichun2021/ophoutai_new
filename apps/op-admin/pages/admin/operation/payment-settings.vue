@@ -216,7 +216,7 @@
           <div class="channel-body">
             <div class="info-row">
               <span class="label">商户ID:</span>
-              <span class="value">{{ channel.credentials.pid || channel.credentials.merchantId || '-' }}</span>
+              <span class="value">{{ channel.credentials.pid || channel.credentials.merchantId || channel.credentials.mchId || '-' }}</span>
             </div>
             <div class="info-row">
               <span class="label">渠道状态:</span>

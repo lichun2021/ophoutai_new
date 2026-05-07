@@ -259,8 +259,11 @@ router.get('/payment/trans/:transaction_id', defineEventHandler(PaymentCtrl.getP
 router.get('/payment/user/:user_id', defineEventHandler(PaymentCtrl.getPaymentByUserID));
 
 // ========== 支付回调（第三方通知）==========
+// 众合支付等第三方使用 POST JSON 回调，同时注册 GET 和 POST
 
-router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知'));
-router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知'));
+router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知-GET'));
+router.post('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知-POST'));
+router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知-GET'));
+router.post('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知-POST'));
 
 export default useBase('/api', router.handler);

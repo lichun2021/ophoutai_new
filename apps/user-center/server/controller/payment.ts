@@ -1820,7 +1820,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             trade_no: body.trade_no
         });
 
-        await PaymentModel.updateOrderStatus(localOrder.transaction_id || '', 3, currentTime, currentTime, body.trade_no);
+        await PaymentModel.updateOrderStatus(localOrder.transaction_id || '', 3, currentTime, currentTime, body.trade_no || body.tradeNo || '');
         console.log(`[${requestId}] 订单状态更新完成!`);
 
         // --- 支付路由 Redis 额度累加 ---
@@ -1869,7 +1869,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] === 第三方支付回调处理完成，返回success ===`);
         console.log(`[${requestId}] 总处理时间: ${processingTime}ms`);
         setResponseStatus(evt, 200);
-        return 'success';
+        return 'SUCCESS'; // 众合支付等第三方要求大写
 
     } catch (error: any) {
         const endTime = Date.now();
@@ -2037,7 +2037,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             trade_no: body.trade_no
         });
 
-        await PaymentModel.updateOrderStatus(localOrder.transaction_id || '', 3, currentTime, currentTime, body.trade_no);
+        await PaymentModel.updateOrderStatus(localOrder.transaction_id || '', 3, currentTime, currentTime, body.trade_no || body.tradeNo || '');
         console.log(`[${requestId}] 订单状态更新完成!`);
 
         // --- 支付路由 Redis 额度累加 ---
@@ -2140,7 +2140,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] === 收银台支付回调处理完成，返回success ===`);
         console.log(`[${requestId}] 总处理时间: ${processingTime}ms`);
         setResponseStatus(evt, 200);
-        return 'success';
+        return 'SUCCESS'; // 众合支付等第三方要求大写
 
     } catch (error: any) {
         const endTime = Date.now();

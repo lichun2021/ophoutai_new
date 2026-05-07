@@ -132,18 +132,18 @@ export async function verifyApiSignature(
 
 
   if (!ts || !providedSign) {
-    // console.error('[API_SIGN][FAIL] 缺少 ts 或 sign!', { ts, providedSign });
+    console.error('[API_SIGN][FAIL] 缺少 ts 或 sign!', { path: pathname, method, ts, providedSign: providedSign ? '(has)' : '(empty)' });
     throw createError({ statusCode: 401, statusMessage: 'missing_ts_or_sign' });
   }
   if (!nonce) {
-    // console.error('[API_SIGN][FAIL] 缺少 nonce!');
+    console.error('[API_SIGN][FAIL] 缺少 nonce!', { path: pathname });
     throw createError({ statusCode: 401, statusMessage: 'missing_nonce' });
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
   const skewDiff = Math.abs(nowSec - ts);
   if (skewDiff > skew) {
-    // console.error('[API_SIGN][FAIL] 时间偏差过大!', { nowSec, ts, diff: skewDiff, skew });
+    console.error('[API_SIGN][FAIL] 时间偏差过大!', { nowSec, ts, diff: skewDiff, skew });
     throw createError({ statusCode: 401, statusMessage: 'ts_skew' });
   }
 
@@ -157,10 +157,10 @@ export async function verifyApiSignature(
   if (expected !== providedSign) {
     const base = buildSignBase({ ts, nonce });
     const ymd = formatYmd(dateForToken);
-    // console.warn('[API_SIGN][server] invalid_sign', {
-    //   path: pathname, method, ts, salt, nonce,
-    //   expected, provided: providedSign, token, base, ymd
-    // });
+    console.warn('[API_SIGN][server] invalid_sign', {
+      path: pathname, method, ts, nonce,
+      expected, provided: providedSign, ymd
+    });
     throw createError({ statusCode: 401, statusMessage: 'invalid_sign' });
   }
 
