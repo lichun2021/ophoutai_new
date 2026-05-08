@@ -1085,6 +1085,7 @@ router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPar
  * @returns {string} 处理结果(success/fail)
  */
 router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知接口'));
+router.post('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知接口'));
 
 /**
  * Steam 支付回调通知接口
