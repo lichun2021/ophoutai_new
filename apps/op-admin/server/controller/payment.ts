@@ -1,4 +1,4 @@
-﻿import * as PaymentModel from '../model/payment';
+import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
@@ -819,131 +819,98 @@ async function deductPlatformCoinsForPayment(
                     });
 
                     if (shouldProcessApiDelivery) {
-                        const config = orderDetail.product_des ? getRechargeConfig(orderDetail.product_des) : null;
+                        // 直接用订单的 transaction_id（即客户端 y 参数）作为 goodsId
+                        const finalGoodsId = orderDetail.transaction_id || orderDetail.mch_order_id;
+                        const playerId = String(wuid);
+                        const billNo = String(orderDetail.mch_order_id || transactionId);
 
-                        console.log('API到账--商品配置:', config ? `找到配置:${config.id}` : '未找到配置');
+                        console.log('API到账--直接发货:', {
+                            playerId,
+                            goodsId: finalGoodsId,
+                            billNo,
+                            worldId: orderDetail.world_id
+                        });
 
-                        if (config) {
-                            // 确定使用的 goodsId：iOS 使用 id，非 iOS 使用 andid
-                            let finalGoodsId = config.andid;
-                            try {
-                                
-                                const character = await GameCharactersModel.findByUuid(playerRoleId);
-                                if (character && character.ext) {
-                                    let extObj: any = {};
-                                    try {
-                                        extObj = typeof character.ext === 'string' ? JSON.parse(character.ext) : character.ext;
-                                    } catch (e) {
-                                        extObj = { value: character.ext };
-                                    }
-                                    
-                                    if (extObj && extObj.value === 'ios') {
-                                        finalGoodsId = config.id;
-                                        console.log(`API到账--平台判定: iOS, 使用 id=${finalGoodsId}, 角色UUID=${playerRoleId}`);
+                        // 查询服务器 webhost
+                        const serverCfg = await getByWorldId(Number(orderDetail.world_id));
+                        console.log('API到账--服务器配置:', serverCfg ? `找到服务器:${serverCfg.webhost}` : `未找到world_id=${orderDetail.world_id}`);
+
+                        if (serverCfg && serverCfg.webhost) {
+                            const webhost = serverCfg.webhost.replace(/\/$/, '');
+                            const rechargeUrl = `${webhost}/api/order/deliver`;
+
+                            console.log('API到账--rechargeUrl:', rechargeUrl, { playerId, goodsId: finalGoodsId, billNo });
+
+                            const response = await fetch(rechargeUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    playerId,
+                                    goodsId: finalGoodsId,
+                                    billNo,
+                                    rechargeType: '1'
+                                }),
+                                signal: AbortSignal.timeout(10000)
+                            });
+
+                            const responseText = await response.text();
+                            const currentTime = getCurrentFormattedTime();
+                            if (response.ok) {
+                                try {
+                                    const result = JSON.parse(responseText);
+
+                                    const isSuccess = result.code === 0 ||
+                                        result.msg === 'success' ||
+                                        (result.result && String(result.result).toLowerCase().includes('success'));
+
+                                    if (isSuccess) {
+                                        console.log('API到账--Success:', { transactionId, playerId, goodsId: finalGoodsId, response: result });
+                                        apiDeliveryHandled = true;
+                                        await PaymentModel.updateByTransactionId(transactionId, {
+                                            payment_status: 3,
+                                            notify_at: currentTime,
+                                            msg: `API到账成功:${JSON.stringify(result).substring(0, 500)}`
+                                        });
                                     } else {
-                                        finalGoodsId = config.andid || config.id;
-                                        console.log(`API到账--平台判定: 非iOS, 使用 andid=${finalGoodsId}, 角色UUID=${playerRoleId}`);
+                                        console.error('API到账--Failed:', result);
+                                        await PaymentModel.updateByTransactionId(transactionId, {
+                                            msg: `API到账失败:${JSON.stringify(result).substring(0, 500)}`
+                                        });
                                     }
-                                } else {
-                                    finalGoodsId = config.andid || config.id;
-                                    console.log(`API到账--平台判定: 未找到角色或ext为空, 默认使用 andid=${finalGoodsId}, 角色UUID=${playerRoleId}`);
-                                }
-                            } catch (charError) {
-                                console.error('API到账--平台判定异常:', charError);
-                                finalGoodsId = config.andid || config.id;
-                            }
-
-                            // 查询服务器 webhost
-                            const serverCfg = await getByWorldId(Number(orderDetail.world_id));
-                            console.log('API到账--服务器配置:', serverCfg ? `找到服务器:${serverCfg.webhost}` : `未找到world_id=${orderDetail.world_id}`);
-                            if (serverCfg && serverCfg.webhost) {
-                                const webhost = serverCfg.webhost.replace(/\/$/, '');
-                                const playerId = String(wuid);
-                                const rechargeUrl = `${webhost}/script/gmRecharge?playerId=${playerId}&rechargeType=${config.rechargeType}&goodsId=${finalGoodsId}&billno=${orderDetail.mch_order_id}`;
-
-                                const response = await fetch(rechargeUrl, {
-                                    method: 'GET',
-                                    signal: AbortSignal.timeout(10000)
-                                });
-
-                                console.log('API到账--rechargeUrl:', rechargeUrl);
-                                const responseText = await response.text();
-                                const currentTime = getCurrentFormattedTime();
-                                if (response.ok) {
-                                    try {
-                                        const result = JSON.parse(responseText);
-
-                                        // 兼容多种成功响应格式：
-                                        // 1. { code: 0 } - 游戏充值接口
-                                        // 2. { msg: 'success' } - 通用接口
-                                        // 3. { result: 'buy gift success!' } - 礼包接口
-                                        const isSuccess = result.code === 0 ||
-                                            result.msg === 'success' ||
-                                            (result.result && String(result.result).toLowerCase().includes('success'));
-
-                                        if (isSuccess) {
-                                            console.log('API到账--Success:', { transactionId, playerId, product: finalGoodsId, response: result });
-                                            apiDeliveryHandled = true;
-                                            // 记录成功日志到订单
-
-                                            await PaymentModel.updateByTransactionId(transactionId, {
-                                                payment_status: 3,
-                                                notify_at: currentTime,
-                                                msg: `API到账成功:${JSON.stringify(result).substring(0, 500)}`
-                                            });
-                                        } else {
-                                            console.error('API到账--Failed:', result);
-                                            // 记录失败日志到订单
-                                            await PaymentModel.updateByTransactionId(transactionId, {
-
-                                                msg: `API到账失败:${JSON.stringify(result).substring(0, 500)}`
-                                            });
-                                        }
-                                    } catch (parseError) {
-                                        // 兼容纯文本 "success" 响应
-                                        if (responseText.trim().toLowerCase() === 'success') {
-                                            console.log('API到账--Success:', { transactionId, playerId });
-                                            apiDeliveryHandled = true;
-                                            // 记录成功日志到订单
-                                            await PaymentModel.updateByTransactionId(transactionId, {
-                                                payment_status: 3,
-                                                notify_at: currentTime,
-                                                msg: 'API到账成功:纯文本success响应'
-                                            });
-                                        } else {
-                                            const errorMsg = `API到账响应解析失败:${responseText.substring(0, 200)}`;
-                                            console.error('API到账--响应解析失败:', {
-                                                transactionId,
-                                                playerId,
-                                                responseText: responseText.substring(0, 200),
-                                                parseError: parseError instanceof Error ? parseError.message : 'Unknown error'
-                                            });
-                                            // 记录错误日志到订单
-                                            await PaymentModel.updateByTransactionId(transactionId, {
-                                                msg: errorMsg
-                                            });
-                                        }
+                                } catch (parseError) {
+                                    // 兼容纯文本 "success" 响应
+                                    if (responseText.trim().toLowerCase() === 'success') {
+                                        console.log('API到账--Success:', { transactionId, playerId });
+                                        apiDeliveryHandled = true;
+                                        await PaymentModel.updateByTransactionId(transactionId, {
+                                            payment_status: 3,
+                                            notify_at: currentTime,
+                                            msg: 'API到账成功:纯文本success响应'
+                                        });
+                                    } else {
+                                        const errorMsg = `API到账响应解析失败:${responseText.substring(0, 200)}`;
+                                        console.error('API到账--响应解析失败:', {
+                                            transactionId,
+                                            playerId,
+                                            responseText: responseText.substring(0, 200),
+                                            parseError: parseError instanceof Error ? parseError.message : 'Unknown error'
+                                        });
+                                        await PaymentModel.updateByTransactionId(transactionId, {
+                                            msg: errorMsg
+                                        });
                                     }
-                                } else {
-                                    // HTTP 请求失败
-                                    const errorMsg = `API到账HTTP错误:${response.status} ${response.statusText}`;
-                                    console.error('API到账--HTTP错误:', { status: response.status, statusText: response.statusText });
-                                    await PaymentModel.updateByTransactionId(transactionId, {
-                                        msg: errorMsg
-                                    });
                                 }
                             } else {
-                                const errorMsg = `API到账未找到服务器配置:world_id=${orderDetail.world_id}`;
-                                console.warn('API到账--未找到服务器配置:', orderDetail.world_id);
-                                // 记录错误日志到订单
+                                // HTTP 请求失败
+                                const errorMsg = `API到账HTTP错误:${response.status} ${response.statusText}`;
+                                console.error('API到账--HTTP错误:', { status: response.status, statusText: response.statusText });
                                 await PaymentModel.updateByTransactionId(transactionId, {
                                     msg: errorMsg
                                 });
                             }
                         } else {
-                            // 找不到商品配置
-                            const errorMsg = `API到账找不到商品配置:${orderDetail.product_name}`;
-                            console.warn('API到账--找不到商品配置:', orderDetail.product_name);
+                            const errorMsg = `API到账未找到服务器配置:world_id=${orderDetail.world_id}`;
+                            console.warn('API到账--未找到服务器配置:', orderDetail.world_id);
                             await PaymentModel.updateByTransactionId(transactionId, {
                                 msg: errorMsg
                             });
@@ -1770,7 +1737,7 @@ export const doPayment = async (evt: H3Event) => {
             }
         }
 
-        // Redis 防重复下单(15秒):仅对非平台币(ptb)生效;优先按 wuid,其次按 subUserId,最后按用户名
+
 
         try {
             const redis = getRedisCluster();
@@ -1790,6 +1757,7 @@ export const doPayment = async (evt: H3Event) => {
                 const lockOk = await redis.set(lockKey, '1', 'EX', 15, 'NX');
                 if (lockOk !== 'OK') {
                     setResponseStatus(evt, 200);
+                    console.error('[支付拦截] 下单过于频繁', wuid, subUserId, username);
                     return {
                         code: -10,
                         msg: '下单过于频繁,请15秒后再试',
@@ -1989,36 +1957,36 @@ export const doPayment = async (evt: H3Event) => {
             || serverUrl.includes('cashier');
 
         // 读取商品配置并强校验价格：商城礼包（gift://）和平台币充值不依赖 rechargeConfig，跳过校验
-        if (!isGiftOrder && !isPlatformCoinRecharge) {
-            try {
-                const productKey = productDesc || productName || '';
-                const { getRechargeConfig } = await import('../utils/rechargeConfig');
-                const cfg = productKey ? getRechargeConfig(productKey) : null;
-                const cfgPrice = cfg && typeof (cfg as any).price === 'number' ? Number((cfg as any).price) : NaN;
+        // if (!isGiftOrder && !isPlatformCoinRecharge) {
+        //     try {
+        //         const productKey = productDesc || productName || '';
+        //         const { getRechargeConfig } = await import('../utils/rechargeConfig');
+        //         const cfg = productKey ? getRechargeConfig(productKey) : null;
+        //         const cfgPrice = cfg && typeof (cfg as any).price === 'number' ? Number((cfg as any).price) : NaN;
 
-                // 配置缺失或价格无效，直接拒绝
-                if (!cfg || isNaN(cfgPrice) || cfgPrice <= 0) {
-                    setResponseStatus(evt, 200);
-                    return {
-                        code: -10,
-                        msg: '商品价格配置缺失或无效',
-                        data: null
-                    };
-                }
+        //         // 配置缺失或价格无效，直接拒绝
+        //         if (!cfg || isNaN(cfgPrice) || cfgPrice <= 0) {
+        //             setResponseStatus(evt, 200);
+        //             return {
+        //                 code: -10,
+        //                 msg: '商品价格配置缺失或无效',
+        //                 data: null
+        //             };
+        //         }
 
-                // 所有支付方式（含平台币）都要求金额与配置价一致
-                if (Math.abs(amountNumGlobal - cfgPrice) > 0.001) {
-                    setResponseStatus(evt, 200);
-                    return {
-                        code: -10,
-                        msg: '支付金额与商品配置不一致',
-                        data: null
-                    };
-                }
-            } catch (e) {
-                console.warn('[doPayment] 金额与配置校验异常:', e);
-            }
-        }
+        //         // 所有支付方式（含平台币）都要求金额与配置价一致
+        //         if (Math.abs(amountNumGlobal - cfgPrice) > 0.001) {
+        //             setResponseStatus(evt, 200);
+        //             return {
+        //                 code: -10,
+        //                 msg: '支付金额与商品配置不一致',
+        //                 data: null
+        //             };
+        //         }
+        //     } catch (e) {
+        //         console.warn('[doPayment] 金额与配置校验异常:', e);
+        //     }
+        // }
 
         // 处理不同支付方式
         if (paymentMethod === 'kf') {
@@ -3156,7 +3124,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
 
         // --- 支付路由 Redis 额度累加 ---
         try {
-            
+
             const isRoutingEnabled = await getSystemParam('payment_routing_enabled', 'false');
             if (isRoutingEnabled === 'true') {
                 const { getOrderRuleMapping, incrementRedisUsedQuota } = await import('../model/paymentRouting');

@@ -1,4 +1,4 @@
-﻿import { sql } from '../db';
+import { sql } from '../db';
 import { getRedisCluster } from '../utils/redis-cluster';
 
 export interface GameServerConfig {
@@ -90,6 +90,10 @@ export function extractWorldIdFromBName(bname: string): number | null {
 }
 
 export async function getByWorldId(worldId: number): Promise<GameServerConfig | null> {
+  // 兼容短 ID：1 → 10001, 2 → 10002, ...
+  if (worldId > 0 && worldId < 10000) {
+    worldId = worldId + 10000;
+  }
   const cacheKey = `gameserver:world_${worldId}`;
   
   try {

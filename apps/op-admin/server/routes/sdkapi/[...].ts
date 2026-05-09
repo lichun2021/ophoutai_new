@@ -15,14 +15,14 @@ const withLogging = (handler: Function, apiName: string) => {
   return defineEventHandler(async (event) => {
     const startTime = Date.now();
     const requestId = `req_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // ========== 访问日志 ==========
     const headers = getHeaders(event);
     const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
     const userAgent = (headers['user-agent'] as string) || 'unknown';
     const method = getMethod(event);
     const url = getRequestURL(event);
-    
+
     let requestBody: any = {};
     try {
       const parsed = await readBody(event);
@@ -31,7 +31,7 @@ const withLogging = (handler: Function, apiName: string) => {
     } catch (e) {
       requestBody = {};
     }
-    
+
     // 访问日志
     const maskIpForPrivacy = apiName.includes('登录');
     console.log(`[IN] 时间: ${new Date().toISOString()}`);
@@ -43,7 +43,7 @@ const withLogging = (handler: Function, apiName: string) => {
 
     let response: any = {};
     let error: any = null;
-    
+
     try {
       // ========== 可选的时间戳有效性校验（ts） ==========
       // 若请求携带 ts（秒或毫秒），则要求与服务器当前时间误差 <= 50 秒
@@ -101,19 +101,18 @@ const withLogging = (handler: Function, apiName: string) => {
         };
       }
     }
-    
+
     const endTime = Date.now();
     const processingTime = endTime - startTime;
-    
+
     // 出口日志
-    console.log(`[OUT] ${apiName} 耗时: ${processingTime}ms, 状态: ${
-      response && response.code !== undefined 
-        ? `码=${response.code}, ${String(response.code) === '1' ? '成功' : '失败'}`
-        : response && response.z !== undefined
+    console.log(`[OUT] ${apiName} 耗时: ${processingTime}ms, 状态: ${response && response.code !== undefined
+      ? `码=${response.code}, ${String(response.code) === '1' ? '成功' : '失败'}`
+      : response && response.z !== undefined
         ? `码=${response.z}, ${response.z === 0 ? '成功' : '失败'}`
         : '未知'
-    }${error ? `, 错误: ${error.message}` : ''}`);
-    
+      }${error ? `, 错误: ${error.message}` : ''}`);
+
     // 写入结构化日志
     try {
       let logEntry: any = {
@@ -159,7 +158,7 @@ const withLogging = (handler: Function, apiName: string) => {
     } catch (logError) {
       console.error('[ERROR] 日志记录失败:', logError);
     }
-    
+
     return response;
   });
 };
@@ -237,7 +236,7 @@ router.post('/user/setRole', withSignAndLogging(UserCtrl.reportRole, '角色上�
 
 /**
  * 支付请求接口
- * @route GET/POST /sdkapi/Pay/doPay
+ * @route GET/POST /sdkapi/Unipay/pay
  * @body {各种支付参数}
  * @returns {Object} 支付结果或支付链接
  */
@@ -282,7 +281,7 @@ router.post('/user/login', withSignAndLogging(async (event: H3Event) => {
         'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax'
       ]);
     }
-  } catch {}
+  } catch { }
   return result;
 }, 'SDK 用户登录'));
 

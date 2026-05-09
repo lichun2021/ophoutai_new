@@ -144,7 +144,6 @@ const REST_ENDPOINTS = {
   paymentNotify:     '/api/order/payment-notify',
   protectShield:     '/api/player/protect-shield',
   deletePlayer:      '/api/player/delete',
-  a8tPay:            '/api/order/deliver',   // REST 模式复用 deliver 端点
 } as const;
 
 /** 旧 IDIP 端点 */
@@ -160,7 +159,6 @@ const IDIP_ENDPOINTS = {
   paymentNotify:     '/update_pay_status',
   protectShield:     '/script/openProtectShield',
   deletePlayer:      '/script/playerDelete',
-  a8tPay:            '/a8t_pay',             // 平台币购买游戏道具发货接口
 } as const;
 
 // ==================== 工具函数 ====================
@@ -564,56 +562,6 @@ export class GameServerClient {
 
     // REST 模式
     return this.request('deliverOrder', params);
-  }
-
-  /**
-   * 平台币购买游戏道具发货 — 调用游戏服务器 /a8t_pay 接口
-   *
-   * IDIP 模式: GET /a8t_pay?playerId=&goodsId=&billno=&rechargeType=
-   * REST 模式: POST /api/order/deliver  (与 deliverOrder 共用)
-   */
-  async deliverOrderA8tPay(params: DeliverOrderParams): Promise<GameServerResponse> {
-    if (this.protocol === 'idip') {
-      // 走 GET /a8t_pay，参数与 /script/gmRecharge 完全一致
-      const qs = new URLSearchParams({
-        playerId: params.playerId,
-        ...(params.rechargeType ? { rechargeType: params.rechargeType } : {}),
-        goodsId: params.goodsId,
-        billno: params.billNo,
-      }).toString();
-      const url = `${this.baseURL}${this.getEndpoint('a8tPay')}?${qs}`;
-
-      console.log(`[GameServer] GET ${url}  (a8t_pay)`);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-      try {
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        const text = await res.text();
-
-        // 兼容多种成功响应格式
-        try {
-          const json = JSON.parse(text);
-          const ok = json.code === 0 || json.msg === 'success' ||
-            (json.result && String(json.result).toLowerCase().includes('success'));
-          if (ok) return { code: 0, message: 'ok', data: json };
-          throw new Error(`a8t_pay 失败: ${JSON.stringify(json).substring(0, 500)}`);
-        } catch (parseErr) {
-          if (text.trim().toLowerCase() === 'success') {
-            return { code: 0, message: 'ok' };
-          }
-          throw parseErr;
-        }
-      } catch (err: any) {
-        clearTimeout(timeoutId);
-        throw new Error(`[GameServer] a8t_pay 失败: ${err?.message || err}`);
-      }
-    }
-
-    // REST 模式：复用 deliverOrder 端点
-    return this.request('a8tPay', params);
   }
 
   /** 支付到账通知 */
