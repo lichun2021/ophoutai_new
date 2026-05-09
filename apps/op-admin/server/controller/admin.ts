@@ -2787,16 +2787,16 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
         pr.msg,
         pr.server_url,
         pr.device,
-        COALESCE(u.channel_code, pr.channel_code) as channel_code,
+        COALESCE(ANY_VALUE(u.channel_code), pr.channel_code) as channel_code,
         pr.game_code,
         pr.payment_status,
         pr.ptb_before,
         pr.ptb_change,
         pr.ptb_after,
-        g.game_name,
-        COALESCE(su.wuid, pr.wuid) as role_id_from_join,
-        gc.character_name as role_name,
-        ps.payment_channel
+        ANY_VALUE(g.game_name) as game_name,
+        COALESCE(ANY_VALUE(su.wuid), pr.wuid) as role_id_from_join,
+        ANY_VALUE(gc.character_name) as role_name,
+        ANY_VALUE(ps.payment_channel) as payment_channel
     FROM paymentrecords pr 
     LEFT JOIN users u ON pr.user_id = u.id 
     LEFT JOIN games g ON u.game_code = g.game_code

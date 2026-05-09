@@ -652,38 +652,6 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         console.log(`[deliverPackageToGameViaIDIP] 获取到礼包配置:`, JSON.stringify(giftPackage, null, 2));
 
-        // 解析礼包物品
-        let giftItems;
-        try {
-            if (typeof giftPackage.gift_items === 'string') {
-                giftItems = JSON.parse(giftPackage.gift_items);
-            } else {
-                giftItems = giftPackage.gift_items;
-            }
-        } catch (error) {
-            console.error(`[deliverPackageToGameViaIDIP] 解析礼包物品失败:`, error);
-            giftItems = [];
-        }
-
-        // 规范化物资列表（兼容多种字段命名，包括 i/a 形式）
-        const toNumber = (v: any) => {
-            const n = Number(v);
-            return Number.isFinite(n) ? n : NaN;
-        };
-        const sendItemList = Array.isArray(giftItems) ? giftItems.map((it: any) => {
-            const id = toNumber(it?.ItemId ?? it?.itemId ?? it?.id ?? it?.ItemID ?? it?.item_id ?? it?.i);
-            const num = toNumber(it?.ItemNum ?? it?.itemNum ?? it?.num ?? it?.quantity ?? it?.count ?? it?.a);
-            return { ItemId: id, ItemNum: num };
-        }).filter(x => Number.isFinite(x.ItemId) && x.ItemId > 0 && Number.isFinite(x.ItemNum) && x.ItemNum > 0) : [];
-
-        if (sendItemList.length === 0) {
-            await sql({
-                query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, remark = CONCAT(remark, " | 发放失败: 物资列表为空或无效") WHERE id = ?',
-                values: ['failed', purchaseRecordId],
-            });
-            return { success: false, message: '物资列表为空或无效' };
-        }
-
         // 更新状态为正在发送
         await sql({
             query: 'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, delivery_attempts = delivery_attempts + 1 WHERE id = ?',
@@ -712,9 +680,8 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
         }
 
         const characterInfo = gcRows[0];
-        const subUserId = characterInfo.subuser_id || record.user_id;
         const actualServerId = characterInfo.server_id || serverId;
-        console.log(`[deliverPackageToGameViaIDIP] 角色UUID=${actualRoleId}, 子账号ID=${subUserId}, 服务器ID=${actualServerId}`);
+        console.log(`[deliverPackageToGameViaIDIP] 角色UUID=${actualRoleId}, 服务器ID=${actualServerId}`);
 
         // 从 GameServers 读取区服配置（使用从角色表获取的 server_id）
         const worldId = Number(actualServerId);
@@ -731,24 +698,18 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         console.log(`[deliverPackageToGameViaIDIP] 找到服务器配置: name=${serverCfg.name}, webhost=${serverCfg.webhost}`);
 
-        // 使用 GameServerClient 发放物资
+        // 使用 GameServerClient 调用 /a8t_pay 发货
         const webhost = String(serverCfg.webhost || '').replace(/\/+$/, '');
         const client = createGameServerClient(webhost, 'idip', 10000);
 
-        // 平台默认 android（礼包系统暂不区分平台）
-        const plat: Platform = 'android';
-
-        console.log(`[deliverPackageToGameViaIDIP] 发送物资邮件: openId=${subUserId}, serverId=${actualServerId}, roleId=${actualRoleId}`);
+        console.log(`[deliverPackageToGameViaIDIP] 调用 a8t_pay 发货: playerId=${actualRoleId}, goodsId=${giftPackage.package_code}, billNo=${record.mch_order_id || purchaseRecordId}`);
 
         try {
-            const resp = await client.sendItemMail({
-                openId: String(subUserId),
-                serverId: String(actualServerId),
-                platform: plat,
-                roleId: actualRoleId,
-                mailTitle: giftPackage.package_name || '系统发放',
-                mailContent: `您购买的${giftPackage.package_name}已到账，请查收！`,
-                items: sendItemList.map(i => ({ itemId: i.ItemId, itemCount: i.ItemNum })),
+            const resp = await client.deliverOrderA8tPay({
+                playerId: actualRoleId,
+                goodsId: giftPackage.package_code,
+                billNo: record.mch_order_id || String(purchaseRecordId),
+                rechargeType: '1',
             });
 
             // 更新游戏响应数据
@@ -762,7 +723,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
                 query: 'UPDATE giftpackagepurchaserecords SET status = ?, game_delivery_status = ?, delivered_at = NOW() WHERE id = ?',
                 values: ['delivered', 'success', purchaseRecordId],
             });
-            console.log(`[deliverPackageToGameViaIDIP] 礼包发放成功: 记录ID=${purchaseRecordId}`);
+            console.log(`[deliverPackageToGameViaIDIP] 礼包发放成功 (a8t_pay): 记录ID=${purchaseRecordId}`);
             return { success: true, message: '发放成功' };
 
         } catch (err: any) {
