@@ -663,7 +663,7 @@ export class GameServerClient {
  * 根据游戏服务器配置创建客户端实例
  *
  * @param webhost  游戏服基础地址
- * @param protocol 协议模式（默认从系统参数读取，未配置时使用 idip）
+ * @param protocol 协议模式（默认 rest；idip 为旧协议兼容保留，已废弃）
  */
 export function createGameServerClient(
   webhost: string,
@@ -673,7 +673,7 @@ export function createGameServerClient(
 ): GameServerClient {
   return new GameServerClient({
     baseURL: webhost,
-    protocol: protocol ?? 'idip',
+    protocol: protocol ?? 'rest',
     timeoutMs: timeoutMs ?? parseInt(process.env.GM_TIMEOUT_MS || '10000'),
     signKey: signKey ?? process.env.API_SIGN_KEY ?? '',
   });

@@ -733,7 +733,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         // 使用 GameServerClient 发放物资
         const webhost = String(serverCfg.webhost || '').replace(/\/+$/, '');
-        const client = createGameServerClient(webhost, 'idip', 10000);
+        const client = createGameServerClient(webhost, 'rest', 10000);
 
         // 平台默认 android（礼包系统暂不区分平台）
         const plat: Platform = 'android';

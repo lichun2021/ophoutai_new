@@ -1239,7 +1239,7 @@ router.get('/admin/server-status', defineEventHandler(async (event) => {
 
     try {
       const webhost = (s.webhost || '').replace(/\/$/, '');
-      const client = createGameServerClient(webhost, 'idip', 3000);
+      const client = createGameServerClient(webhost, 'rest', 3000);
       const resp = await client.getServerStatus({ serverId: String(worldId), areaId });
       const data = resp.data || {} as any;
 

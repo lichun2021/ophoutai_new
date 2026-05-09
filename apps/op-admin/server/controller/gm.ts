@@ -12,7 +12,7 @@ const createClientForServer = async (identifier: string): Promise<GameServerClie
   const cfg = await getGameServerByIdentifier(identifier).catch(() => null);
   const webhost = (cfg?.webhost || process.env.GM_BASE_URL || '').replace(/\/+$/, '');
   const timeoutMs = parseInt(process.env.GM_TIMEOUT_MS || '10000');
-  return createGameServerClient(webhost, 'idip', timeoutMs);
+  return createGameServerClient(webhost, 'rest', timeoutMs);
 };
 
 // 解析平台字符串
