@@ -46,4 +46,12 @@ export default defineNuxtConfig({
     "@nuxt/ui",
     "@nuxtjs/tailwindcss"
   ],
+
+  // 使用本地安装的 heroicons 包，禁止运行时从 CDN 拉取图标（需重新构建生效）
+  icon: {
+    serverBundle: {
+      collections: ['heroicons']
+    },
+    fallbackToApi: false
+  }
 })

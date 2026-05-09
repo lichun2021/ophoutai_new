@@ -9,6 +9,8 @@
  * 第三方游戏服务器只需实现 rest 协议即可接入。
  */
 
+import { createHmac } from 'node:crypto';
+
 // ==================== 类型定义 ====================
 
 export type Platform = 'android' | 'ios';
@@ -185,9 +187,8 @@ function genNonce(): string {
  * 签名算法：HMAC-SHA256(timestamp + "\n" + nonce + "\n" + body, signKey)
  */
 function hmacSign(timestamp: string, nonce: string, body: string, signKey: string): string {
-  const crypto = require('crypto');
   const payload = `${timestamp}\n${nonce}\n${body}`;
-  return crypto.createHmac('sha256', signKey).update(payload).digest('hex');
+  return createHmac('sha256', signKey).update(payload).digest('hex');
 }
 
 // ==================== 客户端类 ====================
@@ -265,7 +266,8 @@ export class GameServerClient {
       console.log(`[GameServer] HTTP ${response.status} ${response.statusText}`);
 
       const responseText = await response.text();
-      console.log(`[GameServer] 响应:`, responseText);
+      console.log(`[GameServer] 响应内容:`, responseText.length > 2000 ? responseText.slice(0, 2000) + '...(截断)' : responseText);
+      console.log(`[GameServer] ==========================================`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

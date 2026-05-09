@@ -67,9 +67,6 @@ function buildSignBase(params: Record<string, any>) {
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
   const apiKey = config.public?.apiSignKey || 'q12eiedu24fi3rf434g34g';
-  // 【调试】启动时打印前端使用的 apiKey
-  console.log('[API_SIGN][FRONTEND_INIT] apiKey =', `"${apiKey}"`);
-  console.log('[API_SIGN][FRONTEND_INIT] config.public.apiSignKey =', config.public?.apiSignKey);
   // 全局记录已签名的请求（用 WeakSet 记录 options 对象，避免内存泄漏）
   const signedRequests = new WeakSet<any>();
 
@@ -127,15 +124,6 @@ export default defineNuxtPlugin((nuxtApp) => {
       const sign = md5Hex(buildSignBase(payload) + token);
 
       // 【调试】打印签名计算过程
-      console.log('[API_SIGN][FRONTEND] ---- 签名生成 ----');
-      console.log('[API_SIGN][FRONTEND] path:', pathname, '| method:', methodUpper);
-      console.log('[API_SIGN][FRONTEND] apiKey:', `"${apiKey}"`);
-      console.log('[API_SIGN][FRONTEND] ts:', ts, '| nonce:', nonce);
-      console.log('[API_SIGN][FRONTEND] ymd:', ymd);
-      console.log('[API_SIGN][FRONTEND] md5Input for token:', `"${ymd}${apiKey}"`);
-      console.log('[API_SIGN][FRONTEND] token:', token);
-      console.log('[API_SIGN][FRONTEND] signBase:', `"${buildSignBase(payload)}"`);
-      console.log('[API_SIGN][FRONTEND] sign:', sign);
 
       // 生成签名
       const method2 = methodUpper;

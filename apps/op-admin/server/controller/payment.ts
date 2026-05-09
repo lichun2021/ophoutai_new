@@ -854,6 +854,9 @@ async function deductPlatformCoinsForPayment(
                             });
 
                             const responseText = await response.text();
+                            console.log('[API到账] HTTP状态:', response.status, response.statusText);
+                            console.log('[API到账] 完整响应体:', JSON.stringify(responseText));
+                            console.log('[API到账] 响应Headers:', Object.fromEntries(response.headers.entries()));
                             const currentTime = getCurrentFormattedTime();
                             if (response.ok) {
                                 try {
@@ -878,27 +881,18 @@ async function deductPlatformCoinsForPayment(
                                         });
                                     }
                                 } catch (parseError) {
-                                    // 兼容纯文本 "success" 响应
-                                    if (responseText.trim().toLowerCase() === 'success') {
-                                        console.log('API到账--Success:', { transactionId, playerId });
-                                        apiDeliveryHandled = true;
-                                        await PaymentModel.updateByTransactionId(transactionId, {
-                                            payment_status: 3,
-                                            notify_at: currentTime,
-                                            msg: 'API到账成功:纯文本success响应'
-                                        });
-                                    } else {
-                                        const errorMsg = `API到账响应解析失败:${responseText.substring(0, 200)}`;
-                                        console.error('API到账--响应解析失败:', {
-                                            transactionId,
-                                            playerId,
-                                            responseText: responseText.substring(0, 200),
-                                            parseError: parseError instanceof Error ? parseError.message : 'Unknown error'
-                                        });
-                                        await PaymentModel.updateByTransactionId(transactionId, {
-                                            msg: errorMsg
-                                        });
-                                    }
+
+                                    const errorMsg = `API到账响应解析失败:${responseText.substring(0, 200)}`;
+                                    console.error('API到账--响应解析失败:', {
+                                        transactionId,
+                                        playerId,
+                                        responseText: responseText.substring(0, 200),
+                                        parseError: parseError instanceof Error ? parseError.message : 'Unknown error'
+                                    });
+                                    await PaymentModel.updateByTransactionId(transactionId, {
+                                        msg: errorMsg
+                                    });
+
                                 }
                             } else {
                                 // HTTP 请求失败
@@ -945,25 +939,35 @@ async function deductPlatformCoinsForPayment(
                     console.error('[平台币支付] API到账失败，退还平台币:', transactionId);
                     const { getPaymentRefundEnabled } = await import('../model/systemParams');
                     const refundEnabled = await getPaymentRefundEnabled();
+                    console.log('[平台币支付] 退款开关:', refundEnabled, ' transactionId:', transactionId);
                     if (refundEnabled) {
                         const refundResult = await UserModel.updatePlatformCoinsUnified(userId, amount, 6);
+                        console.log('[平台币退款] 退款结果:', { transactionId, success: refundResult.success, newBalance: refundResult.newBalance, amount });
+                        if (!refundResult.success) {
+                            console.error('[平台币退款] 退款失败！用户可能未拿到退款:', refundResult.message);
+                        }
+                        // ptb_change=0 表示净变化为0（扣了又退），ptb_after 回到扣款前余额
+                        const refundedBalance = refundResult.newBalance ?? oldBalance;
                         await PaymentModel.updateByTransactionId(transactionId, {
-                            payment_status: 2, // 失败
-                            ptb_change: 0,
-                            ptb_after: refundResult.newBalance || oldBalance,
-                            msg: 'API_DELIVERY_FAILED:API到账失败，已退款'
+                            ptb_change: 0,     // 净变化=0，已扣已退
+                            ptb_after: refundedBalance,
+                            msg: refundResult.success
+                                ? `API_DELIVERY_FAILED:API到账失败，已退款${amount}，余额恢复至${refundedBalance}`
+                                : `API_DELIVERY_FAILED_REFUND_ERR:退款失败-${refundResult.message}`
                         });
+                        // 单独更新状态，确保写入（避免 updateByTransactionId 合并时被跳过）
+                        await PaymentModel.updateState(transactionId, { payment_status: 2 });
                         return {
                             success: false,
                             code: -13,
-                            msg: "到账失败，已退还平台币",
+                            msg: refundResult.success ? "到账失败，已退还平台币" : "到账失败，退款异常，请联系管理员",
                             data: null
                         };
                     }
                     await PaymentModel.updateByTransactionId(transactionId, {
-                        payment_status: 1,
                         msg: 'API_DELIVERY_FAILED_NO_REFUND:API到账失败（退款关闭）'
                     } as any);
+                    await PaymentModel.updateState(transactionId, { payment_status: 2 });
                     return {
                         success: false,
                         code: -13,

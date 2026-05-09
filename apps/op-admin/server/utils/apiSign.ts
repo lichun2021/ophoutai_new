@@ -4,11 +4,7 @@ import { getRedisCluster } from './redis-cluster';
 const DEFAULT_SALT = process.env.API_SIGN_KEY || 'q12eiedu24fi3rf434g34g';
 const DEFAULT_SKEW_SECONDS = parseInt(process.env.API_SIGN_SKEW_SEC || '60', 10); // 1 分钟
 
-// 启动时打印一次，确认运行时使用的 salt 值
-console.log('[API_SIGN][INIT] ================================');
-console.log('[API_SIGN][INIT] process.env.API_SIGN_KEY =', process.env.API_SIGN_KEY ? `"${process.env.API_SIGN_KEY}"` : '(未设置，使用默认值)');
-console.log('[API_SIGN][INIT] DEFAULT_SALT =', `"${DEFAULT_SALT}"`);
-console.log('[API_SIGN][INIT] ================================');
+
 
 // 使用与前端完全一致的 MD5 实现
 function md5(input: string): string {

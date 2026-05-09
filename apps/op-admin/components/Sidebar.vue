@@ -513,23 +513,6 @@
                 游戏运营
               </UButton>
 
-              <!-- 实际到账查询 -->
-              <UButton 
-                v-if="isSuperAdmin"
-                :to="'/admin/operation/game-checkorder'"
-                variant="ghost" 
-                color="gray"
-                :class="{ 'nav-active': route.path === '/admin/operation/game-checkorder' }"
-                class="nav-subitem"
-                justify="start"
-                size="sm"
-              >
-                <template #leading>
-                  <UIcon name="i-heroicons-banknotes" class="w-4 h-4" />
-                </template>
-                游戏内购
-              </UButton>
-
                             <!-- GM 操作日志 -->
               <UButton 
                 v-if="isSuperAdmin"

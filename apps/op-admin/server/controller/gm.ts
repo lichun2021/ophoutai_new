@@ -4,14 +4,23 @@ import { verifyAdminSession } from '../utils/auth';
 import { createGameServerClient, type GameServerClient, type Platform } from './gameServerClient';
 import type { RowDataPacket } from 'mysql2';
 import { gameDbSql, getGameDatabases, checkGameDatabase } from '../db/gameDb';
-import { listActive, getByIdentifier as getGameServerByIdentifier } from '../model/gameServers';
+import { listActive, getByIdentifier as getGameServerByIdentifier, getByWorldId } from '../model/gameServers';
 import { insertGmOperationLog } from '../model/gmOperationLogs';
 
-// 根据区服动态创建 GameServerClient（优先使用 GameServers.webhost）
+// 根据区服动态创建 GameServerClient（和支付一样，通过 server_id 查找 webhost）
 const createClientForServer = async (identifier: string): Promise<GameServerClient> => {
-  const cfg = await getGameServerByIdentifier(identifier).catch(() => null);
+  const raw = String(identifier || '').trim();
+  const asNumber = Number(raw);
+  // 数字型 identifier 优先用 getByWorldId（自动处理 1→10001 偏移）
+  const cfg = Number.isFinite(asNumber) && asNumber > 0
+    ? await getByWorldId(asNumber).catch(() => null)
+    : await getGameServerByIdentifier(raw).catch(() => null);
   const webhost = (cfg?.webhost || process.env.GM_BASE_URL || '').replace(/\/+$/, '');
   const timeoutMs = parseInt(process.env.GM_TIMEOUT_MS || '10000');
+  console.log(`[createClientForServer] identifier="${identifier}" server_id=${cfg?.server_id} webhost="${webhost}"`);
+  if (!webhost) {
+    throw new Error(`未找到服务器配置：identifier="${identifier}"，请在"服务器列表"中配置该区服的 webhost 地址`);
+  }
   return createGameServerClient(webhost, 'rest', timeoutMs);
 };
 
