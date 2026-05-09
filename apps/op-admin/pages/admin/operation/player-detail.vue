@@ -113,6 +113,23 @@
                 </span>
               </div>
             </div>
+            <div class="summary-item" style="grid-column: 1 / -1">
+              <span class="label">备注</span>
+              <div class="value remark-value">
+                <span v-if="result.user.remark" class="remark-text">{{ result.user.remark }}</span>
+                <span v-else class="text-gray-400 italic text-sm">暂无备注</span>
+                <UButton
+                  size="xs"
+                  color="teal"
+                  variant="outline"
+                  class="ml-2"
+                  icon="i-heroicons-pencil-square"
+                  @click="openRemarkDialog"
+                >
+                  编辑备注
+                </UButton>
+              </div>
+            </div>
           </div>
         </UCard>
 
@@ -417,6 +434,51 @@
       </template>
     </UCard>
   </UModal>
+
+  <!-- 备注编辑弹窗 -->
+  <UModal v-model="remarkDialogVisible" :ui="{ width: 'w-full max-w-md' }">
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-semibold text-gray-900">编辑玩家备注</h3>
+      </template>
+
+      <div class="space-y-4">
+        <div class="text-sm text-gray-600">
+          当前用户：<span class="font-semibold text-gray-900">{{ result?.user?.username }}</span>
+        </div>
+        <UFormGroup label="备注内容">
+          <UTextarea
+            v-model="remarkInput"
+            placeholder="请输入备注内容（最多 500 字）"
+            :rows="4"
+            :maxlength="500"
+            autocomplete="off"
+          />
+        </UFormGroup>
+        <div class="text-right text-xs text-gray-400">{{ remarkInput.length }} / 500</div>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <UButton
+            color="gray"
+            variant="outline"
+            @click="remarkDialogVisible = false"
+            :disabled="savingRemark"
+          >
+            取消
+          </UButton>
+          <UButton
+            color="teal"
+            :loading="savingRemark"
+            @click="submitRemark"
+          >
+            保存备注
+          </UButton>
+        </div>
+      </template>
+    </UCard>
+  </UModal>
 </template>
 
 <script setup>
@@ -442,6 +504,9 @@ const newChannelCode = ref('')
 const updatingChannel = ref(false)
 const channelOptions = ref([])
 const loadingChannels = ref(false)
+const remarkDialogVisible = ref(false)
+const remarkInput = ref('')
+const savingRemark = ref(false)
 
 const handleSearch = async () => {
   const keyword = (userIdInput.value || '').toString().trim()
@@ -693,6 +758,51 @@ const submitNewChannel = async () => {
   }
 }
 
+const openRemarkDialog = () => {
+  if (!result.value?.user?.id) {
+    toast.add({ title: '请先查询玩家信息', color: 'red' })
+    return
+  }
+  remarkInput.value = result.value.user.remark || ''
+  remarkDialogVisible.value = true
+}
+
+const submitRemark = async () => {
+  if (savingRemark.value) return
+  if (!result.value?.user?.id) {
+    toast.add({ title: '未找到玩家信息', color: 'red' })
+    return
+  }
+  try {
+    savingRemark.value = true
+    const response = await $fetch('/api/admin/player/update-remark', {
+      method: 'POST',
+      body: {
+        user_id: result.value.user.id,
+        remark: remarkInput.value
+      }
+    })
+    if (response?.success) {
+      result.value.user.remark = remarkInput.value
+      toast.add({
+        title: '备注已保存',
+        color: 'green'
+      })
+      remarkDialogVisible.value = false
+    } else {
+      throw new Error(response?.message || '保存失败')
+    }
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error.message || '请稍后再试',
+      color: 'red'
+    })
+  } finally {
+    savingRemark.value = false
+  }
+}
+
 const formatNumber = (value) => {
   if (value === null || value === undefined) return '0'
   return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
@@ -767,6 +877,14 @@ const isGiftOrder = (serverUrl) => {
 
 .password-value {
   @apply flex items-center gap-2;
+}
+
+.remark-value {
+  @apply flex items-start gap-2 flex-wrap;
+}
+
+.remark-text {
+  @apply text-sm text-gray-700 whitespace-pre-wrap break-words flex-1;
 }
 </style>
 

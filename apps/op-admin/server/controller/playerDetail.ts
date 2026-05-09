@@ -97,7 +97,7 @@ export const getPlayerDetail = async (evt: H3Event) => {
             throw createError({ statusCode: 400, message: '请输入有效的用户标识' });
         }
 
-        const baseUserFields = 'id, username, password, platform_coins, created_at, status, thirdparty_uid, channel_code';
+        const baseUserFields = 'id, username, password, platform_coins, created_at, status, thirdparty_uid, channel_code, remark';
 
         const fetchUserById = async (id: number) => {
             if (!Number.isInteger(id) || id <= 0) {
@@ -398,6 +398,7 @@ export const getPlayerDetail = async (evt: H3Event) => {
                     createdAt: user.created_at,
                     status: user.status || 0,
                     bannedAt: bannedAt,
+                    remark: user.remark || '',
                 },
                 summary: {
                     totalCashAmount,
@@ -424,3 +425,29 @@ export const getPlayerDetail = async (evt: H3Event) => {
     }
 };
 
+// 更新玩家备注
+export const updateRemark = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        const userId = body?.user_id;
+        const remark = body?.remark ?? '';
+
+        if (!userId) {
+            throw createError({ statusCode: 400, message: '缺少 user_id 参数' });
+        }
+
+        const result = await sql({
+            query: 'UPDATE Users SET remark = ? WHERE id = ?',
+            values: [String(remark).slice(0, 500), Number(userId)],
+        }) as any;
+
+        if (result.affectedRows === 0) {
+            throw createError({ statusCode: 404, message: '用户不存在' });
+        }
+
+        return { success: true, message: '备注已保存' };
+    } catch (error: any) {
+        console.error('[Player Detail] 更新备注失败:', error);
+        throw error;
+    }
+};

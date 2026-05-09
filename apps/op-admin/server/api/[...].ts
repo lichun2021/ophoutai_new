@@ -27,14 +27,14 @@ const withLogging = (handler: Function, apiName: string) => {
   return defineEventHandler(async (event: H3Event) => {
     const startTime = Date.now();
     const requestId = `req_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // ========== 访问日志 ==========
     const headers = getHeaders(event);
     const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
     const userAgent = (headers['user-agent'] as string) || 'unknown';
     const method = getMethod(event);
     const url = getRequestURL(event);
-    
+
     let requestBody: any = {};
     let queryParams: any = {};
     try {
@@ -45,14 +45,14 @@ const withLogging = (handler: Function, apiName: string) => {
     } catch (e) {
       requestBody = {};
     }
-    
+
     // 访问日志（仅记录关键信息）
     console.log(`[API] ${method} ${url.pathname} | IP: ${ipAddress.split(',')[0]}`);
 
     let response: any = {};
     let error: any = null;
     let statusCode = 200;
-    
+
     try {
       // 调用实际的处理函数
       // 在处理前校验签名（跳过公开接口）
@@ -85,13 +85,13 @@ const withLogging = (handler: Function, apiName: string) => {
         message: e.statusMessage || e.message || "系统错误",
         data: null
       };
-      try { setResponseStatus(event, statusCode); } catch {}
+      try { setResponseStatus(event, statusCode); } catch { }
     }
-    
+
     const endTime = Date.now();
     const processingTime = endTime - startTime;
-    
-    
+
+
     // 判断响应是否成功
     let isSuccess = false;
     if (response && typeof response === 'object') {
@@ -107,14 +107,14 @@ const withLogging = (handler: Function, apiName: string) => {
     } else if (!error && statusCode < 400) {
       isSuccess = true;
     }
-    
+
     if (error) {
       console.error(`[API] 错误: ${error.message}`);
     }
-    
+
     // console.log(`[OUT] 响应体: ${JSON.stringify(response)}`);
     console.log('==========================================');
-    
+
     // 写入结构化日志
     try {
       const logEntry = {
@@ -135,13 +135,13 @@ const withLogging = (handler: Function, apiName: string) => {
         },
         response: response
       };
-      
+
       // 这里可以扩展为写入日志文件或日志系统
       // console.log('[LOG] 结构化日志:', JSON.stringify(logEntry));
     } catch (logError) {
       console.error('[ERROR] 日志记录失败:', logError);
     }
-    
+
     return response;
   });
 };
@@ -160,23 +160,23 @@ const adminWrap = (handler: Function, apiName: string) => {
     if (qId !== undefined && String(qId) !== String(v.adminId)) {
       throw createError({ statusCode: 403, statusMessage: 'Forbidden: adminId mismatch' });
     }
-    if (['POST','PUT','PATCH','DELETE'].includes((getMethod(event) || 'GET').toUpperCase())) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes((getMethod(event) || 'GET').toUpperCase())) {
       try {
         const body: any = await readBody(event);
         const bId = body?.adminId ?? body?.admin_id;
         if (bId !== undefined && String(bId) !== String(v.adminId)) {
           throw createError({ statusCode: 403, statusMessage: 'Forbidden: adminId mismatch' });
         }
-      } catch {}
+      } catch { }
     }
     try {
       // 🔐 身份加固：强制清理可能存在的伪造 Header，确保 authorization 仅来自经过验证的 Session
       delete event.node.req.headers['authorization'];
       delete event.node.req.headers['Authorization'];
-      
+
       // 统一从会话注入管理员ID，禁止通过参数伪造
       event.node.req.headers['authorization'] = String(v.adminId);
-    } catch {}
+    } catch { }
     return await handler(event);
   }, apiName);
 };
@@ -190,7 +190,7 @@ const adminWrap = (handler: Function, apiName: string) => {
 router.post('/admin/login', defineEventHandler(async (event) => {
   // 获取客户端 IP（提前获取，用于日志）
   const headers = getHeaders(event);
-  
+
   // 调试：打印所有相关的 IP 头信息
   console.log(`[Admin Login][DEBUG] 所有 IP 相关头信息:`, {
     'cf-connecting-ip': headers['cf-connecting-ip'] || '无',
@@ -198,12 +198,12 @@ router.post('/admin/login', defineEventHandler(async (event) => {
     'x-forwarded-for': headers['x-forwarded-for'] || '无',
     'socket': event.node.req.socket?.remoteAddress || '无'
   });
-  
+
   // 优先级：X-Forwarded-For 第一个 IP > CF-Connecting-IP > X-Real-IP > socket
   // 适配 Cloudflare + Web Proxy + 源站 的架构
   let clientIp = 'unknown';
   let ipSource = 'unknown';
-  
+
   if (headers['x-forwarded-for']) {
     // X-Forwarded-For: 真实客户端IP, Cloudflare IP, ...
     // 取第一个 IP（真实客户端 IP）
@@ -224,22 +224,22 @@ router.post('/admin/login', defineEventHandler(async (event) => {
     clientIp = event.node.req.socket.remoteAddress;
     ipSource = 'socket';
   }
-  
+
   // 清理 IPv6 前缀（::ffff:192.168.1.1 -> 192.168.1.1）
   if (clientIp.startsWith('::ffff:')) {
     clientIp = clientIp.substring(7);
   }
-  
+
   console.log(`[Admin Login] 登录请求 - 客户端IP: ${clientIp} (来源: ${ipSource})`);
-  
+
   // IP 白名单检查（动态读取配置文件，支持热更新）
   let whitelist = '*';
   let configFound = false;
-  
+
   try {
     const fs = await import('fs');
     const path = await import('path');
-    
+
     // 尝试多个可能的路径
     const possiblePaths = [
       // 开发环境路径
@@ -255,10 +255,10 @@ router.post('/admin/login', defineEventHandler(async (event) => {
       // 绝对路径（如果设置了环境变量）
       process.env.SECURITY_CONFIG_PATH || ''
     ];
-    
+
     console.log(`[Admin Login] 当前工作目录: ${process.cwd()}`);
     console.log(`[Admin Login] 尝试查找配置文件...`);
-    
+
     let configPath = '';
     for (const tryPath of possiblePaths) {
       if (tryPath && fs.existsSync(tryPath)) {
@@ -268,7 +268,7 @@ router.post('/admin/login', defineEventHandler(async (event) => {
         break;
       }
     }
-    
+
     if (configPath) {
       const configContent = fs.readFileSync(configPath, 'utf-8');
       const securityConfig = JSON.parse(configContent);
@@ -281,12 +281,12 @@ router.post('/admin/login', defineEventHandler(async (event) => {
   } catch (err) {
     console.error('[Admin Login] 读取安全配置失败，使用默认值 *', err);
   }
-  
+
   // 白名单验证
   if (whitelist !== '*') {
     const allowedIps = whitelist.split(',').map((ip: string) => ip.trim()).filter(Boolean);
     console.log(`[Admin Login] 开始验证 IP: ${clientIp}, 允许列表: [${allowedIps.join(', ')}]`);
-    
+
     const isAllowed = allowedIps.some((allowedIp: string) => {
       // 支持 CIDR 或精确匹配
       if (allowedIp.includes('/')) {
@@ -301,20 +301,20 @@ router.post('/admin/login', defineEventHandler(async (event) => {
       console.log(`[Admin Login] 精确匹配: ${clientIp} vs ${allowedIp} => ${matched}`);
       return matched;
     });
-    
+
     if (!isAllowed) {
       console.log(`[Admin Login] ❌ IP 白名单拦截: ${clientIp}, 允许列表: ${whitelist}`);
-      throw createError({ 
-        statusCode: 403, 
-        statusMessage: 'IP not allowed' 
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'IP not allowed'
       });
     }
-    
+
     console.log(`[Admin Login] ✅ IP 验证通过: ${clientIp}`);
   } else {
     console.log(`[Admin Login] ⚠️ 白名单为 *，不限制访问 (IP: ${clientIp})`);
   }
-  
+
   const result: any = await AdminCtrl.login(event);
   try {
     // 登录成功则设置短期会话 Cookie（占位实现，可后续改为真正签名会话）
@@ -329,7 +329,7 @@ router.post('/admin/login', defineEventHandler(async (event) => {
         `admin_sid=${sid}; Path=/; HttpOnly; SameSite=Lax`
       ]);
     }
-  } catch {}
+  } catch { }
   return result;
 }));
 
@@ -568,6 +568,7 @@ router.post('/admin/payment-routing/settings/update', adminWrap(PaymentRoutingCt
  * 玩家详情查询
  */
 router.post('/admin/player/detail', adminWrap(PlayerDetailCtrl.getPlayerDetail, '获取玩家详情'));
+router.post('/admin/player/update-remark', adminWrap(PlayerDetailCtrl.updateRemark, '更新玩家备注'));
 
 /**
  * 创建支付设置
@@ -897,7 +898,7 @@ router.post('/user/login', defineEventHandler(async (event) => {
         'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax'
       ]);
     }
-  } catch {}
+  } catch { }
   return result;
 }));
 
@@ -1159,6 +1160,7 @@ router.get('/gm/servers', withLogging(GMCtrl.getServers, 'GM获取服务器列�
  */
 router.get('/gm/players', withLogging(GMCtrl.getPlayers, 'GM获取玩家列表'));
 
+
 /**
  * 封号
  * @route POST /api/gm/ban
@@ -1177,11 +1179,11 @@ router.post('/gm/unban', adminWrap(GMCtrl.unbanPlayer, 'GM解封'));
  */
 router.post('/gm/send-items', adminWrap(GMCtrl.sendItems, 'GM发放物资'));
 
-  /**
-   * 批量发放物资（顺序执行，0.5s 间隔，上限 50 人）
-   * @route POST /api/gm/send-items-batch
-   */
-  router.post('/gm/send-items-batch', adminWrap(GMCtrl.sendItemsBatch, 'GM批量发放物资'));
+/**
+ * 批量发放物资（顺序执行，0.5s 间隔，上限 50 人）
+ * @route POST /api/gm/send-items-batch
+ */
+router.post('/gm/send-items-batch', adminWrap(GMCtrl.sendItemsBatch, 'GM批量发放物资'));
 
 /**
  * GM充值
@@ -1276,20 +1278,20 @@ router.get('/admin/server-status', defineEventHandler(async (event) => {
 
       const json = await res.json().catch(() => ({}));
       const body: any = (json && json.body) || {};
-      
+
       const registerNum = Number(body.RegisterNum || 0);
       const onlineNum = Number(body.OnlineNum || 0);
-      
+
       // 兼容新版本的 IosOnlineNum 和 AndroidOnlineNum 参数
       // 如果没有这些参数，默认为 0
       const onlineIOS = Number(body.IosOnlineNum || 0);
       const onlineAndroid = Number(body.AndroidOnlineNum || 0);
-      
+
       console.log(`[服务器状态] ${s.name} - 总在线: ${onlineNum}, iOS: ${onlineIOS}, Android: ${onlineAndroid}, 注册数: ${registerNum}`);
-      
+
       const svrNameRaw = body.SvrName || '';
       let svrName = String(svrNameRaw);
-      try { svrName = decodeURIComponent(svrNameRaw); } catch {}
+      try { svrName = decodeURIComponent(svrNameRaw); } catch { }
 
       return {
         id: s.id,

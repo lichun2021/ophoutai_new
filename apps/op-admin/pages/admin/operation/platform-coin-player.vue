@@ -96,7 +96,30 @@
         </div>
       </template>
 
-      <!-- 发放统计 -->
+      <!-- 搜索筛选栏 -->
+      <div class="flex flex-wrap gap-3 mb-4 pb-4 border-b border-gray-100">
+        <UInput
+          v-model="recordFilter.userId"
+          placeholder="按用户ID筛选"
+          icon="i-heroicons-magnifying-glass"
+          class="w-48"
+          type="number"
+          @keyup.enter="applyFilter"
+        />
+        <UInput
+          v-model="recordFilter.startDate"
+          type="date"
+          class="w-44"
+        />
+        <UInput
+          v-model="recordFilter.endDate"
+          type="date"
+          class="w-44"
+        />
+        <UButton color="primary" icon="i-heroicons-magnifying-glass" @click="applyFilter">查询</UButton>
+        <UButton color="gray" variant="outline" icon="i-heroicons-arrow-path" @click="resetFilter">重置</UButton>
+      </div>
+
       <UCard v-if="transactions.length > 0" class="mb-4">
         <template #header>
           <h4 class="text-base font-medium">发放统计</h4>
@@ -221,6 +244,13 @@ const grantLoading = ref(false)
 const currentUserLevel = ref(0)
 const currentChannelCode = ref('')
 
+// 发放记录筛选
+const recordFilter = ref({
+  userId: '',
+  startDate: '',
+  endDate: ''
+})
+
 // Toast通知
 const toast = useToast()
 
@@ -310,20 +340,23 @@ const loadBalance = async () => {
 
 const loadTransactions = async () => {
   try {
+    const body = {
+      channel_code: currentChannelCode.value,
+      page: pagination.value.page,
+      page_size: pagination.value.pageSize
+    }
+    if (recordFilter.value.userId) body.user_id = Number(recordFilter.value.userId)
+    if (recordFilter.value.startDate) body.start_date = recordFilter.value.startDate
+    if (recordFilter.value.endDate) body.end_date = recordFilter.value.endDate
+
     const response = await $fetch('/api/admin/platform-coin-to-player-transactions', {
       method: 'POST',
-      body: {
-        channel_code: currentChannelCode.value,
-        page: pagination.value.page,
-        page_size: pagination.value.pageSize
-      }
+      body
     })
     
     if (response.success) {
       transactions.value = response.data.data
       pagination.value.total = response.data.total
-      
-      // 计算统计数据
       calculateGrantStats()
     }
   } catch (error) {
@@ -473,6 +506,18 @@ const refreshTransactions = async () => {
 
 const changePage = async (page) => {
   pagination.value.page = page
+  await loadTransactions()
+}
+
+// 发放记录筛选
+const applyFilter = async () => {
+  pagination.value.page = 1
+  await loadTransactions()
+}
+
+const resetFilter = async () => {
+  recordFilter.value = { userId: '', startDate: '', endDate: '' }
+  pagination.value.page = 1
   await loadTransactions()
 }
 

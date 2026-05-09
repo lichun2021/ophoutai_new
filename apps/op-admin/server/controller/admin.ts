@@ -4733,7 +4733,7 @@ export const getAdminPlatformCoinTransactions = async(evt: H3Event) => {
 export const getAdminToPlayerTransactions = async(evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        const { channel_code, page = 1, page_size = 20 } = body;
+        const { channel_code, page = 1, page_size = 20, user_id, start_date, end_date } = body;
         
         if (!channel_code) {
             throw createError({
@@ -4742,14 +4742,19 @@ export const getAdminToPlayerTransactions = async(evt: H3Event) => {
             });
         }
         
-        // 安全处理分页参数
         const parsedPage = Math.max(1, parseInt(page.toString()) || 1);
         const parsedPageSize = Math.max(1, Math.min(100, parseInt(page_size.toString()) || 20));
+
+        const filters: { userId?: number; startDate?: string; endDate?: string } = {};
+        if (user_id) filters.userId = Number(user_id);
+        if (start_date) filters.startDate = String(start_date);
+        if (end_date) filters.endDate = String(end_date);
         
         const result = await PlatformCoinsModel.getAdminToPlayerTransactions(
             channel_code,
             parsedPage,
-            parsedPageSize
+            parsedPageSize,
+            filters
         );
         
         return {

@@ -260,9 +260,32 @@ export const getAdminTransactions = async (channelCode: string, page: number = 1
 };
 
 // 获取代理给玩家转账记录
-export const getAdminToPlayerTransactions = async (channelCode: string, page: number = 1, pageSize: number = 20) => {
+export const getAdminToPlayerTransactions = async (
+    channelCode: string,
+    page: number = 1,
+    pageSize: number = 20,
+    filters: { userId?: number; startDate?: string; endDate?: string } = {}
+) => {
     const offset = (page - 1) * pageSize;
-    
+
+    const whereClauses: string[] = ['apt.admin_channel_code = ?'];
+    const whereValues: any[] = [channelCode];
+
+    if (filters.userId) {
+        whereClauses.push('u.id = ?');
+        whereValues.push(filters.userId);
+    }
+    if (filters.startDate) {
+        whereClauses.push('DATE(apt.created_at) >= ?');
+        whereValues.push(filters.startDate);
+    }
+    if (filters.endDate) {
+        whereClauses.push('DATE(apt.created_at) <= ?');
+        whereValues.push(filters.endDate);
+    }
+
+    const whereStr = whereClauses.join(' AND ');
+
     const transactions = await sql({
         query: `SELECT 
                    apt.*,
@@ -271,16 +294,18 @@ export const getAdminToPlayerTransactions = async (channelCode: string, page: nu
                 FROM AdminToPlayerPlatformCoinTransactions apt
                 LEFT JOIN Games g ON apt.game_code = g.game_code
                 LEFT JOIN Users u ON apt.user_thirdparty_uid = u.thirdparty_uid
-                WHERE apt.admin_channel_code = ?
+                WHERE ${whereStr}
                 ORDER BY apt.created_at DESC 
                 LIMIT ? OFFSET ?`,
-        values: [channelCode, pageSize, offset]
+        values: [...whereValues, pageSize, offset]
     });
 
     const countResult = await sql({
-        query: `SELECT COUNT(*) as total FROM AdminToPlayerPlatformCoinTransactions 
-               WHERE admin_channel_code = ?`,
-        values: [channelCode]
+        query: `SELECT COUNT(*) as total
+                FROM AdminToPlayerPlatformCoinTransactions apt
+                LEFT JOIN Users u ON apt.user_thirdparty_uid = u.thirdparty_uid
+                WHERE ${whereStr}`,
+        values: whereValues
     }) as any[];
 
     return {
