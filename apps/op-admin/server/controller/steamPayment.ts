@@ -168,10 +168,10 @@ export const steamInitPay = async (evt: H3Event) => {
         console.log('[Steam Pay] initpay 请求:', body);
 
         const {
-            steam_id,
-            item_id,
-            item_name,
-            amount,
+            steam_id: _steam_id,
+            item_id: _item_id,
+            item_name: _item_name,
+            amount: _amount,
             currency = 'CNY',
             qty = 1,
             language = 'zh',
@@ -179,10 +179,21 @@ export const steamInitPay = async (evt: H3Event) => {
             // 平台内部字段
             user_id,
             sub_user_id,
-            world_id,
+            world_id: _world_id,
             server_url,
-            wuid
+            wuid: _wuid,
+            // 兼容通用 SDK 参数格式
+            k, p, c, x, h, y, f
         } = body;
+
+        // 参数兼容映射：优先用专用字段，回退到通用 SDK 参数
+        const steam_id = _steam_id || c || '';   // steam_id 或 c(设备/steamid)
+        const item_id = _item_id || k || y || ''; // item_id 或 k(商品名) 或 y(attachInfo)
+        const item_name = _item_name || k || '';
+        const world_id = _world_id || (h ? parseInt(String(h)) : 0);
+        const wuid = _wuid || x || '';
+        // p 单位为分（如 600 = 6元 = 600分），_amount 同
+        const amount = _amount || p || 0;
 
         // 参数校验
         if (!steam_id) {
@@ -198,19 +209,39 @@ export const steamInitPay = async (evt: H3Event) => {
         const amountInCents = parseInt(String(amount));
         const amountInYuan = (amountInCents / 100).toFixed(2);
 
-        // 获取用户渠道信息
+        // 获取用户渠道信息：优先直接传入的 user_id，否则通过用户名(f)查询
+        let resolvedUserId: number | null = user_id ? parseInt(String(user_id)) : null;
         let userChannelCode = '';
         let userGameCode = '';
-        if (user_id) {
+        const username = f || '';  // f 参数为用户名（如 steam_76561199819350897）
+
+        if (resolvedUserId) {
+            // 直接用 user_id 查询
             const userResult = await sql({
-                query: 'SELECT channel_code, game_code FROM Users WHERE id = ?',
-                values: [user_id],
+                query: 'SELECT id, channel_code, game_code FROM Users WHERE id = ?',
+                values: [resolvedUserId],
             }) as any[];
             if (userResult.length > 0) {
                 userChannelCode = userResult[0].channel_code || '';
                 userGameCode = userResult[0].game_code || '';
             }
+        } else if (username) {
+            // 通过用户名或 thirdparty_uid 查询（兼容 steam_xxx 格式）
+            const userResult = await sql({
+                query: 'SELECT id, channel_code, game_code FROM Users WHERE username = ? OR thirdparty_uid = ? LIMIT 1',
+                values: [username, username],
+            }) as any[];
+            if (userResult.length > 0) {
+                resolvedUserId = userResult[0].id;
+                userChannelCode = userResult[0].channel_code || '';
+                userGameCode = userResult[0].game_code || '';
+            }
         }
+
+        if (!resolvedUserId) {
+            return { code: -1, msg: '用户不存在或未登录' };
+        }
+
 
         // 获取客户端 IP
         let clientIp = '';
@@ -219,15 +250,27 @@ export const steamInitPay = async (evt: H3Event) => {
             clientIp = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || '';
         } catch { }
 
-        // 构建回调地址（steam-notify 放在后台 /api 路由下）
-        const { getSystemConfig } = await import('../utils/systemConfig');
-        const systemConfig = await getSystemConfig();
-        const baseUrl = (systemConfig.base_url || '').replace(/\/+$/, '');
-        const returnUrl = `${baseUrl}/api/payment/steam-notify?token=${token}`;
+        // 构建回调地址（优先读取系统参数 steam_notify_url）
+        const { getOrCreate } = await import('../model/systemParams');
+        const defaultNotifyUrl = 'https://shop.kccyei.cn/api/payment/steam-notify';
+        let baseNotifyUrl = defaultNotifyUrl;
+        try {
+            const param = await getOrCreate('steam_notify_url', defaultNotifyUrl);
+            if (param && param.content) {
+                baseNotifyUrl = param.content;
+            }
+        } catch (e) {
+            console.warn('[Steam Pay] 读取 steam_notify_url 参数失败', e);
+        }
+        baseNotifyUrl = baseNotifyUrl.replace(/\/+$/, ''); // 去除末尾斜杠
+        
+        // 追加 token 参数
+        const separator = baseNotifyUrl.includes('?') ? '&' : '?';
+        const returnUrl = `${baseNotifyUrl}${separator}token=${token}`;
 
         // 1. 创建平台内部支付记录
         const paymentRecord: Omit<Payment, 'id' | 'created_at'> = {
-            user_id: user_id || null,
+            user_id: resolvedUserId,
             sub_user_id: sub_user_id || null,
             role_id: wuid || '',
             transaction_id: `steam_${orderId}`,
@@ -257,7 +300,7 @@ export const steamInitPay = async (evt: H3Event) => {
             steam_id: steam_id,
             item_id: item_id,
             amount: amountInCents,
-            user_id: user_id || null,
+            user_id: resolvedUserId,
             world_id: world_id || 0,
             wuid: wuid || '',
             server_url: server_url || '',
@@ -267,13 +310,34 @@ export const steamInitPay = async (evt: H3Event) => {
         console.log('[Steam Pay] 订单已存入 Redis, token:', token);
 
         // 3. 调用 Steam InitTxn（使用 web 模式，Steam 返回支付 URL）
+        // itemId 必须是 Steamworks 后台登记的数字 ID
+        // 用 item_id（商品 key，如 com.tencent.tmgp.hjol.diamond_60）查 rechargeConfig 得到注册的数字 ID
+        let steamItemId = parseInt(String(item_id));  // 先尝试直接 parseInt
+        let steamDescription = item_name || String(item_id);
+        try {
+            const { getRechargeConfig } = await import('../utils/rechargeConfig');
+            const cfg = getRechargeConfig(String(item_id));
+            if (cfg && cfg.id) {
+                steamItemId = parseInt(String(cfg.id));
+                console.log(`[Steam Pay] 商品映射: ${item_id} → itemId=${steamItemId}, price=${cfg.price}`);
+            } else {
+                console.warn(`[Steam Pay] 未找到商品配置: ${item_id}, 直接使用 item_id=${steamItemId}`);
+            }
+        } catch (cfgErr) {
+            console.warn('[Steam Pay] 读取商品配置失败:', cfgErr);
+        }
+
+        if (!steamItemId || isNaN(steamItemId)) {
+            return { code: -1, msg: `无效的商品 ID: ${item_id}，请检查商品配置` };
+        }
+
         const initRequest: SteamInitTxnRequest = {
             steamId: steam_id,
             orderId: orderId,
-            itemId: parseInt(String(item_id)),
+            itemId: steamItemId,
             qty: parseInt(String(qty)) || 1,
             amount: amountInCents,
-            description: item_name || `Item ${item_id}`,
+            description: steamDescription,
             currency: currency,
             language: language,
             userSession: 'web',   // web 模式才有支付跳转 URL

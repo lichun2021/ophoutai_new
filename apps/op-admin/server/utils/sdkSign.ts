@@ -68,10 +68,8 @@ export async function verifySdkSign(event: H3Event, secretOverride?: string): Pr
 
   // 签名对比调试日志
   const fields = Object.keys(params).filter(k => k !== 'sign' && k !== '__signed').sort();
-  console.log(`[SdkSign] provided=${provided}`);
-  console.log(`[SdkSign] expected=${expect}`);
-  console.log(`[SdkSign] fields=[${fields.join(',')}]`);
-  console.log(`[SdkSign] match=${expect === provided}`);
+
+
 
   return expect === provided;
 }

@@ -26,6 +26,11 @@ export default defineNuxtConfig({
     }
   },
 
+  routeRules: {
+    // 将 steam-notify 回调请求代理到 op-admin (端口 3003)
+    '/api/payment/steam-notify': { proxy: 'http://127.0.0.1:3003/api/payment/steam-notify' }
+  },
+
   runtimeConfig: {
     baseUrl: process.env.BASE_URL || 'http://localhost:3001',
 

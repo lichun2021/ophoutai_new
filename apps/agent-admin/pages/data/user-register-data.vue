@@ -229,36 +229,7 @@
           </div>
         </template>
 
-        <template #actions-data="{ row }">
-          <div class="flex items-center justify-center gap-2">
-            <UButton
-              v-if="canBanUser && row.status !== 1"
-              @click="confirmBanUser(row)"
-              color="red"
-              variant="ghost"
-              size="xs"
-              icon="i-heroicons-no-symbol"
-              :loading="row.id === actionLoading"
-            >
-              封号
-            </UButton>
-            <UButton
-              v-if="canBanUser && row.status === 1"
-              @click="confirmUnbanUser(row)"
-              color="green"
-              variant="ghost"
-              size="xs"
-              icon="i-heroicons-check-circle"
-              :loading="row.id === actionLoading"
-            >
-              解封
-            </UButton>
-            <UDropdown :items="getActionMenuItems(row)" :popper="{ placement: 'bottom-end' }">
-              <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-ellipsis-horizontal" />
-            </UDropdown>
-            <span v-if="!canBanUser" class="text-gray-400 text-xs">无权限</span>
-          </div>
-        </template>
+
         </UTable>
       </div>
 
@@ -431,10 +402,6 @@ const userColumns = [
     key: 'created_at',
     label: '注册时间',
     sortable: true
-  },
-  {
-    key: 'actions',
-    label: '操作'
   }
 ];
 
