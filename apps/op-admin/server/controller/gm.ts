@@ -3,7 +3,7 @@ import * as AdminModel from '../model/admin';
 import { verifyAdminSession } from '../utils/auth';
 import { createGameServerClient, type GameServerClient, type Platform } from './gameServerClient';
 import type { RowDataPacket } from 'mysql2';
-import { gameDbSql, getGameDatabases, checkGameDatabase } from '../db/gameDb';
+
 import { listActive, getByIdentifier as getGameServerByIdentifier, getByWorldId } from '../model/gameServers';
 import { insertGmOperationLog } from '../model/gmOperationLogs';
 
