@@ -1,8 +1,7 @@
 import { H3Event, readBody, getQuery, createError } from 'h3';
-import { gameDbSql } from '../db/gameDb';
 import * as CDKModel from '../model/cdk';
 import { getChinaTime } from '../utils/timezone';
-import { createGameServerClient, type Platform } from './gameServerClient';
+import { createGameServerClient } from './gameServerClient';
 import { getByIdentifier as getGameServerByIdentifier } from '../model/gameServers';
 
 // 根据区服动态创建 GameServerClient
@@ -110,35 +109,8 @@ export const listRedemptions = async (evt: H3Event) => {
 };
 
 // ========== 公共端：CDK 兑换 ==========
-type PlayerInfo = { openid: string; platform: number | string };
-
-async function getPlayerInfo(server: string, playerId: string): Promise<PlayerInfo | null> {
-  // 1) 按 id（字符串）查
-  const rowsById = await gameDbSql({
-    query: `SELECT openid, platform FROM player WHERE id = ? LIMIT 1`,
-    values: [playerId],
-    database: server,
-  }) as any[];
-  if (rowsById.length > 0) return { openid: rowsById[0].openid, platform: rowsById[0].platform };
-
-  // 2) 退化到 puid 查
-  const rowsByName = await gameDbSql({
-    query: `SELECT openid, platform FROM player WHERE name = ? LIMIT 1`,
-    values: [playerId],
-    database: server,
-  }) as any[];
-  if (rowsByName.length > 0) return { openid: rowsByName[0].openid, platform: rowsByName[0].platform };
-
-  // 尝试按 openid 直查
-  const rowsByOpen = await gameDbSql({
-    query: `SELECT openid, platform FROM player WHERE openid = ? LIMIT 1`,
-    values: [playerId],
-    database: server,
-  }) as any[];
-  if (rowsByOpen.length > 0) return { openid: rowsByOpen[0].openid, platform: rowsByOpen[0].platform };
-
-  return null;
-}
+// 不再查游戏 DB，直接用 playerId 作为 roleId 调用游戏服 /open_api/mail/send-with-items
+// 游戏服通过 roleId 定位玩家并发放邮件（与发送道具邮件逻辑一致）
 
 export const redeem = async (evt: H3Event) => {
   const body = await readBody(evt);
@@ -148,8 +120,23 @@ export const redeem = async (evt: H3Event) => {
     throw createError({ status: 400, message: '缺少参数：server/playerId/code' });
   }
   const serverCfg = await getServerConfigByInput(String(server));
+  const serverId = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
 
-  // 特殊类型 data：每日验证码为当日 YYYYMMDD（东8区）
+  // 辅助：调用游戏服发放物资邮件（不依赖 gameDb）
+  const doSendMail = async (cdkType: any) => {
+    const client = await createClientForServer(String(server));
+    await client.sendItemMail({
+      openId: String(playerId),   // 游戏服通过 roleId 定位玩家，openId 同 roleId
+      serverId,
+      platform: 'android',        // 不查 gameDb，平台由游戏服按 roleId 自行判断
+      roleId: String(playerId),
+      mailTitle: cdkType.title,
+      mailContent: cdkType.content,
+      items: cdkType.items.map((i: any) => ({ itemId: Number(i.ItemId), itemCount: Number(i.ItemNum) })),
+    });
+  };
+
+  // ===== data 类型：每日验证码（YYYYMMDD 东8区）=====
   {
     const now = getChinaTime();
     const todayCode = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`;
@@ -161,57 +148,35 @@ export const redeem = async (evt: H3Event) => {
         return { code: 400, message: '未配置 data 类型' };
       }
 
-      // 幂等（按码）：仅当同一玩家在同一日期码已领取时拦截
       const typeId = (cdkType as any).id as number;
       const alreadyToday = await CDKModel.hasRedeemedByTypeAndCode(playerId, typeId, String(todayCode));
-      console.log(`[CDK][redeem][data] 幂等检查(按码)`, { playerId, typeId, todayCode, alreadyToday });
+      console.log(`[CDK][redeem][data] 幂等检查`, { playerId, typeId, todayCode, alreadyToday });
       if (alreadyToday) {
-        console.log(`[CDK][redeem][data] 拒绝发放：今日已领取`);
         return { code: 400, message: '今日已领取，无法重复领取' };
       }
 
-      // 查询玩家信息
-      const player = await getPlayerInfo(serverCfg.bname, playerId);
-      if (!player) {
-        console.log(`[CDK][redeem][data] 未找到玩家信息`, { server, playerId });
-        return { code: 404, message: '未找到玩家信息' };
-      }
-      const platform = player.platform;
-
-      // 发放物资
       try {
-        const client = await createClientForServer(String(server));
-        const serverId = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
-        const plat: Platform = (typeof platform === 'string' ? platform.toLowerCase() === 'ios' : Number(platform) === 2) ? 'ios' : 'android';
-        await client.sendItemMail({
-          openId: player.openid,
-          serverId,
-          platform: plat,
-          roleId: playerId,
-          mailTitle: cdkType.title,
-          mailContent: cdkType.content,
-          items: cdkType.items.map((i: any) => ({ itemId: Number(i.ItemId), itemCount: Number(i.ItemNum) })),
-        });
+        await doSendMail(cdkType);
       } catch (e: any) {
         console.error(`[CDK][redeem][data] 发放失败`, { server, playerId, code: String(code) }, e);
         throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
       }
 
-      // 记录领取（不涉及唯一码占用）
-      console.log(`[CDK][redeem][data] 记录领取`, { playerId, server, code: String(code), typeId });
       await CDKModel.insertRedemption({
         player_id: playerId,
         server: serverCfg.bname,
         code: String(code),
         cdk_type_id: typeId,
-        open_id: player.openid,
-        platform,
+        open_id: String(playerId),
+        platform: 'android',
       });
 
       console.log(`[CDK][redeem][data] 发放成功`);
       return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
     }
   }
+
+  // ===== universal / unique 类型 =====
 
   // 1) 校验码是否存在
   const codeRow = await CDKModel.getCode(code);
@@ -231,46 +196,26 @@ export const redeem = async (evt: H3Event) => {
     return { code: 400, message: '该类型已领取，无法重复领取' };
   }
 
-  // 4) 对于唯一码，校验是否已使用
+  // 4) 唯一码：校验是否已被使用
   if (cdkType.type === 'unique' && codeRow.is_used) {
     return { code: 400, message: '该CDK已被使用' };
   }
 
-  // 5) 查询玩家 openid/platform
-  const player = await getPlayerInfo(serverCfg.bname, playerId);
-  if (!player) {
-    return { code: 404, message: '未找到玩家信息' };
-  }
-
-  // 平台: iOS=2, Android=1（gm.ts 同步逻辑，这里原样透传数字/字符串都可）
-  const platform = player.platform;
-
-  // 6) 调用 GM 发放物资
+  // 5) 调用游戏服发放物资
   try {
-    const client = await createClientForServer(String(server));
-    const serverId = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
-    const plat: Platform = (typeof platform === 'string' ? platform.toLowerCase() === 'ios' : Number(platform) === 2) ? 'ios' : 'android';
-    await client.sendItemMail({
-      openId: player.openid,
-      serverId,
-      platform: plat,
-      roleId: playerId,
-      mailTitle: cdkType.title,
-      mailContent: cdkType.content,
-      items: cdkType.items.map((i: any) => ({ itemId: Number(i.ItemId), itemCount: Number(i.ItemNum) })),
-    });
+    await doSendMail(cdkType);
   } catch (e: any) {
     throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
   }
 
-  // 7) 记录 & 标记
+  // 6) 记录 & 标记
   await CDKModel.insertRedemption({
     player_id: playerId,
     server: serverCfg.bname,
     code,
     cdk_type_id: codeRow.cdk_type_id,
-    open_id: player.openid,
-    platform: platform,
+    open_id: String(playerId),
+    platform: 'android',
   });
 
   if (cdkType.type === 'unique') {

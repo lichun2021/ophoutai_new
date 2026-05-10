@@ -1,5 +1,21 @@
-﻿import { sql } from '../db';
+import { sql } from '../db';
 import { getRedisCluster } from '../utils/redis-cluster';
+
+// ========== 简单内存缓存（公开只读接口减少 DB 连接压力）==========
+const _cache: Map<string, { data: any; expireAt: number }> = new Map();
+const CACHE_TTL_MS = 30_000; // 30 秒
+
+function cacheGet<T>(key: string): T | null {
+  const item = _cache.get(key);
+  if (item && Date.now() < item.expireAt) return item.data as T;
+  _cache.delete(key);
+  return null;
+}
+
+function cacheSet(key: string, data: any): void {
+  _cache.set(key, { data, expireAt: Date.now() + CACHE_TTL_MS });
+}
+
 
 export interface GameServerConfig {
   id?: number;
@@ -25,18 +41,28 @@ export async function listAll(): Promise<GameServerConfig[]> {
 }
 
 export async function listActive(): Promise<GameServerConfig[]> {
+  const cacheKey = 'listActive';
+  const cached = cacheGet<GameServerConfig[]>(cacheKey);
+  if (cached) return cached;
   const rows = await sql({
     query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM gameservers WHERE is_active = 1 ORDER BY id ASC'
   }) as any[];
-  return rows as GameServerConfig[];
+  const result = rows as GameServerConfig[];
+  cacheSet(cacheKey, result);
+  return result;
 }
 
 // 获取允许CDK领取的活跃服务器
 export async function listCdkRedeemable(): Promise<GameServerConfig[]> {
+  const cacheKey = 'listCdkRedeemable';
+  const cached = cacheGet<GameServerConfig[]>(cacheKey);
+  if (cached) return cached;
   const rows = await sql({
     query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, created_at, updated_at FROM gameservers WHERE is_active = 1 AND allow_cdk_redeem = 1 ORDER BY id ASC'
   }) as any[];
-  return rows as GameServerConfig[];
+  const result = rows as GameServerConfig[];
+  cacheSet(cacheKey, result);
+  return result;
 }
 
 export async function getById(id: number): Promise<GameServerConfig | null> {
