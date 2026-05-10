@@ -1,4 +1,4 @@
-﻿import {sql} from '../db';
+import { sql } from '../db';
 
 export type GameCharacter = {
     id?: number;
@@ -72,36 +72,36 @@ export const read = async () => {
 
 export const readPage = async (pageIndex: number, pageSize: number = 10, user_id?: number, subuser_id?: number, game_id?: number) => {
     const offset = (pageIndex - 1) * pageSize;
-    
+
     let _sql = {
         query: 'SELECT * FROM gamecharacters',
         values: [] as number[],
     };
-    
+
     const conditions = [];
-    
+
     if (user_id !== undefined) {
         conditions.push('user_id = ?');
         _sql.values.push(user_id);
     }
-    
+
     if (subuser_id !== undefined) {
         conditions.push('subuser_id = ?');
         _sql.values.push(subuser_id);
     }
-    
+
     if (game_id !== undefined) {
         conditions.push('game_id = ?');
         _sql.values.push(game_id);
     }
-    
+
     if (conditions.length > 0) {
         _sql.query += ' WHERE ' + conditions.join(' AND ');
     }
-    
+
     _sql.query += ' ORDER BY created_at DESC LIMIT ?, ?';
     _sql.values.push(offset, pageSize);
-    
+
     const characters = await sql(_sql);
     return characters as GameCharacter[];
 };
@@ -112,28 +112,28 @@ export const count = async (user_id?: number, subuser_id?: number, game_id?: num
             query: 'SELECT COUNT(*) AS total FROM gamecharacters',
             values: [] as number[],
         };
-        
+
         const conditions = [];
-        
+
         if (user_id !== undefined) {
             conditions.push('user_id = ?');
             _sql.values.push(user_id);
         }
-        
+
         if (subuser_id !== undefined) {
             conditions.push('subuser_id = ?');
             _sql.values.push(subuser_id);
         }
-        
+
         if (game_id !== undefined) {
             conditions.push('game_id = ?');
             _sql.values.push(game_id);
         }
-        
+
         if (conditions.length > 0) {
             _sql.query += ' WHERE ' + conditions.join(' AND ');
         }
-        
+
         const result: any = await sql(_sql);
         const rows = result as { total: number }[];
         return rows[0].total;
@@ -146,7 +146,7 @@ export const count = async (user_id?: number, subuser_id?: number, game_id?: num
 // 辅助函数：处理 ext 字段，确保它是有效的 JSON 字符串或 null
 const normalizeExtData = (ext: any): string | null => {
     if (!ext) return null;
-    
+
     if (typeof ext === 'object') {
         return JSON.stringify(ext);
     } else if (typeof ext === 'string') {
@@ -164,7 +164,7 @@ const normalizeExtData = (ext: any): string | null => {
 
 export const insert = async (characterData: Omit<GameCharacter, 'id' | 'created_at'>) => {
     const extData = normalizeExtData(characterData.ext);
-    
+
     const result = await sql({
         query: 'INSERT INTO gamecharacters (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         values: [
@@ -188,17 +188,17 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
     try {
         const extData = normalizeExtData(characterData.ext);
         const characterLevel = characterData.character_level || 1;
-        
+
         // 1. 先根据 subuser_id + uuid 查询角色是否已存在
         const existingResult = await sql({
             query: 'SELECT id, server_id, server_name FROM gamecharacters WHERE subuser_id = ? AND uuid = ? LIMIT 1',
             values: [characterData.subuser_id, characterData.uuid],
         }) as any[];
-        
+
         if (existingResult.length > 0) {
             // 2. 如果已存在，则执行更新（不更新 server_id 和 server_name）
             const existingId = existingResult[0].id;
-            
+
             await sql({
                 query: `
                     UPDATE gamecharacters 
@@ -216,7 +216,7 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
                     existingId
                 ],
             });
-            
+
             console.log(`角色上报成功: 更新信息 uuid=${characterData.uuid}, 服务器ID=${existingResult[0].server_id}`);
             return { isNew: false, id: existingId };
         } else {
@@ -239,7 +239,7 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
                     extData,
                 ],
             }) as any;
-            
+
             const id = result.insertId || result.lastInsertId;
             console.log(`角色上报成功: 新建角色 uuid=${characterData.uuid}, 服务器ID=${characterData.server_id || 1}`);
             return { isNew: true, id };
@@ -253,7 +253,7 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
 export const update = async (id: number, characterData: Partial<Omit<GameCharacter, 'id' | 'created_at'>>) => {
     const fields = [];
     const values = [];
-    
+
     if (characterData.user_id !== undefined) {
         fields.push('user_id = ?');
         values.push(characterData.user_id);
@@ -295,10 +295,10 @@ export const update = async (id: number, characterData: Partial<Omit<GameCharact
         fields.push('last_login_at = ?');
         values.push(characterData.last_login_at);
     }
-    
+
     if (fields.length > 0) {
         values.push(id);
-        
+
         await sql({
             query: `UPDATE gamecharacters SET ${fields.join(', ')} WHERE id = ?`,
             values: values,

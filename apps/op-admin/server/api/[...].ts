@@ -1,4 +1,4 @@
-import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, createError, setResponseStatus, type H3Event } from "h3";
+import { useBase, createRouter, defineEventHandler, getHeader, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, createError, setResponseStatus, type H3Event } from "h3";
 import { verifyApiSignature } from '../utils/apiSign';
 import { signAdminSession } from '../utils/auth';
 import { verifyAdminSession } from '../utils/auth';
@@ -533,6 +533,19 @@ router.post('/user/payment/query', defineEventHandler(PaymentCtrl.queryPaymentOr
 
 // 内部API：支付订单询单（供后台脚本调用，无需认证）
 router.post('/internal/payment/query', defineEventHandler(PaymentCtrl.queryPaymentOrder));
+
+/**
+ * 内部API：创建代理（供 agent-admin 内网调用，使用共享 API_SIGN_KEY 认证）
+ * @route POST /api/internal/admin/create-promoter
+ */
+router.post('/internal/admin/create-promoter', defineEventHandler(async (event: H3Event) => {
+  const sharedKey = process.env.API_SIGN_KEY || 'q12eiedu24fi3rf434g34g';
+  const secret = getHeader(event, 'x-internal-secret');
+  if (!secret || secret !== sharedKey) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized: invalid internal secret' });
+  }
+  return AdminCtrl.createPromoter(event);
+}));
 
 /**
  * 支付渠道管理

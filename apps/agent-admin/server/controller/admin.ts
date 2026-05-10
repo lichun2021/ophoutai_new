@@ -919,7 +919,22 @@ export const createPromoter = async(evt:H3Event) => {
                 console.error('向上级联刷新权限失败:', permissionError);
             }
         }
-        
+        // 🔄 同步到 op-admin：直接将原始请求 body 转发（异步，失败不影响当前流程）
+        try {
+            const { syncCreatePromoterToOpAdmin } = await import('../utils/opAdminClient');
+            syncCreatePromoterToOpAdmin(body).then(res => {
+                if (!res.success) {
+                    console.warn(`[agent->op-admin] 同步创建代理失败（不影响 agent-admin 流程）: ${res.message}`);
+                } else {
+                    console.log(`[agent->op-admin] 同步创建代理成功，渠道: ${cleanChannelCode}`);
+                }
+            }).catch(err => {
+                console.error('[agent->op-admin] 同步创建代理异常:', err?.message || err);
+            });
+        } catch (syncErr: any) {
+            console.error('[agent->op-admin] 导入 opAdminClient 失败:', syncErr?.message || syncErr);
+        }
+
         return {
             success: true,
             message: '代理创建成功',

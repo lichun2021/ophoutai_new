@@ -819,10 +819,10 @@ async function deductPlatformCoinsForPayment(
                     });
 
                     if (shouldProcessApiDelivery) {
-                        // 直接用订单的 transaction_id（即客户端 y 参数）作为 goodsId
-                        const finalGoodsId = orderDetail.transaction_id || orderDetail.mch_order_id;
+                        // 用 mch_order_id（即客户端 y 参数）作为 goodsId，内部流水号作为 billNo
+                        const finalGoodsId = orderDetail.mch_order_id || orderDetail.transaction_id;
                         const playerId = String(wuid);
-                        const billNo = String(orderDetail.mch_order_id || transactionId);
+                        const billNo = String(transactionId);
 
                         console.log('API到账--直接发货:', {
                             playerId,
@@ -837,7 +837,7 @@ async function deductPlatformCoinsForPayment(
 
                         if (serverCfg && serverCfg.webhost) {
                             const webhost = serverCfg.webhost.replace(/\/$/, '');
-                            const rechargeUrl = `${webhost}/api/order/deliver`;
+                            const rechargeUrl = `${webhost}/open_api/order/deliver`;
 
                             console.log('API到账--rechargeUrl:', rechargeUrl, { playerId, goodsId: finalGoodsId, billNo });
 
@@ -2196,7 +2196,7 @@ export const doPayment = async (evt: H3Event) => {
                     product_des: productDesc || '',
                     ip: '',
                     amount: amountNum,
-                    mch_order_id: orderId || '',
+                    mch_order_id: String(attachInfo || ''),
                     msg: '',
                     server_url: serverUrl || '',
                     device: deviceImei || '',
