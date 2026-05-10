@@ -77,14 +77,7 @@ export interface SendTextMailParams {
   content: string;
 }
 
-export interface RechargePlayerParams {
-  openId: string;
-  serverId: string;
-  platform: Platform;
-  /** 充值钻石数量 */
-  diamond: number;
-  serialNo?: string;
-}
+
 
 export interface PlatformTransferParams {
   openId: string;
@@ -135,32 +128,30 @@ export interface DeletePlayerParams {
 
 /** 新标准 REST 端点 */
 const REST_ENDPOINTS = {
-  banPlayer:         '/api/player/ban',
-  unbanPlayer:       '/api/player/unban',
-  sendItemMail:      '/api/mail/send-with-items',
-  sendTextMail:      '/api/mail/send-text',
-  rechargePlayer:    '/api/player/recharge',
-  platformTransfer:  '/api/player/platform-transfer',
-  serverStatus:      '/api/server/status',
-  deliverOrder:      '/api/order/deliver',
-  paymentNotify:     '/api/order/payment-notify',
-  protectShield:     '/api/player/protect-shield',
-  deletePlayer:      '/api/player/delete',
+  banPlayer: '/open_api/player/ban',
+  unbanPlayer: '/open_api/player/unban',
+  sendItemMail: '/open_api/mail/send-with-items',
+  sendTextMail: '/open_api/mail/send-text',
+  platformTransfer: '/open_api/player/platform-transfer',
+  serverStatus: '/open_api/server/status',
+  deliverOrder: '/open_api/order/deliver',
+  paymentNotify: '/open_api/order/payment-notify',
+  protectShield: '/open_api/player/protect-shield',
+  deletePlayer: '/open_api/player/delete',
 } as const;
 
 /** 旧 IDIP 端点 */
 const IDIP_ENDPOINTS = {
-  banPlayer:         '/script/idip/4147',
-  unbanPlayer:       '/script/idip/4107',
-  sendItemMail:      '/script/idip/4283',
-  sendTextMail:      '/script/idip/4321',
-  rechargePlayer:    '/script/idip/4443',
-  platformTransfer:  '/script/idip/4493',
-  serverStatus:      '/script/idip/4295',
-  deliverOrder:      '/script/gmRecharge',
-  paymentNotify:     '/update_pay_status',
-  protectShield:     '/script/openProtectShield',
-  deletePlayer:      '/script/playerDelete',
+  banPlayer: '/script/idip/4147',
+  unbanPlayer: '/script/idip/4107',
+  sendItemMail: '/script/idip/4283',
+  sendTextMail: '/script/idip/4321',
+  platformTransfer: '/script/idip/4493',
+  serverStatus: '/script/idip/4295',
+  deliverOrder: '/script/gmRecharge',
+  paymentNotify: '/update_pay_status',
+  protectShield: '/script/openProtectShield',
+  deletePlayer: '/script/playerDelete',
 } as const;
 
 // ==================== 工具函数 ====================
@@ -326,19 +317,19 @@ export class GameServerClient {
   async banPlayer(params: BanPlayerParams): Promise<GameServerResponse> {
     const body = this.protocol === 'idip'
       ? this.wrapIdipBody(4147, {
-          PlatId: platformToId(params.platform),
-          OpenId: params.openId,
-          Partition: params.serverId,
-          BanTime: params.duration,
-          BanReason: enc(params.reason),
-        })
+        PlatId: platformToId(params.platform),
+        OpenId: params.openId,
+        Partition: params.serverId,
+        BanTime: params.duration,
+        BanReason: enc(params.reason),
+      })
       : {
-          openId: params.openId,
-          serverId: params.serverId,
-          platform: params.platform,
-          duration: params.duration,
-          reason: params.reason,
-        };
+        openId: params.openId,
+        serverId: params.serverId,
+        platform: params.platform,
+        duration: params.duration,
+        reason: params.reason,
+      };
 
     return this.request('banPlayer', body);
   }
@@ -347,15 +338,15 @@ export class GameServerClient {
   async unbanPlayer(params: UnbanPlayerParams): Promise<GameServerResponse> {
     const body = this.protocol === 'idip'
       ? this.wrapIdipBody(4107, {
-          PlatId: platformToId(params.platform),
-          OpenId: params.openId,
-          Partition: params.serverId,
-        })
+        PlatId: platformToId(params.platform),
+        OpenId: params.openId,
+        Partition: params.serverId,
+      })
       : {
-          openId: params.openId,
-          serverId: params.serverId,
-          platform: params.platform,
-        };
+        openId: params.openId,
+        serverId: params.serverId,
+        platform: params.platform,
+      };
 
     return this.request('unbanPlayer', body);
   }
@@ -366,25 +357,25 @@ export class GameServerClient {
 
     const body = this.protocol === 'idip'
       ? this.wrapIdipBody(4283, {
-          PlatId: platformToId(params.platform),
-          OpenId: params.openId,
-          Partition: params.serverId,
-          RoleId: params.roleId ?? '',
-          Serial: serial,
-          MailTitle: enc(params.mailTitle),
-          MailContent: enc(params.mailContent),
-          SendItemList: params.items.map(i => ({ ItemId: i.itemId, ItemNum: i.itemCount })),
-        })
+        PlatId: platformToId(params.platform),
+        OpenId: params.openId,
+        Partition: params.serverId,
+        RoleId: params.roleId ?? '',
+        Serial: serial,
+        MailTitle: enc(params.mailTitle),
+        MailContent: enc(params.mailContent),
+        SendItemList: params.items.map(i => ({ ItemId: i.itemId, ItemNum: i.itemCount })),
+      })
       : {
-          openId: params.openId,
-          serverId: params.serverId,
-          platform: params.platform,
-          roleId: params.roleId || '',
-          serialNo: serial,
-          mailTitle: params.mailTitle,
-          mailContent: params.mailContent,
-          items: params.items,
-        };
+        openId: params.openId,
+        serverId: params.serverId,
+        platform: params.platform,
+        roleId: params.roleId || '',
+        serialNo: serial,
+        mailTitle: params.mailTitle,
+        mailContent: params.mailContent,
+        items: params.items,
+      };
 
     return this.request('sendItemMail', body);
   }
@@ -395,63 +386,42 @@ export class GameServerClient {
 
     const body = this.protocol === 'idip'
       ? this.wrapIdipBody(4321, {
-          PlatId: platformToId(params.platform),
-          OpenId: params.openId,
-          Partition: params.serverId,
-          RoleId: params.roleId ?? '',
-          Serial: serial,
-          Title: enc(params.title),
-          Content: enc(params.content),
-        })
+        PlatId: platformToId(params.platform),
+        OpenId: params.openId,
+        Partition: params.serverId,
+        RoleId: params.roleId ?? '',
+        Serial: serial,
+        Title: enc(params.title),
+        Content: enc(params.content),
+      })
       : {
-          openId: params.openId,
-          serverId: params.serverId,
-          platform: params.platform,
-          roleId: params.roleId || '',
-          serialNo: serial,
-          title: params.title,
-          content: params.content,
-        };
+        openId: params.openId,
+        serverId: params.serverId,
+        platform: params.platform,
+        roleId: params.roleId || '',
+        serialNo: serial,
+        title: params.title,
+        content: params.content,
+      };
 
     return this.request('sendTextMail', body);
   }
 
-  /** GM充值钻石 */
-  async rechargePlayer(params: RechargePlayerParams): Promise<GameServerResponse> {
-    const serial = params.serialNo || genSerial();
 
-    const body = this.protocol === 'idip'
-      ? this.wrapIdipBody(4443, {
-          PlatId: platformToId(params.platform),
-          OpenId: params.openId,
-          Partition: params.serverId,
-          Diamond: params.diamond,
-          Serial: serial,
-        })
-      : {
-          openId: params.openId,
-          serverId: params.serverId,
-          platform: params.platform,
-          diamond: params.diamond,
-          serialNo: serial,
-        };
-
-    return this.request('rechargePlayer', body);
-  }
 
   /** 平台迁移（安卓↔iOS） */
   async platformTransfer(params: PlatformTransferParams): Promise<GameServerResponse> {
     const body = this.protocol === 'idip'
       ? this.wrapIdipBody(4493, {
-          AreaId: params.targetAreaId,
-          Partition: params.serverId,
-          OpenId: params.openId,
-        })
+        AreaId: params.targetAreaId,
+        Partition: params.serverId,
+        OpenId: params.openId,
+      })
       : {
-          openId: params.openId,
-          serverId: params.serverId,
-          targetAreaId: params.targetAreaId,
-        };
+        openId: params.openId,
+        serverId: params.serverId,
+        targetAreaId: params.targetAreaId,
+      };
 
     return this.request('platformTransfer', body);
   }
