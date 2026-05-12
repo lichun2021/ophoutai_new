@@ -37,6 +37,7 @@ export default defineEventHandler(async (event) => {
       path === '/api/admin/login' ||
       path === '/api/user/login' ||
       path === '/api/user/register' ||
+      path === '/api/user/captcha' ||
       path === '/api/user/check-channel' ||
       path === '/api/user/check' ||
       // Google 2FA 绑定（对外开放以便初始化流程）

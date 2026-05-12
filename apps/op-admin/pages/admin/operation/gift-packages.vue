@@ -208,6 +208,37 @@
             </div>
           </UFormGroup>
           
+          <!-- 从已有礼包复制模板 -->
+          <div v-if="!editingGiftPackage" class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div class="flex items-center gap-2 mb-2">
+              <UIcon name="i-heroicons-document-duplicate" class="text-blue-600" />
+              <label class="text-sm font-medium text-blue-900">从已有礼包复制模板</label>
+            </div>
+            <div class="flex gap-2 items-center">
+              <USelectMenu
+                v-model="selectedTemplatePackageId"
+                :options="templatePackageOptions"
+                value-attribute="value"
+                option-attribute="label"
+                :searchable="searchTemplatePackages"
+                searchable-placeholder="输入礼包名称或代码搜索"
+                placeholder="选择礼包作为模板（可搜索）"
+                class="flex-1"
+                @click="loadGiftPackagesForTemplate"
+              />
+              <UButton
+                @click="applyPackageTemplate"
+                :disabled="!selectedTemplatePackageId"
+                size="sm"
+                color="blue"
+                variant="soft"
+              >
+                应用模板
+              </UButton>
+            </div>
+            <p class="text-xs text-blue-600 mt-2">💡 选择已有礼包后点击"应用模板"，将自动复制该礼包的所有物品配置</p>
+          </div>
+
           <!-- 礼包物品配置 -->
           <UFormGroup label="礼包物品" required class="mt-4">
             <div class="space-y-2">
@@ -414,7 +445,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useAuthStore } from '~/store/auth';
 import { useDebounceFn } from '@vueuse/core';
@@ -437,6 +468,68 @@ const itemsLoading = ref(false);
 const giftPackages = ref([]);
 const showCreateGiftPackageModal = ref(false);
 const editingGiftPackage = ref(null);
+
+// 模板礼包选择
+const templatePackagesLoaded = ref(false);
+const availableTemplatePackages = ref([]);
+const selectedTemplatePackageId = ref(undefined);
+
+const templatePackageOptions = computed(() =>
+  availableTemplatePackages.value.map((pkg: any) => ({
+    value: pkg.id,
+    label: `${pkg.package_name} (${pkg.package_code})`,
+    package: pkg
+  }))
+);
+
+function searchTemplatePackages(query: string) {
+  const q = (query || '').trim().toLowerCase();
+  const pkgs = availableTemplatePackages.value as any[];
+  if (!q) return templatePackageOptions.value.slice(0, 20);
+  return pkgs
+    .filter((pkg: any) => {
+      const name = (pkg.package_name || '').toLowerCase();
+      const code = (pkg.package_code || '').toLowerCase();
+      return name.includes(q) || code.includes(q) || String(pkg.id).includes(q);
+    })
+    .slice(0, 100)
+    .map((pkg: any) => ({ value: pkg.id, label: `${pkg.package_name} (${pkg.package_code})`, package: pkg }));
+}
+
+async function loadGiftPackagesForTemplate() {
+  if (templatePackagesLoaded.value) return;
+  try {
+    const res: any = await $fetch('/api/admin/gift-packages', {
+      query: { page: 1, pageSize: 1000 },
+      headers: { authorization: authStore.id }
+    });
+    if (res?.success) {
+      availableTemplatePackages.value = res?.data?.list || [];
+      templatePackagesLoaded.value = true;
+    }
+  } catch (error) {
+    console.error('加载礼包模板列表失败:', error);
+  }
+}
+
+function applyPackageTemplate() {
+  if (!selectedTemplatePackageId.value) return;
+  const pkg = (availableTemplatePackages.value as any[]).find((p: any) => p.id === selectedTemplatePackageId.value);
+  if (!pkg) return;
+  try {
+    const raw = typeof pkg.gift_items === 'string' ? JSON.parse(pkg.gift_items) : pkg.gift_items;
+    const parsed = (Array.isArray(raw) ? raw : []).map((it: any) => ({ i: Number(it.i), a: Number(it.a) })).filter((it: any) => it.i > 0 && it.a > 0);
+    if (parsed.length > 0) {
+      giftPackageForm.gift_items = parsed;
+      selectedTemplatePackageId.value = undefined;
+      toast.add({ title: '已应用模板', description: `已复制 ${parsed.length} 个物品配置`, color: 'green' });
+    } else {
+      toast.add({ title: '该礼包暂无物品配置', color: 'yellow' });
+    }
+  } catch {
+    toast.add({ title: '解析礼包物品失败', color: 'red' });
+  }
+}
 
 // 物品配置相关（只读）
 const items = ref([]);

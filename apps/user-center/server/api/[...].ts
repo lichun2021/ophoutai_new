@@ -7,6 +7,7 @@ import * as CDKCtrl from '../controller/cdk';
 import { listActive, listCdkRedeemable } from '../model/gameServers';
 import * as SystemParamsCtrl from '../controller/systemParams';
 import * as PaymentSettingsCtrl from '../controller/paymentSettings';
+import { generateCaptcha, verifyCaptcha } from '../utils/captcha';
 
 const router = createRouter();
 
@@ -46,6 +47,7 @@ const withLogging = (handler: Function, apiName: string) => {
         const skipSignature = (
           pathname === '/api/user/login' ||
           pathname === '/api/user/register' ||
+          pathname === '/api/user/captcha' ||
           pathname === '/api/user/check' ||
           pathname === '/api/user/check-channel' ||
           pathname === '/api/user/token' ||
@@ -120,10 +122,28 @@ router.post('/user/login', defineEventHandler(async (event) => {
 }));
 
 /**
- * 用户注册
+ * 获取图形验证码
+ * @route GET /api/user/captcha
+ */
+router.get('/user/captcha', defineEventHandler(() => {
+  return generateCaptcha();
+}));
+
+/**
+ * 用户注册（带验证码校验）
  * @route POST /api/user/register
  */
-router.post('/user/register', withLogging(UserCtrl.register, '用户注册接口'));
+router.post('/user/register', withLogging(async (event: H3Event) => {
+  const body = await readBody(event);
+  const { captcha_token, captcha_input } = body || {};
+  if (!captcha_token || !captcha_input) {
+    throw createError({ statusCode: 400, statusMessage: '请完成图形验证码' });
+  }
+  if (!verifyCaptcha(captcha_token, captcha_input)) {
+    throw createError({ statusCode: 400, statusMessage: '验证码错误或已过期，请刷新重试' });
+  }
+  return UserCtrl.register(event);
+}, '用户注册接口'));
 
 /**
  * 关联游戏 wuid

@@ -71,6 +71,30 @@
           </div>
         </div>
 
+        <!-- 图形验证码 -->
+        <div class="form-field">
+          <label class="field-label">验证码</label>
+          <div class="captcha-row">
+            <div class="input-wrap captcha-input-wrap">
+              <span class="input-icon">🔑</span>
+              <input
+                v-model="formState.captchaInput"
+                class="field-input"
+                placeholder="请输入验证码"
+                maxlength="4"
+                autocomplete="off"
+                :disabled="loading || !channelValid"
+                style="text-transform: uppercase; letter-spacing: 4px;"
+              />
+            </div>
+            <div class="captcha-img-wrap" @click="fetchCaptcha" title="点击刷新验证码">
+              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" alt="验证码" />
+              <div v-else class="captcha-loading">加载中...</div>
+              <span class="captcha-refresh-hint">🔄 点击刷新</span>
+            </div>
+          </div>
+        </div>
+
         <button type="submit" class="register-btn" :disabled="!isFormValid || loading || channelValidating">
           <span v-if="!loading">注 册</span>
           <span v-else class="loading-dots">
@@ -115,7 +139,8 @@ const router = useRouter();
 const formState = reactive({
   username: '',
   password: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  captchaInput: ''
 });
 
 // URL参数
@@ -135,13 +160,31 @@ const channelValid = ref(true);
 const channelValidating = ref(false);
 const channelError = ref('');
 
+// 验证码状态
+const captchaToken = ref('');
+const captchaImage = ref('');
+
+async function fetchCaptcha() {
+  captchaImage.value = '';
+  formState.captchaInput = '';
+  try {
+    const res = await fetch('/api/user/captcha');
+    const data = await res.json();
+    captchaToken.value = data.token || '';
+    captchaImage.value = data.image || '';
+  } catch {
+    captchaImage.value = '';
+  }
+}
+
 // 表单验证
 const isFormValid = computed(() => {
   return channelValid.value &&
          formState.username.trim() !== '' &&
          formState.password.trim() !== '' &&
          formState.confirmPassword.trim() !== '' &&
-         formState.password === formState.confirmPassword;
+         formState.password === formState.confirmPassword &&
+         formState.captchaInput.trim().length === 4;
 });
 
 // 验证代理账号状态
@@ -208,6 +251,9 @@ onMounted(async () => {
     channelValid.value = false;
     channelError.value = '缺少渠道代码参数';
   }
+
+  // 加载验证码
+  await fetchCaptcha();
 });
 
 // 处理注册
@@ -238,9 +284,11 @@ const handleRegister = async () => {
       channel_code: urlParams.channel_code,
       game_code: urlParams.game_code,
       thirdparty_uid: urlParams.thirdparty_uid || `user_${Date.now()}`,
-      iphone: '', // 可以从URL参数中获取
-      uid: '', // 由后端生成
-      ...urlParams.extra_params // 包含其他参数
+      iphone: '',
+      uid: '',
+      captcha_token: captchaToken.value,
+      captcha_input: formState.captchaInput.trim(),
+      ...urlParams.extra_params
     };
     
     console.log('注册数据:', registerData);
@@ -260,10 +308,10 @@ const handleRegister = async () => {
     if (response.ok && result.status === 'success') {
       showSuccess('注册成功！即将跳转到登录页面...');
     } else {
-      // 处理服务器返回的错误信息
+      // 验证码错误或其他错误，刷新验证码
+      await fetchCaptcha();
       if (!response.ok) {
-        // HTTP错误状态码，显示服务器返回的错误信息
-        showError(result.message || '注册失败，请检查参数是否正确');
+        showError(result.message || result.statusMessage || '注册失败，请检查参数是否正确');
       } else if (result.message && result.message.includes('Duplicate')) {
         // 数据库重复键错误
         if (result.message.includes('username')) {
@@ -353,4 +401,10 @@ const handleModalClose = () => {
 .btn-gray { background: var(--surface-container); color: var(--on-surface); }
 .btn-gray:hover { background: var(--surface-container-highest); }
 @media (max-width: 480px) { .register-box { padding: 32px 24px; border-radius: 20px; } }
+.captcha-row { display: flex; gap: 10px; align-items: stretch; }
+.captcha-input-wrap { flex: 1; }
+.captcha-img-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; user-select: none; }
+.captcha-img { width: 120px; height: 42px; border-radius: 6px; display: block; border: 1px solid rgba(127,230,219,0.2); }
+.captcha-loading { width: 120px; height: 42px; background: var(--surface-container); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--on-surface-variant); }
+.captcha-refresh-hint { font-size: 10px; color: var(--on-surface-variant); opacity: 0.6; }
 </style>

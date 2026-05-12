@@ -2588,10 +2588,7 @@ export const getPaymentRecords = async(evt:H3Event) => {
                     allowedChannelCodes = adminWithPermissions.allowed_channel_codes || [];
                 }
                 
-                console.log(`管理员 ${adminWithPermissions.name} 的支付数据权限:`, {
-                    level: adminWithPermissions.level,
-                    allowedChannelCodes: allowedChannelCodes
-                });
+
             } catch (error) {
                 console.error('支付数据权限检查失败:', error);
                 throw createError({
@@ -2700,7 +2697,7 @@ const applyPaymentMethodFilter = (filters: any, whereConditions: string[], value
 const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filters: any, allowedChannelCodes: string[] = []) => {
     const offset = (page - 1) * pageSize;
     
-    console.log('getPaymentRecordsWithFilters 参数:', { page, pageSize, filters, allowedChannelCodes });
+
     
     let whereConditions = [];
     let values: any[] = [];
@@ -2719,7 +2716,7 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
     if (filters.user_id) {
         // 清理user_id参数，移除可能的空格和特殊字符
         const cleanUserId = filters.user_id.toString().trim().replace(/^\+/, '');
-        console.log('getPaymentRecordsWithFilters 清理后的user_id:', cleanUserId, '原始值:', filters.user_id);
+
         
         // 兼容多个ID的查询：子账号ID、游戏账号ID、游戏角色ID
         whereConditions.push(`(
@@ -2811,15 +2808,14 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
     
     values.push(pageSize, offset);
     
-    console.log('执行查询:', query);
-    console.log('查询参数:', values);
+
     
     const result = await sql({
         query: query,
         values: values,
     }) as any[];
     
-    console.log('查询结果数量:', result.length);
+
     
     // 使用 Map 进一步去重（基于 id），防止 GROUP BY 在某些情况下仍可能产生重复
     const uniqueResults = new Map();
