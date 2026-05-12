@@ -3276,7 +3276,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         if (body.trade_status !== 'TRADE_SUCCESS') {
             console.log(`[${requestId}] 订单状态不是成功:`, body.trade_status);
             setResponseStatus(evt, 200);
-            return 'success'; // 即使不是成功状态也返回success避免重复通知
+            return 'SUCCESS'; // 即使不是成功状态也返回success避免重复通知
         }
 
         console.log(`[${requestId}] 订单状态验证成功!`);
@@ -3334,7 +3334,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         if (localOrder.payment_status === 3) {
             console.log(`[${requestId}] 订单已处理过:`, body.out_trade_no);
             setResponseStatus(evt, 200);
-            return 'success';
+            return 'SUCCESS';
         }
 
         // 验证金额
@@ -3476,7 +3476,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] === 收银台支付回调处理完成，返回success ===`);
         console.log(`[${requestId}] 总处理时间: ${processingTime}ms`);
         setResponseStatus(evt, 200);
-        return 'success';
+        return 'SUCCESS';
 
     } catch (error: any) {
         const endTime = Date.now();
