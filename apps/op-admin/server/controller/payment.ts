@@ -3254,6 +3254,16 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] 参数类型:`, typeof body);
         console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
 
+        // -- 字段归一化：兼容众合支付（state/outTradeNo/amount-分）和其他渠道
+        if (body.state !== undefined && body.outTradeNo !== undefined) {
+            console.log(`[${requestId}] 检测到众合支付格式，进行字段归一化`);
+            body.trade_status = body.state === 1 ? 'TRADE_SUCCESS' : 'TRADE_FAILED';
+            body.trade_no     = body.outTradeNo;
+            body.out_trade_no = body.tradeNo;
+            body.money        = (Number(body.amount) / 100).toFixed(2);
+            console.log(`[${requestId}] 归一化后: trade_status=${body.trade_status} trade_no=${body.trade_no} money=${body.money}`);
+        }
+
         // 检查订单状态（先检查，避免查询不必要的订单）
         console.log(`[${requestId}] 订单状态:`, body.trade_status);
         if (body.trade_status !== 'TRADE_SUCCESS') {
