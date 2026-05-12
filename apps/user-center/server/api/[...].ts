@@ -125,7 +125,7 @@ router.post('/user/login', defineEventHandler(async (event) => {
  * 获取图形验证码
  * @route GET /api/user/captcha
  */
-router.get('/user/captcha', defineEventHandler(() => {
+router.get('/user/captcha', defineEventHandler(async () => {
   return generateCaptcha();
 }));
 
@@ -139,7 +139,8 @@ router.post('/user/register', withLogging(async (event: H3Event) => {
   if (!captcha_token || !captcha_input) {
     throw createError({ statusCode: 400, statusMessage: '请完成图形验证码' });
   }
-  if (!verifyCaptcha(captcha_token, captcha_input)) {
+  const captchaOk = await verifyCaptcha(captcha_token, captcha_input);
+  if (!captchaOk) {
     throw createError({ statusCode: 400, statusMessage: '验证码错误或已过期，请刷新重试' });
   }
   return UserCtrl.register(event);
