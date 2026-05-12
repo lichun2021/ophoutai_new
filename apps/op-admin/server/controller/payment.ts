@@ -2265,7 +2265,9 @@ export const doPayment = async (evt: H3Event) => {
         } else if (paymentMethod === 'zfb') {
             // 支付宝支付
             const amountNum = parseFloat(String(resolvedPrice));
-            const transactionId = `zfb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // ★ 优先复用客户端预生成的 ID（y/xx 字段），保证 transaction_id = outTradeNo = extParam 三处一致
+            //   若客户端未传或格式异常，服务端兜底生成
+            const transactionId = sanitizeTransactionId(attachInfo || orderId, `zfb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
 
             // // 如果有 attachInfo，先检查订单是否存在
             // if (safeAttach) {
