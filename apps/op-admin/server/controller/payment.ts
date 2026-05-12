@@ -1,4 +1,4 @@
-import * as PaymentModel from '../model/payment';
+﻿import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
@@ -3274,12 +3274,11 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
 
         console.log(`[${requestId}] 订单状态验证成功!`);
 
-        // 查找本地订单 - 使用 trade_no 匹配 mch_order_id
-        console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
+        // 查找本地订单 - 兼容众合支付(outTradeNo=transaction_id)和其他渠道(trade_no=mch_order_id)
 
         const result = await sql({
-            query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
-            values: [body.trade_no]
+            query: 'SELECT * FROM PaymentRecords WHERE transaction_id = ? OR mch_order_id = ? LIMIT 1',
+            values: [body.trade_no, body.trade_no]
         }) as any[];
 
         const localOrder = result.length > 0 ? result[0] : null;
