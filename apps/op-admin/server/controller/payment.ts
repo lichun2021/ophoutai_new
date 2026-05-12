@@ -1,4 +1,4 @@
-﻿import * as PaymentModel from '../model/payment';
+import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
@@ -3258,10 +3258,12 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         if (body.state !== undefined && body.outTradeNo !== undefined) {
             console.log(`[${requestId}] 检测到众合支付格式，进行字段归一化`);
             body.trade_status = body.state === 1 ? 'TRADE_SUCCESS' : 'TRADE_FAILED';
-            body.trade_no     = body.outTradeNo;
+            // ★ extParam = 我们发给众合的 transactionId（服务端生成，DB 里的那个）
+            //   outTradeNo = 客户端预生成的 ID，可能和 DB 里不一致，不能用来查单
+            body.trade_no     = body.extParam || body.outTradeNo;
             body.out_trade_no = body.tradeNo;
             body.money        = (Number(body.amount) / 100).toFixed(2);
-            console.log(`[${requestId}] 归一化后: trade_status=${body.trade_status} trade_no=${body.trade_no} money=${body.money}`);
+            console.log(`[${requestId}] 归一化后: trade_status=${body.trade_status} trade_no=${body.trade_no} money=${body.money} (extParam=${body.extParam})`);
         }
 
         // 检查订单状态（先检查，避免查询不必要的订单）
