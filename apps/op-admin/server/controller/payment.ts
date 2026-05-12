@@ -1,4 +1,4 @@
-import * as PaymentModel from '../model/payment';
+﻿import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
@@ -3256,6 +3256,9 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] 参数类型:`, typeof body);
         console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
 
+        // ★ 保存原始 body（归一化前），验签必须用原始字段，否则额外字段会污染签名计算
+        const rawBody = { ...body };
+
         // -- 字段归一化：兼容众合支付（state/outTradeNo/amount-分）和其他渠道
         if (body.state !== undefined && body.outTradeNo !== undefined) {
             console.log(`[${requestId}] 检测到众合支付格式，进行字段归一化`);
@@ -3317,7 +3320,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             console.log(`[${requestId}] 降级使用系统默认配置进行验签`);
         }
 
-        const verified = provider.verify ? provider.verify(body, credentials) : true;
+        const verified = provider.verify ? provider.verify(rawBody, credentials) : true;
         if (!verified) {
             console.error(`[${requestId}] 签名验证失败! 渠道ID: ${channelId}`);
             setResponseStatus(evt, 200);
