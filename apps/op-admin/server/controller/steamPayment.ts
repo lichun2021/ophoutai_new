@@ -19,6 +19,7 @@ import { H3Event, readBody, getHeaders, getQuery } from 'h3';
 import { sql } from '../db';
 import * as PaymentModel from '../model/payment';
 import { Payment } from '../model/payment';
+import * as GameCharactersModel from '../model/gameCharacters';
 import {
     initTxn,
     finalizeTxn,
@@ -70,58 +71,139 @@ async function getSteamOrderFromRedis(token: string): Promise<Record<string, any
 }
 
 /**
- * 通知游戏服到账
+ * 通知游戏服到账（API 到账，和普通充値逻辑相同）
  */
 async function notifyGameServerForSteam(orderDetail: any, orderId: string) {
+    const transactionId = `steam_${orderId}`;
     try {
         if (!orderDetail.wuid) {
             console.log('[Steam Pay] 无 wuid，跳过游戏服通知');
             return;
         }
 
-        const { getSystemConfig } = await import('../utils/systemConfig');
+        const { getRechargeConfig } = await import('../utils/rechargeConfig');
         const { getByWorldId } = await import('../model/gameServers');
-        const systemConfig = await getSystemConfig();
 
-        let targetUrl = '';
-        if (orderDetail.world_id && Number(orderDetail.world_id) > 0) {
-            try {
-                const serverCfg = await getByWorldId(Number(orderDetail.world_id));
-                if (serverCfg && serverCfg.webhost) {
-                    targetUrl = `${serverCfg.webhost.replace(/\/$/, '')}/update_pay_status`;
+        // item_id 存在 product_des 里（如 com.tencent.tmgp.hjol.diamond_60）
+        const itemId = orderDetail.product_des || orderDetail.item_id || '';
+        const config = itemId ? getRechargeConfig(String(itemId)) : null;
+
+        if (!config) {
+            console.warn('[Steam Pay] 找不到商品配置，item_id:', itemId);
+            await PaymentModel.updateByTransactionId(transactionId, {
+                msg: `API到账找不到商品配置:${itemId}`
+            } as any);
+            return;
+        }
+
+        // 判断 iOS / Android，并获取真实的游戏角色 uuid（游戏服认识的 playerId）
+        let finalGoodsId = config.andid || config.id;
+        const wuid = String(orderDetail.wuid);  // 系统内部的子账号 ID
+        let playerId = wuid;                     // 默认兜底用 wuid
+
+        try {
+            // wuid 对应 SubUsers 表的 id，需要通过 SubUsers 找到 subuser_id，
+            // 再查 GameCharacters.uuid 获取游戏内角色 UUID
+            const subUserRows = await sql({
+                query: 'SELECT id FROM SubUsers WHERE wuid = ? LIMIT 1',
+                values: [wuid]
+            }) as any[];
+
+            if (subUserRows.length > 0) {
+                const subuserId = subUserRows[0].id;
+                const charRows = await sql({
+                    query: 'SELECT uuid, ext FROM GameCharacters WHERE subuser_id = ? ORDER BY last_login_at DESC LIMIT 1',
+                    values: [subuserId]
+                }) as any[];
+
+                if (charRows.length > 0) {
+                    playerId = charRows[0].uuid;
+                    console.log('[Steam Pay] 角色 uuid:', playerId, '(subuser_id:', subuserId, ')');
+
+                    // 判断 iOS/Android
+                    const extRaw = charRows[0].ext;
+                    let extObj: any = {};
+                    try { extObj = typeof extRaw === 'string' ? JSON.parse(extRaw) : (extRaw || {}); } catch { }
+                    if (extObj?.value === 'ios') {
+                        finalGoodsId = config.id;
+                        console.log('[Steam Pay] API到账--iOS, goodsId:', finalGoodsId);
+                    } else {
+                        finalGoodsId = config.andid || config.id;
+                        console.log('[Steam Pay] API到账--Android, goodsId:', finalGoodsId);
+                    }
+                } else {
+                    console.warn('[Steam Pay] SubUser', subuserId, '无 GameCharacters 记录，使用 wuid 兜底');
                 }
-            } catch { }
-        }
-        if (!targetUrl) {
-            targetUrl = systemConfig.notify_game_url || 'http://160.202.240.19:8888/update_pay_status';
+            } else {
+                console.warn('[Steam Pay] 未找到 wuid=', wuid, ' 的 SubUser，使用 wuid 兜底');
+            }
+        } catch (e: any) {
+            console.error('[Steam Pay] 查角色 uuid 失败:', e.message);
         }
 
-        let port = '';
-        if (orderDetail.server_url) {
-            try {
-                const urlObj = new URL(String(orderDetail.server_url));
-                port = urlObj.port || '';
-            } catch {
-                port = String(orderDetail.server_url);
+        // 查询服务器 webhost
+        const worldId = Number(orderDetail.world_id);
+        if (!worldId) {
+            console.warn('[Steam Pay] 无 world_id，无法确定游戏服');
+            await PaymentModel.updateByTransactionId(transactionId, { msg: 'API到账失败:无world_id' } as any);
+            return;
+        }
+        const serverCfg = await getByWorldId(worldId);
+        if (!serverCfg || !serverCfg.webhost) {
+            console.warn('[Steam Pay] 未找到服务器配置, world_id:', worldId);
+            await PaymentModel.updateByTransactionId(transactionId, { msg: `API到账失败:未找到服务器world_id=${worldId}` } as any);
+            return;
+        }
+
+        const webhost = serverCfg.webhost.replace(/\/$/, '');
+        const billno = orderDetail.order_id || orderId;
+        const rechargeUrl = `${webhost}/script/gmRecharge?playerId=${playerId}&rechargeType=${config.rechargeType}&goodsId=${finalGoodsId}&billno=${billno}`;
+
+        console.log('[Steam Pay] API到账请求:', rechargeUrl);
+
+        const res = await fetch(rechargeUrl, {
+            method: 'GET',
+            signal: AbortSignal.timeout(10000)
+        });
+        const responseText = await res.text();
+
+        let isSuccess = false;
+        try {
+            const result = JSON.parse(responseText);
+            isSuccess = result.code === 0 || result.msg === 'success' ||
+                (result.result && String(result.result).toLowerCase().includes('success'));
+            if (isSuccess) {
+                console.log('[Steam Pay] API到账成功:', { orderId, playerRoleId, finalGoodsId, result });
+                await PaymentModel.updateByTransactionId(transactionId, {
+                    payment_status: 3,
+                    msg: `API到账成功:${JSON.stringify(result).substring(0, 500)}`
+                } as any);
+            } else {
+                console.error('[Steam Pay] API到账失败:', result);
+                await PaymentModel.updateByTransactionId(transactionId, {
+                    msg: `API到账失败:${JSON.stringify(result).substring(0, 500)}`
+                } as any);
+            }
+        } catch {
+            if (responseText.trim().toLowerCase() === 'success') {
+                isSuccess = true;
+                console.log('[Steam Pay] API到账成功(纯文本):', { orderId });
+                await PaymentModel.updateByTransactionId(transactionId, {
+                    payment_status: 3,
+                    msg: 'API到账成功:纯文本响应'
+                } as any);
+            } else {
+                console.error('[Steam Pay] API到账响应解析失败:', responseText.substring(0, 200));
+                await PaymentModel.updateByTransactionId(transactionId, {
+                    msg: `API到账响应解析失败:${responseText.substring(0, 200)}`
+                } as any);
             }
         }
-
-        console.log('[Steam Pay] 通知游戏服:', { targetUrl, orderId, wuid: orderDetail.wuid });
-
-        const res = await fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                transactionId: `steam_${orderId}`,
-                uid: orderDetail.wuid,
-                port: port
-            }),
-            signal: (AbortSignal as any).timeout ? (AbortSignal as any).timeout(30000) : undefined
-        });
-
-        console.log('[Steam Pay] 游戏服通知结果:', res.status);
     } catch (err: any) {
-        console.error('[Steam Pay] 游戏服通知失败:', err.message);
+        console.error('[Steam Pay] API到账异常:', err.message);
+        await PaymentModel.updateByTransactionId(transactionId, {
+            msg: `API到账异常:${err.message}`
+        } as any);
     }
 }
 
@@ -263,7 +345,7 @@ export const steamInitPay = async (evt: H3Event) => {
             console.warn('[Steam Pay] 读取 steam_notify_url 参数失败', e);
         }
         baseNotifyUrl = baseNotifyUrl.replace(/\/+$/, ''); // 去除末尾斜杠
-        
+
         // 追加 token 参数
         const separator = baseNotifyUrl.includes('?') ? '&' : '?';
         const returnUrl = `${baseNotifyUrl}${separator}token=${token}`;
@@ -279,7 +361,7 @@ export const steamInitPay = async (evt: H3Event) => {
             payment_id: 0,
             world_id: world_id || 0,
             product_name: item_name || `商品${item_id}`,
-            product_des: `Steam购买 - SteamID:${steam_id}`,
+            product_des: String(item_id),   // 存储 item_id，回调时用于查 rechargeConfig（如 com.tencent.tmgp.hjol.diamond_60）
             ip: clientIp,
             amount: parseFloat(amountInYuan),
             mch_order_id: orderId,
@@ -340,7 +422,7 @@ export const steamInitPay = async (evt: H3Event) => {
             description: steamDescription,
             currency: currency,
             language: language,
-            userSession: 'web',   // web 模式才有支付跳转 URL
+            userSession: 'client',   // web 模式才有支付跳转 URL
             category: category
         };
 
