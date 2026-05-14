@@ -102,41 +102,32 @@ async function notifyGameServerForSteam(orderDetail: any, orderId: string) {
         let playerId = wuid;                     // 默认兜底用 wuid
 
         try {
-            // wuid 对应 SubUsers 表的 id，需要通过 SubUsers 找到 subuser_id，
-            // 再查 GameCharacters.uuid 获取游戏内角色 UUID
-            const subUserRows = await sql({
-                query: 'SELECT id FROM SubUsers WHERE wuid = ? LIMIT 1',
-                values: [wuid]
+            // orderDetail.wuid 实际上是 SubUsers.id（主键），不是 wuid 字段
+            const subuserId = Number(wuid);
+            const charRows = await sql({
+                query: 'SELECT uuid, ext FROM GameCharacters WHERE subuser_id = ? ORDER BY last_login_at DESC LIMIT 1',
+                values: [subuserId]
             }) as any[];
 
-            if (subUserRows.length > 0) {
-                const subuserId = subUserRows[0].id;
-                const charRows = await sql({
-                    query: 'SELECT uuid, ext FROM GameCharacters WHERE subuser_id = ? ORDER BY last_login_at DESC LIMIT 1',
-                    values: [subuserId]
-                }) as any[];
+            if (charRows.length > 0) {
+                playerId = charRows[0].uuid;
+                console.log('[Steam Pay] 角色 uuid:', playerId, '(subuser_id:', subuserId, ')');
 
-                if (charRows.length > 0) {
-                    playerId = charRows[0].uuid;
-                    console.log('[Steam Pay] 角色 uuid:', playerId, '(subuser_id:', subuserId, ')');
-
-                    // 判断 iOS/Android
-                    const extRaw = charRows[0].ext;
-                    let extObj: any = {};
-                    try { extObj = typeof extRaw === 'string' ? JSON.parse(extRaw) : (extRaw || {}); } catch { }
-                    if (extObj?.value === 'ios') {
-                        finalGoodsId = config.id;
-                        console.log('[Steam Pay] API到账--iOS, goodsId:', finalGoodsId);
-                    } else {
-                        finalGoodsId = config.andid || config.id;
-                        console.log('[Steam Pay] API到账--Android, goodsId:', finalGoodsId);
-                    }
+                // 判断 iOS/Android
+                const extRaw = charRows[0].ext;
+                let extObj: any = {};
+                try { extObj = typeof extRaw === 'string' ? JSON.parse(extRaw) : (extRaw || {}); } catch { }
+                if (extObj?.value === 'ios') {
+                    finalGoodsId = config.id;
+                    console.log('[Steam Pay] API到账--iOS, goodsId:', finalGoodsId);
                 } else {
-                    console.warn('[Steam Pay] SubUser', subuserId, '无 GameCharacters 记录，使用 wuid 兜底');
+                    finalGoodsId = config.andid || config.id;
+                    console.log('[Steam Pay] API到账--Android, goodsId:', finalGoodsId);
                 }
             } else {
-                console.warn('[Steam Pay] 未找到 wuid=', wuid, ' 的 SubUser，使用 wuid 兜底');
+                console.warn('[Steam Pay] subuser_id=', subuserId, '无 GameCharacters 记录，使用 wuid 兜底');
             }
+
         } catch (e: any) {
             console.error('[Steam Pay] 查角色 uuid 失败:', e.message);
         }
