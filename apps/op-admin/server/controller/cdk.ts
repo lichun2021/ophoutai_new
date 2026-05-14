@@ -144,7 +144,6 @@ async function getPlayerInfo(server: string, playerId: string): Promise<PlayerIn
 export const redeem = async (evt: H3Event) => {
   const body = await readBody(evt);
   const { server, playerId, code } = body || {};
-  console.log(`[CDK][redeem] 入参`, { server, playerId, code });
   if (!server || !playerId || !code) {
     throw createError({ status: 400, message: '缺少参数：server/playerId/code' });
   }
@@ -154,27 +153,22 @@ export const redeem = async (evt: H3Event) => {
   {
     const now = getChinaTime();
     const todayCode = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`;
-    console.log(`[CDK][redeem][data] 计算todayCode=${todayCode}, 提交code=${code}`);
     if (String(code) === todayCode) {
       const cdkType = await CDKModel.getLatestTypeByType('data');
       if (!cdkType) {
-        console.log(`[CDK][redeem][data] 未找到 data 类型配置`);
         return { code: 400, message: '未配置 data 类型' };
       }
 
       // 幂等（按码）：仅当同一玩家在同一日期码已领取时拦截
       const typeId = (cdkType as any).id as number;
       const alreadyToday = await CDKModel.hasRedeemedByTypeAndCode(playerId, typeId, String(todayCode));
-      console.log(`[CDK][redeem][data] 幂等检查(按码)`, { playerId, typeId, todayCode, alreadyToday });
       if (alreadyToday) {
-        console.log(`[CDK][redeem][data] 拒绝发放：今日已领取`);
         return { code: 400, message: '今日已领取，无法重复领取' };
       }
 
       // 查询玩家信息
       const player = await getPlayerInfo(serverCfg.bname, playerId);
       if (!player) {
-        console.log(`[CDK][redeem][data] 未找到玩家信息`, { server, playerId });
         return { code: 404, message: '未找到玩家信息' };
       }
       const platform = player.platform;
@@ -204,7 +198,6 @@ export const redeem = async (evt: H3Event) => {
       }
 
       // 记录领取（不涉及唯一码占用）
-      console.log(`[CDK][redeem][data] 记录领取`, { playerId, server, code: String(code), typeId });
       await CDKModel.insertRedemption({
         player_id: playerId,
         server: serverCfg.bname,
@@ -214,7 +207,6 @@ export const redeem = async (evt: H3Event) => {
         platform,
       });
 
-      console.log(`[CDK][redeem][data] 发放成功`);
       return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
     }
   }

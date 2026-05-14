@@ -1432,7 +1432,7 @@ export const getSubAccountList = async (evt: H3Event) => {
 export const addSubAccount = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("添加子账号请求:", body);
+
 
         const {
             z: username,        // 主用户名
@@ -1588,7 +1588,7 @@ export const addSubAccount = async (evt: H3Event) => {
 export const editSubAccountNickname = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("编辑子账号昵称请求:", body);
+
 
         const {
             username,           // 主用户名
@@ -1703,7 +1703,7 @@ export const editSubAccountNickname = async (evt: H3Event) => {
 export const reportRole = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("角色上报请求:", body);
+
 
         const {
             z: username,        // 主用户名
@@ -1796,11 +1796,10 @@ export const reportRole = async (evt: H3Event) => {
         const GameCharactersModel = await import('../model/gameCharacters');
         const result = await GameCharactersModel.upsertByUuid(characterData);
 
-        console.log(`角色上报成功: ${result.isNew ? '新建' : '更新'} 角色ID=${result.id}`);
+        console.log(`[setRole] ${result.isNew ? '新建' : '更新'} uuid=${characterData.uuid} subuser_id=${characterData.subuser_id}`);
 
         // 角色上报成功后，自动调用登录日志上报
         try {
-            console.log("角色上报成功，开始自动上报登录日志");
 
             // 获取客户端信息
             const headers = getHeaders(evt);
@@ -1832,7 +1831,6 @@ export const reportRole = async (evt: H3Event) => {
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
                 await UserLoginLogsModel.recordLogin(loginLogData);
 
-                console.log(`自动登录日志上报成功: 用户=${loginLogData.username}, 游戏=${gameCode}, 渠道=${channelCode}`);
             }
         } catch (loginLogError: any) {
             // 登录日志上报失败不应该影响角色上报的成功响应
@@ -1874,7 +1872,7 @@ export const reportRole = async (evt: H3Event) => {
 export const updateSubUserWuid = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("更新子用户wuid请求:", body);
+
 
         const { thirdparty_uid, uid } = body;
 
@@ -2022,7 +2020,7 @@ export const updateSubUserWuid = async (evt: H3Event) => {
 export const register = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("用户注册请求:", body);
+
 
         // 参数验证
         if (!body.username || !body.password) {
@@ -2153,7 +2151,7 @@ export const banUser = async (evt: H3Event) => {
         const body = await readBody(evt);
         const { user_id, status, admin_id } = body;
 
-        console.log("封号/解封用户请求:", body);
+
 
         // 参数验证
         if (!user_id || status === undefined) {
