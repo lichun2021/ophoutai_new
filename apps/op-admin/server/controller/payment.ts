@@ -116,7 +116,6 @@ export const count = async (evt: H3Event) => {
             channel_codes: adminWithPermissions.allowed_channel_codes || []
         };
 
-        console.log(`管理员 ${adminWithPermissions.name} 的支付统计权限:`, permissionsJson);
     } catch (error) {
         console.error('支付统计权限检查失败:', error);
         throw createError({
@@ -160,7 +159,6 @@ export const page = async (evt: H3Event) => {
 
     const payment_status = headers['payment_status'];
 
-    console.log("page:", headers);
 
     // 权限检查 - 使用持久化的权限数据
     let permissionsJson = null;
@@ -179,7 +177,6 @@ export const page = async (evt: H3Event) => {
             channel_codes: adminWithPermissions.allowed_channel_codes || []
         };
 
-        console.log(`管理员 ${adminWithPermissions.name} 的支付权限:`, permissionsJson);
     } catch (error) {
         console.error('支付权限检查失败:', error);
         throw createError({
@@ -213,8 +210,6 @@ export const page = async (evt: H3Event) => {
 export const insert = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("insert:", body)
-        const result = await PaymentModel.insert(body);
 
         return {
             status: result === null ? "fail" : "success",
@@ -248,7 +243,6 @@ export const paymentNewReps = async (evt: H3Event) => {
 
     try {
         const body = await readBody(evt);
-        console.log("paymentNewReps 请求:", body);
 
         // 检查是否有 transactionId 并且记录是否存在
         if (body.transactionId) {
@@ -269,11 +263,6 @@ export const paymentNewReps = async (evt: H3Event) => {
                     if (userResult.length > 0) {
                         updateUserChannelCode = userResult[0].channel_code || '';
                         updateUserGameCode = userResult[0].game_code || '';
-                        console.log("更新时获取用户渠道信息:", {
-                            user_id: existingRecord.user_id,
-                            updateUserChannelCode,
-                            updateUserGameCode
-                        });
                     }
                 }
 
@@ -291,7 +280,6 @@ export const paymentNewReps = async (evt: H3Event) => {
                 };
 
                 await PaymentModel.updateByTransactionId(body.transactionId, updatepayrecord);
-                console.log("支付记录已更新:", body.transactionId);
 
                 return {
                     code: 200,
@@ -318,7 +306,6 @@ export const paymentNewReps = async (evt: H3Event) => {
             if (subUserResult.length > 0) {
                 realUserId = subUserResult[0].parent_user_id; // Users 表的 ID
                 realSubUserId = subUserResult[0].id;          // SubUsers 表的 ID
-                console.log("找到子用户:", { realUserId, realSubUserId, uid: body.uid });
 
                 // 获取用户的 channel_code 和 game_code
                 if (realUserId) {
@@ -330,13 +317,10 @@ export const paymentNewReps = async (evt: H3Event) => {
                     if (userResult.length > 0) {
                         userChannelCode = userResult[0].channel_code || '';
                         userGameCode = userResult[0].game_code || '';
-                        console.log("获取用户渠道信息:", { realUserId, userChannelCode, userGameCode });
                     } else {
-                        console.log("未找到用户信息:", realUserId);
                     }
                 }
             } else {
-                console.log("未找到子用户:", body.uid);
             }
         }
 
@@ -367,7 +351,6 @@ export const paymentNewReps = async (evt: H3Event) => {
             });
         }
 
-        console.log('📝 [支付方式判断] 最终确定的支付方式:', paymentWay);
 
         // 预先获取渠道ID
         const { channelId: sdkChannelId } = await selectProviderBySystemParam(body.price || 0, body.payment_method, newTransactionId);
@@ -395,7 +378,6 @@ export const paymentNewReps = async (evt: H3Event) => {
         };
 
         await PaymentModel.insert(insertRecord);
-        console.log(`支付记录已插入: ${newTransactionId}, 渠道ID: ${sdkChannelId}`);
 
         return {
             code: 200,
@@ -467,7 +449,6 @@ async function notifyGameServer(
             }
         }
         const targetGameServerUrl = preferredBaseUrl || gameServerUrl || systemConfig.notify_game_url || 'http://160.202.240.19:8888/update_pay_status';
-        console.log('准备调用游戏服接口:', requestData, '地址:', targetGameServerUrl);
 
         const response = await fetch(targetGameServerUrl, {
             method: 'POST',
@@ -477,7 +458,6 @@ async function notifyGameServer(
         });
 
         if (response.ok) {
-            console.log('游戏服通知成功:', transactionId);
             return {
                 success: true,
                 message: '游戏服通知成功'
@@ -749,7 +729,6 @@ async function deductPlatformCoinsForPayment(
                 ptb_after: newBalance
             } as any);
 
-            console.log('[平台币支付] 扣款完成，开始到账处理:', { transactionId, amount, newBalance });
 
             let giftHandled = false;
             let apiDeliveryHandled = false;
@@ -759,7 +738,6 @@ async function deductPlatformCoinsForPayment(
             if (orderDetail && isGiftOrder) {
                 giftHandled = await processGiftOrder(orderDetail as Payment, `ptb_deduct_${transactionId}`);
                 if (giftHandled) {
-                    console.log('[平台币支付] 礼包到账成功:', transactionId);
                     // 礼包发放成功，更新订单为成功状态
                     await PaymentModel.updateByTransactionId(transactionId, {
                         payment_status: 3
@@ -808,20 +786,10 @@ async function deductPlatformCoinsForPayment(
                     const isTestRole = testRoleId && playerRoleId && String(playerRoleId).trim() === String(testRoleId).trim();
                     const shouldProcessApiDelivery = (apiDeliveryEnabled || isTestRole) && orderDetail.product_name && orderDetail.world_id;
 
-                    console.log('API到账--检查配置:', {
-                        apiDeliveryEnabled,
-                        testRoleId,
-                        playerRoleId,
-                        isTestRole,
-                        shouldProcessApiDelivery,
-                        productName: orderDetail.product_des,
-                        worldId: orderDetail.world_id
-                    });
 
                     if (shouldProcessApiDelivery) {
                         const config = orderDetail.product_des ? getRechargeConfig(orderDetail.product_des) : null;
 
-                        console.log('API到账--商品配置:', config ? `找到配置:${config.id}` : '未找到配置');
 
                         if (config) {
                             // 确定使用的 goodsId：iOS 使用 id，非 iOS 使用 andid
@@ -839,14 +807,11 @@ async function deductPlatformCoinsForPayment(
                                     
                                     if (extObj && extObj.value === 'ios') {
                                         finalGoodsId = config.id;
-                                        console.log(`API到账--平台判定: iOS, 使用 id=${finalGoodsId}, 角色UUID=${playerRoleId}`);
                                     } else {
                                         finalGoodsId = config.andid || config.id;
-                                        console.log(`API到账--平台判定: 非iOS, 使用 andid=${finalGoodsId}, 角色UUID=${playerRoleId}`);
                                     }
                                 } else {
                                     finalGoodsId = config.andid || config.id;
-                                    console.log(`API到账--平台判定: 未找到角色或ext为空, 默认使用 andid=${finalGoodsId}, 角色UUID=${playerRoleId}`);
                                 }
                             } catch (charError) {
                                 console.error('API到账--平台判定异常:', charError);
@@ -855,7 +820,6 @@ async function deductPlatformCoinsForPayment(
 
                             // 查询服务器 webhost
                             const serverCfg = await getByWorldId(Number(orderDetail.world_id));
-                            console.log('API到账--服务器配置:', serverCfg ? `找到服务器:${serverCfg.webhost}` : `未找到world_id=${orderDetail.world_id}`);
                             if (serverCfg && serverCfg.webhost) {
                                 const webhost = serverCfg.webhost.replace(/\/$/, '');
                                 const playerId = String(wuid);
@@ -866,7 +830,6 @@ async function deductPlatformCoinsForPayment(
                                     signal: AbortSignal.timeout(10000)
                                 });
 
-                                console.log('API到账--rechargeUrl:', rechargeUrl);
                                 const responseText = await response.text();
                                 const currentTime = getCurrentFormattedTime();
                                 if (response.ok) {
@@ -882,7 +845,6 @@ async function deductPlatformCoinsForPayment(
                                             (result.result && String(result.result).toLowerCase().includes('success'));
 
                                         if (isSuccess) {
-                                            console.log('API到账--Success:', { transactionId, playerId, product: finalGoodsId, response: result });
                                             apiDeliveryHandled = true;
                                             // 记录成功日志到订单
 
@@ -902,7 +864,6 @@ async function deductPlatformCoinsForPayment(
                                     } catch (parseError) {
                                         // 兼容纯文本 "success" 响应
                                         if (responseText.trim().toLowerCase() === 'success') {
-                                            console.log('API到账--Success:', { transactionId, playerId });
                                             apiDeliveryHandled = true;
                                             // 记录成功日志到订单
                                             await PaymentModel.updateByTransactionId(transactionId, {
@@ -950,11 +911,6 @@ async function deductPlatformCoinsForPayment(
                         }
                     } else {
                         // 不需要API到账，直接标记为成功
-                        console.log('API到账--无需处理:', {
-                            reason: !apiDeliveryEnabled && !isTestRole ? 'API到账开关未开启' :
-                                !orderDetail.product_name ? '缺少商品名称' :
-                                    !orderDetail.world_id ? '缺少服务器ID' : '未知'
-                        });
                         await PaymentModel.updateByTransactionId(transactionId, {
                             payment_status: 3
                         } as any);
@@ -972,7 +928,6 @@ async function deductPlatformCoinsForPayment(
                 // 根据API到账结果决定成功或退款
                 if (apiDeliveryHandled) {
                     // API到账成功
-                    console.log('[平台币支付] API到账成功:', transactionId);
                 } else {
                     // API到账失败，退款
                     console.error('[平台币支付] API到账失败，退还平台币:', transactionId);
@@ -1272,11 +1227,9 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
 // 手动到账功能已注释 - 不能随意使用
 /* export const confirmPayment = async(evt:H3Event) => {
     try {
-        console.log('开始处理支付确认请求');
         const body = await readBody(evt);
         const { transaction_id } = body;
         
-        console.log('支付确认参数:', { transaction_id });
         
         if (!transaction_id) {
             return {
@@ -1286,9 +1239,7 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
         }
         
         // 检查订单当前状态
-        console.log('检查订单当前状态:', transaction_id);
         const currentStatus = await PaymentModel.getOrderStatus(transaction_id);
-        console.log('订单当前状态:', currentStatus);
         
         if (currentStatus === 3) {
             return {
@@ -1298,17 +1249,7 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
         }
         
         // 获取订单详情
-        console.log('获取订单详情:', transaction_id);
         const orderDetail = await PaymentModel.detailByTransId(transaction_id);
-        console.log('订单详情:', {
-            exists: !!orderDetail,
-            payment_way: orderDetail?.payment_way,
-            product_name: orderDetail?.product_name,
-            wuid: orderDetail?.wuid,
-            server_url: orderDetail?.server_url,
-            user_id: orderDetail?.user_id,
-            amount: orderDetail?.amount
-        });
         
         if (!orderDetail) {
             return {
@@ -1331,7 +1272,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
         
         if (isPlatformCoinRecharge && !isGiftOrder) {
             // 平台币充值订单：直接给用户加平台币
-            console.log('检测到平台币充值订单，开始处理平台币到账...');
             
             try {
                 // 计算应该到账的平台币数量（按SystemParams系数，默认1:10）
@@ -1340,7 +1280,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                 const orderAmount = parseFloat(String(orderDetail.amount || 0));
                 const platformCoinsToAdd = orderAmount * rate;
                 
-                console.log(`计算平台币到账数量: ${orderAmount}元 × ${rate} = ${platformCoinsToAdd}平台币`);
                 
                 // 获取用户当前平台币余额
                 const user = await sql({
@@ -1358,7 +1297,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                 
                 const currentPlatformCoins = parseFloat(user[0].platform_coins) || 0;
                 
-                console.log(`平台币余额更新: ${currentPlatformCoins} + ${platformCoinsToAdd}`);
                 
                 // 更新用户平台币余额（使用统一方法）
                 const updateResult = await UserModel.updatePlatformCoinsUnified(orderDetail.user_id, platformCoinsToAdd, 2);
@@ -1371,7 +1309,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                 }
                 
                 const newPlatformCoins = updateResult.newBalance!;
-                console.log('平台币余额更新成功!');
                 
                 // 更新订单状态为支付成功(3)，并记录平台币变化
                 await sql({
@@ -1385,7 +1322,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                     values: [currentTime, currentPlatformCoins, platformCoinsToAdd, newPlatformCoins, transaction_id],
                 });
                 
-                console.log('订单状态更新为支付成功:', transaction_id);
                 
                 return {
                     success: true,
@@ -1406,7 +1342,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
             }
         } else if (isGiftOrder) {
             // 礼包购买订单：走礼包发放逻辑（IDIP）
-            console.log('检测到礼包购买订单，开始处理礼包发放...');
             
             try {
                 // 解析 server_url 中的元数据
@@ -1421,7 +1356,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                 const quantity = 1;
                 const serverId = String(meta.sid || meta.server_id || meta.serverId || orderDetail.world_id || 1);
                 
-                console.log('礼包订单元数据:', { packageId, characterUuid, quantity, serverId });
                 
                 if (!packageId || !characterUuid) {
                     console.error('礼包订单参数缺失:', meta);
@@ -1471,7 +1405,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                 
                 const insertResult = await ExternalGiftPackageModel.createPurchaseRecord(purchaseRecord);
                 const purchaseRecordId = (insertResult as any)?.insertId;
-                console.log('礼包购买记录已创建, 记录ID=', purchaseRecordId);
                 
                 // 更新支付记录的 role_id 为角色 UUID
                 await PaymentModel.updateByTransactionId(transaction_id, {
@@ -1492,7 +1425,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                     );
                     
                     if (deliveryResult.success) {
-                        console.log('礼包已成功发放, 交易ID=', transaction_id);
                         
                         // 更新订单状态为支付成功(3)
                         await PaymentModel.updateOrderStatus(transaction_id, 3, currentTime, currentTime);
@@ -1533,10 +1465,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
             
             if (!hasNotifyParams) {
                 // 缺少通知参数，无法通知游戏服，确认失败
-                console.log('缺少通知参数，无法确认订单:', transaction_id, {
-                    hasWuid: !!orderDetail.wuid,
-                    hasServerUrl: !!orderDetail.server_url
-                });
                 
                 return {
                     success: false,
@@ -1546,7 +1474,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
             
             try {
                 // 调用游戏服通知，直接传入 server_url，函数内部会自动提取端口
-                console.log('开始通知游戏服:', transaction_id);
                 const notifyResult = await notifyGameServer(
                     String(orderDetail.transaction_id || ''),
                     String(orderDetail.wuid || ''),
@@ -1555,12 +1482,10 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                     Number(orderDetail.world_id || 0)
                 );
                 
-                console.log('游戏服通知结果:', notifyResult);
                 
                 if (notifyResult.success) {
                     // 游戏服通知成功，更新订单状态为支付成功(3)
                     await PaymentModel.updateOrderStatus(transaction_id, 3, currentTime, currentTime);
-                    console.log('游戏服通知成功，订单状态更新为支付成功:', transaction_id);
                     
                     return {
                         success: true,
@@ -1620,7 +1545,6 @@ export const doPayment = async (evt: H3Event) => {
                 body = {};
             }
         }
-        console.log("支付请求:", body);
 
         // 获取请求参数 - 同时支持GET query 和 POST body
         const query = getQuery(evt) || {};
@@ -1892,7 +1816,6 @@ export const doPayment = async (evt: H3Event) => {
                 const quantity = 1;
                 const serverIdFromMeta = String(meta.sid || meta.server_id || meta.serverId || serverId || 1);
 
-                console.log(`[doPayment] 礼包订单限购检查 - 礼包ID: ${packageId}, 角色UUID: ${characterUuid}, 数量: ${quantity}`);
 
                 if (!packageId || !characterUuid) {
                     console.error('[doPayment] 礼包订单参数缺失:', meta);
@@ -1926,7 +1849,6 @@ export const doPayment = async (evt: H3Event) => {
                         data: null
                     };
                 }
-                console.log(`[doPayment] ✅ 礼包限购检查通过`);
 
                 const unitPlatformCoins = Number(giftPackage.price_platform_coins || 0);
                 const unitRealMoney = Number(giftPackage.price_real_money || 0);
@@ -2437,7 +2359,6 @@ export const doPayment = async (evt: H3Event) => {
             } as any;
 
             await PaymentModel.insert(paymentData);
-            console.log(`支付宝支付记录已插入: ${transactionId}, 渠道ID: ${zfbChannelId}`);
 
             // 调用支付宝支付接口
             try {
@@ -2685,7 +2606,6 @@ export const doPayment = async (evt: H3Event) => {
             } as any;
 
             await PaymentModel.insert(paymentData);
-            console.log(`微信支付记录已插入: ${transactionId}, 渠道ID: ${wxChannelId}`);
 
             // 调用微信支付接口
             try {
@@ -2804,7 +2724,6 @@ function generateMD5Sign(params: Record<string, any>, key: string): string {
         .join('&') + key;
 
     // 避免打印完整签名串
-    console.log('签名字符串长度:', signString.length);
 
     return crypto.createHash('md5').update(signString).digest('hex');
 }
@@ -2852,12 +2771,10 @@ async function fixPaymentWay(localOrder: any, callbackBody: any, requestId: stri
         }
 
         if (inferredPaymentWay) {
-            console.log(`🔧 [${requestId}] [修复支付方式] 从"${localOrder.payment_way}"修复为"${inferredPaymentWay}"`);
             await PaymentModel.updateByTransactionId(localOrder.transaction_id || '', {
                 payment_way: inferredPaymentWay
             });
         } else {
-            console.log(`⚠️ [${requestId}] [修复支付方式] 无法推断支付方式，保持原值: ${localOrder.payment_way}`);
         }
     }
 }
@@ -2879,11 +2796,9 @@ async function processGiftOrder(localOrder: Payment, requestId: string, tradeNo?
     }
 
     if ((localOrder.msg || '').startsWith('GIFT_')) {
-        console.log(`[${requestId}] 礼包订单已处理，跳过重复处理: ${localOrder.transaction_id}`);
         return true;
     }
 
-    console.log(`[${requestId}] 礼包订单处理 - 商户订单号(trade_no): ${tradeNo || '无'}, 系统订单号: ${localOrder.transaction_id}`);
 
     try {
         const encoded = serverUrlRaw.slice('gift://'.length);
@@ -2966,7 +2881,6 @@ async function processGiftOrder(localOrder: Payment, requestId: string, tradeNo?
             game_delivery_status: 'waiting' as const
         };
 
-        console.log(`[${requestId}] 创建礼包购买记录 - 商户订单号(trade_no): ${tradeNo || '无'}`);
         const insertResult = await ExternalGiftPackageModel.createPurchaseRecord(purchaseRecord);
         const purchaseRecordId = (insertResult as any)?.insertId;
 
@@ -2987,7 +2901,6 @@ async function processGiftOrder(localOrder: Payment, requestId: string, tradeNo?
             );
 
             if (deliveryResult.success) {
-                console.log(`[${requestId}] 礼包已成功发放, 交易ID=${localOrder.transaction_id}`);
                 const currentTime = getCurrentFormattedTime();;
                 await PaymentModel.updateByTransactionId(localOrder.transaction_id || '', {
                     notify_at: currentTime,
@@ -3018,16 +2931,10 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
     const requestId = `notify_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
 
     try {
-        console.log(`[${requestId}] === 开始处理第三方支付回调 ===`);
-        console.log(`[${requestId}] 时间: ${new Date().toISOString()}`);
-        console.log(`[${requestId}] 请求方法: ${evt.node.req.method}`);
-        console.log(`[${requestId}] 请求URL: ${evt.node.req.url}`);
-        console.log(`[${requestId}] 请求头:`, evt.node.req.headers);
 
         // 获取请求参数 - 支持GET和POST方式
         const query = getQuery(evt);
         const requestMethod = evt.node.req.method?.toUpperCase();
-        console.log(`[${requestId}] GET查询参数:`, query);
 
         let body: any = {};
 
@@ -3035,33 +2942,23 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         if (requestMethod === 'POST') {
             try {
                 body = await readBody(evt);
-                console.log(`[${requestId}] POST请求体读取成功:`, body);
             } catch (e) {
-                console.log(`[${requestId}] POST body读取失败，回退到GET参数`);
                 body = query;
             }
         } else {
             // GET请求直接使用query参数
-            console.log(`[${requestId}] 检测到GET请求，使用query参数`);
             body = query;
         }
 
-        console.log(`[${requestId}] 最终使用的通知参数:`, body);
-        console.log(`[${requestId}] 参数类型:`, typeof body);
-        console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
 
         // 检查订单状态（先检查，避免查询不必要的订单）
-        console.log(`[${requestId}] 订单状态:`, body.trade_status);
         if (body.trade_status !== 'TRADE_SUCCESS') {
-            console.log(`[${requestId}] 订单状态不是成功:`, body.trade_status);
             setResponseStatus(evt, 200);
             return 'success'; // 即使不是成功状态也返回success避免重复通知
         }
 
-        console.log(`[${requestId}] 订单状态验证成功!`);
 
         // 查找本地订单 - 使用 trade_no 匹配 mch_order_id
-        console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
 
         const result = await sql({
             query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
@@ -3076,12 +2973,10 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             return 'fail';
         }
 
-        console.log(`[${requestId}] 订单查找成功!`, { transaction_id: localOrder.transaction_id, mch_order_id: localOrder.mch_order_id });
 
         // 验签：根据订单 the payment_id（渠道ID）选择对应的网关
         const dbChannelId = localOrder.payment_id;
         const channelId = String(dbChannelId || '1');
-        console.log(`[${requestId}] [回调追踪] 订单号:${localOrder.transaction_id}, 数据库存的渠道ID:${dbChannelId}, 最终采用ID:${channelId}`);
 
         const { getProviderByChannelId } = await import('../utils/paymentGateways');
         let provider, credentials;
@@ -3089,7 +2984,6 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             const result = getProviderByChannelId(channelId);
             provider = result.provider;
             credentials = result.credentials;
-            console.log(`[${requestId}] 使用渠道 ${channelId} 的配置进行验签`);
         } catch (error) {
             console.error(`[${requestId}] 获取支付渠道配置失败:`, error);
             // 降级到系统默认配置
@@ -3097,7 +2991,6 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             const result = await selectProviderBySystemParam();
             provider = result.provider;
             credentials = result.credentials;
-            console.log(`[${requestId}] 降级使用系统默认配置进行验签`);
         }
 
         const verified = provider.verify ? provider.verify(body, credentials) : true;
@@ -3107,21 +3000,16 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             return 'fail';
         }
 
-        console.log(`[${requestId}] 签名验证成功!`);
 
         // 检查订单是否已经处理过
-        console.log(`[${requestId}] 检查订单处理状态:`, localOrder.payment_status);
         if (localOrder.payment_status === 3) {
-            console.log(`[${requestId}] 订单已处理过:`, body.out_trade_no);
             setResponseStatus(evt, 200);
             return 'success';
         }
 
         // 验证金额
-        console.log(`[${requestId}] 开始验证金额...`);
         const notifyAmount = parseFloat(body.money);
         const orderAmount = parseFloat(String(localOrder.amount || 0));
-        console.log(`[${requestId}] 通知金额:`, notifyAmount, '订单金额:', orderAmount);
 
         if (Math.abs(notifyAmount - orderAmount) > 0.01) {
             console.error(`[${requestId}] 金额不匹配:`, { notify: notifyAmount, order: orderAmount });
@@ -3129,32 +3017,15 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             return 'fail';
         }
 
-        console.log(`[${requestId}] 金额验证成功!`);
 
         // 更新订单状态
-        console.log(`[${requestId}] 开始更新订单状态为成功...`);
-        console.log(`🔍 [第三方回调] 当前订单支付方式状态:`, {
-            transactionId: localOrder.transaction_id,
-            currentPaymentWay: localOrder.payment_way,
-            isPaymentWayEmpty: !localOrder.payment_way,
-            isPaymentWayUnknown: localOrder.payment_way === '未知',
-            callbackType: body.type || 'unknown',
-            callbackParams: body
-        });
 
         // 修复支付方式字段
         await fixPaymentWay(localOrder, body, requestId);
 
         const currentTime = getCurrentFormattedTime();
-        console.log(`[${requestId}] 更新参数:`, {
-            transaction_id: localOrder.transaction_id,
-            status: 3,
-            currentTime,
-            trade_no: body.trade_no
-        });
 
         await PaymentModel.updateOrderStatus(localOrder.transaction_id || '', 3, currentTime, currentTime, body.trade_no);
-        console.log(`[${requestId}] 订单状态更新完成!`);
 
         // --- 支付路由 Redis 额度累加 ---
         try {
@@ -3165,7 +3036,6 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
                 const ruleId = await getOrderRuleMapping(localOrder.transaction_id || '');
                 if (ruleId) {
                     await incrementRedisUsedQuota(ruleId, notifyAmount);
-                    console.log(`[${requestId}] 支付路由 Redis 额度已累加: 规则ID=${ruleId}, 金额=${notifyAmount}`);
                 }
             }
         } catch (redisErr) {
@@ -3177,10 +3047,8 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
 
         if (!giftHandled) {
             // 延迟通知游戏服
-            console.log(`[${requestId}] 设置延迟游戏服通知...`);
             setTimeout(async () => {
                 try {
-                    console.log(`[${requestId}] 开始执行延迟游戏服通知`);
                     await notifyGameServer(
                         String(localOrder.transaction_id || ''),
                         String(localOrder.wuid || ''),
@@ -3188,19 +3056,15 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
                         undefined,
                         Number(localOrder.world_id || 0)
                     );
-                    console.log(`[${requestId}] 延迟游戏服通知完成`);
                 } catch (error) {
                     console.error(`[${requestId}] 延迟通知游戏服失败:`, error);
                 }
             }, 120000); // 120秒延迟
         } else {
-            console.log(`[${requestId}] 礼包订单已处理，跳过游戏服通知`);
         }
 
         const endTime = Date.now();
         const processingTime = endTime - startTime;
-        console.log(`[${requestId}] === 第三方支付回调处理完成，返回success ===`);
-        console.log(`[${requestId}] 总处理时间: ${processingTime}ms`);
         setResponseStatus(evt, 200);
         return 'success';
 
@@ -3224,16 +3088,10 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
     const requestId = `cashier_notify_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
 
     try {
-        console.log(`[${requestId}] === 开始处理收银台支付回调 ===`);
-        console.log(`[${requestId}] 时间: ${new Date().toISOString()}`);
-        console.log(`[${requestId}] 请求方法: ${evt.node.req.method}`);
-        console.log(`[${requestId}] 请求URL: ${evt.node.req.url}`);
-        console.log(`[${requestId}] 请求头:`, evt.node.req.headers);
 
         // 获取请求参数 - 支持GET和POST方式
         const query = getQuery(evt);
         const requestMethod = evt.node.req.method?.toUpperCase();
-        console.log(`[${requestId}] GET查询参数:`, query);
 
         let body: any = {};
 
@@ -3241,45 +3099,34 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         if (requestMethod === 'POST') {
             try {
                 body = await readBody(evt);
-                console.log(`[${requestId}] POST请求体读取成功:`, body);
             } catch (e) {
-                console.log(`[${requestId}] POST body读取失败，回退到GET参数`);
                 body = query;
             }
         } else {
             // GET请求直接使用query参数
-            console.log(`[${requestId}] 检测到GET请求，使用query参数`);
             body = query;
         }
 
-        console.log(`[${requestId}] 最终使用的通知参数:`, body);
-        console.log(`[${requestId}] 参数类型:`, typeof body);
-        console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
 
         // ★ 保存原始 body（归一化前），验签必须用原始字段，否则额外字段会污染签名计算
         const rawBody = { ...body };
 
         // -- 字段归一化：兼容众合支付（state/outTradeNo/amount-分）和其他渠道
         if (body.state !== undefined && body.outTradeNo !== undefined) {
-            console.log(`[${requestId}] 检测到众合支付格式，进行字段归一化`);
             body.trade_status = body.state === 1 ? 'TRADE_SUCCESS' : 'TRADE_FAILED';
             // ★ extParam = 我们发给众合的 transactionId（服务端生成，DB 里的那个）
             //   outTradeNo = 客户端预生成的 ID，可能和 DB 里不一致，不能用来查单
             body.trade_no     = body.extParam || body.outTradeNo;
             body.out_trade_no = body.tradeNo;
             body.money        = (Number(body.amount) / 100).toFixed(2);
-            console.log(`[${requestId}] 归一化后: trade_status=${body.trade_status} trade_no=${body.trade_no} money=${body.money} (extParam=${body.extParam})`);
         }
 
         // 检查订单状态（先检查，避免查询不必要的订单）
-        console.log(`[${requestId}] 订单状态:`, body.trade_status);
         if (body.trade_status !== 'TRADE_SUCCESS') {
-            console.log(`[${requestId}] 订单状态不是成功:`, body.trade_status);
             setResponseStatus(evt, 200);
             return 'SUCCESS'; // 即使不是成功状态也返回success避免重复通知
         }
 
-        console.log(`[${requestId}] 订单状态验证成功!`);
 
         // 查找本地订单 - 兼容众合支付(outTradeNo=transaction_id)和其他渠道(trade_no=mch_order_id)
 
@@ -3296,12 +3143,10 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             return 'fail';
         }
 
-        console.log(`[${requestId}] 订单查找成功!`, { transaction_id: localOrder.transaction_id, mch_order_id: localOrder.mch_order_id });
 
         // 验签：根据订单 the payment_id（渠道ID）选择对应的网关
         const dbChannelId = localOrder.payment_id;
         const channelId = String(dbChannelId || '1');
-        console.log(`[${requestId}] [回调追踪] 订单号:${localOrder.transaction_id}, 数据库存的渠道ID:${dbChannelId}, 最终采用ID:${channelId}`);
 
         const { getProviderByChannelId } = await import('../utils/paymentGateways');
         let provider, credentials;
@@ -3309,7 +3154,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             const result = getProviderByChannelId(channelId);
             provider = result.provider;
             credentials = result.credentials;
-            console.log(`[${requestId}] 使用渠道 ${channelId} 的配置进行验签`);
         } catch (error) {
             console.error(`[${requestId}] 获取支付渠道配置失败:`, error);
             // 降级到系统默认配置
@@ -3317,7 +3161,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             const result = await selectProviderBySystemParam();
             provider = result.provider;
             credentials = result.credentials;
-            console.log(`[${requestId}] 降级使用系统默认配置进行验签`);
         }
 
         const verified = provider.verify ? provider.verify(rawBody, credentials) : true;
@@ -3327,21 +3170,16 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             return 'fail';
         }
 
-        console.log(`[${requestId}] 签名验证成功!`);
 
         // 检查订单是否已经处理过
-        console.log(`[${requestId}] 检查订单处理状态:`, localOrder.payment_status);
         if (localOrder.payment_status === 3) {
-            console.log(`[${requestId}] 订单已处理过:`, body.out_trade_no);
             setResponseStatus(evt, 200);
             return 'SUCCESS';
         }
 
         // 验证金额
-        console.log(`[${requestId}] 开始验证金额...`);
         const notifyAmount = parseFloat(body.money);
         const orderAmount = parseFloat(String(localOrder.amount || 0));
-        console.log(`[${requestId}] 通知金额:`, notifyAmount, '订单金额:', orderAmount);
 
         if (Math.abs(notifyAmount - orderAmount) > 0.01) {
             console.error(`[${requestId}] 金额不匹配:`, { notify: notifyAmount, order: orderAmount });
@@ -3349,32 +3187,15 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             return 'fail';
         }
 
-        console.log(`[${requestId}] 金额验证成功!`);
 
         // 更新订单状态
-        console.log(`[${requestId}] 开始更新订单状态为成功...`);
-        console.log(`🔍 [第三方回调] 当前订单支付方式状态:`, {
-            transactionId: localOrder.transaction_id,
-            currentPaymentWay: localOrder.payment_way,
-            isPaymentWayEmpty: !localOrder.payment_way,
-            isPaymentWayUnknown: localOrder.payment_way === '未知',
-            callbackType: body.type || 'unknown',
-            callbackParams: body
-        });
 
         // 修复支付方式字段
         await fixPaymentWay(localOrder, body, requestId);
 
         const currentTime = getCurrentFormattedTime();
-        console.log(`[${requestId}] 更新参数:`, {
-            transaction_id: localOrder.transaction_id,
-            status: 3,
-            currentTime,
-            trade_no: body.trade_no
-        });
 
         await PaymentModel.updateOrderStatus(localOrder.transaction_id || '', 3, currentTime, currentTime, body.trade_no);
-        console.log(`[${requestId}] 订单状态更新完成!`);
 
         // --- 支付路由 Redis 额度累加 ---
         try {
@@ -3385,7 +3206,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
                 const ruleId = await getOrderRuleMapping(localOrder.transaction_id || '');
                 if (ruleId) {
                     await incrementRedisUsedQuota(ruleId, orderAmount);
-                    console.log(`[${requestId}] 支付路由 Redis 额度已累加: 规则ID=${ruleId}, 金额=${orderAmount}`);
                 }
             }
         } catch (redisErr) {
@@ -3394,14 +3214,12 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         // --- End ---
 
         // ========== 收银台支付特殊处理：平台币到账逻辑 ==========
-        console.log(`[${requestId}] 开始处理平台币到账...`);
 
         try {
             // 计算应该到账的平台币数量（按SystemParams系数，默认1:10）
             const rateStr = await getSystemParam('ptb_exchange_rate', '10');
             const rate = Math.max(1, parseFloat(rateStr) || 10);
             const platformCoinsToAdd = orderAmount * rate;
-            console.log(`[${requestId}] 计算平台币到账数量: ${orderAmount}元 = ${platformCoinsToAdd}平台币`);
 
             // 获取用户当前平台币余额
             const user = await sql({
@@ -3417,7 +3235,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
 
             const currentPlatformCoins = parseFloat(user[0].platform_coins) || 0;
 
-            console.log(`[${requestId}] 平台币余额更新: ${currentPlatformCoins} + ${platformCoinsToAdd}`);
 
             // 更新用户平台币余额（使用统一方法）
             const updateResult = await UserModel.updatePlatformCoinsUnified(localOrder.user_id, platformCoinsToAdd, 3);
@@ -3428,7 +3245,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             }
 
             const newPlatformCoins = updateResult.newBalance!;
-            console.log(`[${requestId}] 平台币余额更新成功!`);
 
             // 同步记录到 PaymentRecords（平台币充值的余额变化）
             try {
@@ -3437,11 +3253,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
                     ptb_change: platformCoinsToAdd,
                     ptb_after: newPlatformCoins
                 } as any);
-                console.log(`[${requestId}] PaymentRecords 平台币变化已记录`, {
-                    before: currentPlatformCoins,
-                    change: platformCoinsToAdd,
-                    after: newPlatformCoins
-                });
             } catch (e: any) {
                 console.warn(`[${requestId}] PaymentRecords 平台币变化记录失败(不影响到账):`, e?.message || e);
             }
@@ -3455,7 +3266,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
                 ],
             });
 
-            console.log(`[${requestId}] 平台币充值日志记录成功!`);
 
 
         } catch (platformCoinError: any) {
@@ -3473,8 +3283,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
 
         const endTime = Date.now();
         const processingTime = endTime - startTime;
-        console.log(`[${requestId}] === 收银台支付回调处理完成，返回success ===`);
-        console.log(`[${requestId}] 总处理时间: ${processingTime}ms`);
         setResponseStatus(evt, 200);
         return 'SUCCESS';
 
@@ -3497,7 +3305,6 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
 export const fixPaymentWayBatch = async (evt: H3Event) => {
     try {
         const body = await readBody(evt).catch(() => ({}));
-        console.log('[Admin] fixPaymentWayBatch 请求:', body);
         // 这里可根据需要实现实际修复逻辑；当前先返回占位响应
         return {
             success: true,
@@ -3518,7 +3325,6 @@ export const fixPaymentWayBatch = async (evt: H3Event) => {
 export const analyzePaymentWay = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
-        console.log('[Admin] analyzePaymentWay 查询:', query);
         // 返回简单统计占位数据，避免路由报错
         return {
             success: true,
@@ -3545,7 +3351,6 @@ export const queryPaymentOrder = async (evt: H3Event) => {
         const body = await readBody(evt);
         const { transaction_id } = body;
 
-        console.log('[PaymentQuery] 开始询单:', { transaction_id });
 
         if (!transaction_id) {
             return {
@@ -3563,12 +3368,6 @@ export const queryPaymentOrder = async (evt: H3Event) => {
             };
         }
 
-        console.log('[PaymentQuery] 订单详情:', {
-            transaction_id,
-            mch_order_id: orderDetail.mch_order_id,
-            payment_status: orderDetail.payment_status,
-            payment_way: orderDetail.payment_way
-        });
 
         // 如果订单已经支付成功，直接返回成功状态
         if (orderDetail.payment_status === 3) {
@@ -3601,7 +3400,6 @@ export const queryPaymentOrder = async (evt: H3Event) => {
             trade_no: orderDetail.mch_order_id
         });
 
-        console.log('[PaymentQuery] 询单结果:', queryResult);
 
         if (queryResult.code === 0) {
             // 询单成功
@@ -3609,7 +3407,6 @@ export const queryPaymentOrder = async (evt: H3Event) => {
 
             // 如果第三方返回已支付(status=1)，但本地状态不是3，需要处理到账逻辑
             if (thirdPartyStatus === 1 && orderDetail.payment_status !== 3) {
-                console.log('[PaymentQuery] 检测到支付成功但本地未到账，触发到账逻辑');
 
                 // 调用到账逻辑
                 await processSuccessfulPayment(orderDetail, queryResult);
@@ -3668,7 +3465,6 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
         const isGiftOrder = serverUrl.startsWith('gift://');
 
         if (isPlatformCoinRecharge && !isGiftOrder) {
-            console.log('[PaymentQuery] 处理平台币充值到账...');
 
             // 计算应该到账的平台币数量
             const rateStr = await getSystemParam('ptb_exchange_rate', '10');
@@ -3676,7 +3472,6 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
             const orderAmount = parseFloat(String(orderDetail.amount || 0));
             const platformCoinsToAdd = orderAmount * rate;
 
-            console.log(`[PaymentQuery] 计算平台币: ${orderAmount}元 × ${rate} = ${platformCoinsToAdd}平台币`);
 
             // 获取用户当前平台币余额
             const user = await sql({
@@ -3691,7 +3486,6 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
 
             const currentPlatformCoins = parseFloat(user[0].platform_coins) || 0;
 
-            console.log(`[PaymentQuery] 平台币余额更新: ${currentPlatformCoins} + ${platformCoinsToAdd}`);
 
             // 更新用户平台币余额（使用统一方法）
             const updateResult = await UserModel.updatePlatformCoinsUnified(orderDetail.user_id, platformCoinsToAdd, 4);
@@ -3710,10 +3504,8 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
                 ptb_after: newPlatformCoins
             });
 
-            console.log('[PaymentQuery] 平台币充值到账完成');
 
         } else if (isGiftOrder) {
-            console.log('[PaymentQuery] 处理礼包订单到账...');
 
             // 解析礼包元数据
             const metaStr = serverUrl.replace('gift://', '');
@@ -3728,16 +3520,13 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
             const characterUuid = meta.cid;
             const serverId = meta.sid || 1;
 
-            console.log('[PaymentQuery] 礼包元数据:', { packageId, characterUuid, serverId });
 
             // 获取礼包信息（注意：表名是 externalgiftpackages）
-            console.log('[PaymentQuery] 查询礼包信息, packageId:', packageId);
             const packageInfo: any = await sql({
                 query: 'SELECT * FROM externalgiftpackages WHERE id = ?',
                 values: [packageId]
             });
 
-            console.log('[PaymentQuery] 礼包查询结果:', packageInfo.length > 0 ? '找到' : '未找到');
 
             if (packageInfo.length === 0) {
                 console.error('[PaymentQuery] 礼包不存在:', packageId);
@@ -3745,24 +3534,17 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
             }
 
             const pkg = packageInfo[0];
-            console.log('[PaymentQuery] 礼包信息:', {
-                id: pkg.id,
-                package_name: pkg.package_name,
-                price_real_money: pkg.price_real_money
-            });
 
             // 解析 gift_items
             let giftItems;
             try {
                 giftItems = typeof pkg.gift_items === 'string' ? JSON.parse(pkg.gift_items) : pkg.gift_items;
-                console.log('[PaymentQuery] gift_items 解析成功');
             } catch (parseError: any) {
                 console.error('[PaymentQuery] gift_items 解析失败:', parseError.message);
                 throw new Error(`礼包物品配置解析失败: ${parseError.message}`);
             }
 
             // 创建礼包购买记录（如果不存在）
-            console.log('[PaymentQuery] 创建礼包购买记录...');
             const purchaseRecord = {
                 user_id: orderDetail.user_id,
                 thirdparty_uid: characterUuid,
@@ -3779,26 +3561,13 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
                 remark: `第三方支付购买 - 询单补偿发放`
             };
 
-            console.log('[PaymentQuery] 导入 ExternalGiftPackageModel...');
             const ExternalGiftPackageModel = await import('../model/externalGiftPackage');
 
-            console.log('[PaymentQuery] 调用 createPurchaseRecord, 参数:', {
-                user_id: purchaseRecord.user_id,
-                package_id: purchaseRecord.package_id,
-                package_name: purchaseRecord.package_name,
-                total_amount: purchaseRecord.total_amount
-            });
             const createResult: any = await ExternalGiftPackageModel.createPurchaseRecord(purchaseRecord);
             const purchaseRecordId = createResult.insertId;
 
-            console.log('[PaymentQuery] 购买记录创建成功, 记录ID:', purchaseRecordId);
 
             // 使用 IDIP 方式发放礼包到游戏内
-            console.log('[PaymentQuery] 开始发放礼包到游戏内, 参数:', {
-                purchaseRecordId,
-                serverId: serverId.toString(),
-                characterUuid
-            });
 
             try {
                 const deliveryResult = await ExternalGiftPackageModel.deliverPackageToGameViaIDIP(
@@ -3807,10 +3576,8 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
                     characterUuid
                 );
 
-                console.log('[PaymentQuery] IDIP 发放返回结果:', JSON.stringify(deliveryResult));
 
                 if (deliveryResult.success) {
-                    console.log('[PaymentQuery] ✅ 礼包发放成功!');
                     // 记录到账时间
                     const currentTime = getCurrentFormattedTime();
                     await PaymentModel.updateByTransactionId(orderDetail.transaction_id, {
@@ -3828,14 +3595,10 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
             }
 
             // 更新订单状态
-            console.log('[PaymentQuery] 更新订单状态为成功, transaction_id:', orderDetail.transaction_id);
             await PaymentModel.updateOrderStatus(orderDetail.transaction_id, 3);
-            console.log('[PaymentQuery] 订单状态更新完成');
 
-            console.log('[PaymentQuery] ✅ 礼包订单处理完成');
         }
 
-        console.log('[PaymentQuery] ✅ 到账逻辑处理完成');
 
     } catch (error: any) {
         console.error('[PaymentQuery] ❌ 到账逻辑处理失败');
