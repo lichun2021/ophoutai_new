@@ -364,7 +364,42 @@ export const insert = async (evt: H3Event) => {
 export const reg = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("reg:", body)
+
+        // ---- 获取真实客户端IP（阿里云CDN架构）----
+        const headers = getHeaders(evt);
+        // 优先取阿里云CDN专属头，其次取 X-Forwarded-For 第一个，最后取 X-Real-IP
+        const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
+        const xForwardedFor = headers['x-forwarded-for'] as string;
+        const xRealIp = headers['x-real-ip'] as string;
+        const clientIp = aliCdnRealIp
+            || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
+            || xRealIp
+            || 'unknown';
+        console.log(`[注册] 来自IP: ${clientIp} | Ali-CDN-Real-IP: ${aliCdnRealIp || '-'} | X-Forwarded-For: ${xForwardedFor || '-'} | X-Real-IP: ${xRealIp || '-'}`);
+        // ---- END ----
+
+        // ---- IP 注册频率限制：同一IP 8小时内只允许注册一次 ----
+        const REGISTER_IP_LIMIT_HOURS = 8;
+        const REGISTER_IP_LIMIT_TTL = REGISTER_IP_LIMIT_HOURS * 60 * 60; // 28800 秒
+        const ipLimitKey = `reg_ip_limit:${clientIp}`;
+        if (clientIp && clientIp !== 'unknown') {
+            const redis = getRedisCluster();
+            const existing = await redis.get(ipLimitKey);
+            if (existing) {
+                // 查询剩余 TTL（秒）
+                const ttl = await redis.ttl(ipLimitKey);
+                const remainHours = Math.ceil(ttl / 3600);
+                const remainMins = Math.ceil((ttl % 3600) / 60);
+                console.warn(`[注册拒绝] IP ${clientIp} 在限制期内重复注册，剩余 ${ttl}s`);
+                return {
+                    status: "fail",
+                    message: `该IP注册过于频繁，请 ${remainHours > 0 ? remainHours + ' 小时' : ''}${remainMins > 0 && remainHours === 0 ? remainMins + ' 分钟' : ''} 后再试`,
+                };
+            }
+        }
+        // ---- END IP 限制 ----
+
+        console.log("reg body:", body)
 
         // 检查用户是否已存在
         const existingUser = await UserModel.findByThirdpartyUid(body.thirdparty_uid);
@@ -417,6 +452,13 @@ export const reg = async (evt: H3Event) => {
 
         // 创建新用户（同时创建SubUser）
         const result = await UserModel.insert(userData);
+
+        // ✅ 注册成功后写入IP限制记录
+        if (result !== null && clientIp && clientIp !== 'unknown') {
+            const redis = getRedisCluster();
+            await redis.set(ipLimitKey, '1', 'EX', REGISTER_IP_LIMIT_TTL);
+            console.log(`[注册] IP ${clientIp} 已记录，${REGISTER_IP_LIMIT_HOURS}小时内限制再次注册`);
+        }
 
         return {
             status: result === null ? "fail" : "success",
@@ -658,9 +700,15 @@ export const userLogin = async (evt: H3Event) => {
         const { username, password, ts, sig } = body;
         usernameToLog = username || '';
 
-        // 获取客户端信息
+        // 获取客户端信息（阿里云CDN架构：Ali-CDN-Real-IP > X-Forwarded-For > X-Real-IP）
         const headers = getHeaders(evt);
-        const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+        const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
+        const xForwardedFor = headers['x-forwarded-for'] as string;
+        const xRealIp = headers['x-real-ip'] as string;
+        const ipAddress = aliCdnRealIp
+            || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
+            || xRealIp
+            || 'unknown';
         const userAgent = (headers['user-agent'] as string) || '';
 
         if (!username) {
@@ -1755,7 +1803,18 @@ export const updateSubUserWuid = async (evt: H3Event) => {
 export const register = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("用户注册请求:", body);
+
+        // 提取真实客户端IP（阿里云CDN架构）
+        const _headers = getHeaders(evt);
+        const _aliIp = _headers['ali-cdn-real-ip'] as string;
+        const _xffIp = _headers['x-forwarded-for'] as string;
+        const _realIp = _headers['x-real-ip'] as string;
+        const clientIp = _aliIp
+            || (_xffIp ? _xffIp.split(',')[0].trim() : '')
+            || _realIp
+            || 'unknown';
+
+        console.log(`[用户注册] IP: ${clientIp} | 用户名: ${body.username} | 渠道: ${body.channel_code} | 游戏: ${body.game_code}`);
 
         // 参数验证
         if (!body.username || !body.password) {
