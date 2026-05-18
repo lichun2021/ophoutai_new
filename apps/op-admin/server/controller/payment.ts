@@ -1,4 +1,4 @@
-﻿import * as PaymentModel from '../model/payment';
+import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
@@ -1694,7 +1694,7 @@ export const doPayment = async (evt: H3Event) => {
             }
         }
 
-        // Redis 防重复下单(15秒):仅对非平台币(ptb)生效;优先按 wuid,其次按 subUserId,最后按用户名
+        // Redis 防重复下单(5秒):仅对非平台币(ptb)生效;优先按 wuid,其次按 subUserId,最后按用户名
 
         try {
             const redis = getRedisCluster();
@@ -1711,12 +1711,12 @@ export const doPayment = async (evt: H3Event) => {
 
             if (lockKey) {
                 // @ts-ignore ioredis 支持 NX + EX 语义
-                const lockOk = await redis.set(lockKey, '1', 'EX', 15, 'NX');
+                const lockOk = await redis.set(lockKey, '1', 'EX', 5, 'NX');
                 if (lockOk !== 'OK') {
                     setResponseStatus(evt, 200);
                     return {
                         code: -10,
-                        msg: '下单过于频繁,请15秒后再试',
+                        msg: '下单过于频繁,请5秒后再试',
                         data: null
                     };
                 }

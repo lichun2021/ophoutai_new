@@ -37,20 +37,20 @@ function generateSVG(code: string): string {
     svg += `<rect width="${W}" height="${H}" fill="url(#bg)" rx="7"/>`;
 
     // 干扰线
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-        svg += `<line x1="${rnd(0, W)}" y1="${rnd(0, H)}" x2="${rnd(0, W)}" y2="${rnd(0, H)}" stroke="${color}" stroke-width="1" opacity="0.3"/>`;
+        svg += `<line x1="${rnd(0, W)}" y1="${rnd(0, H)}" x2="${rnd(0, W)}" y2="${rnd(0, H)}" stroke="${color}" stroke-width="1.5" opacity="0.4"/>`;
     }
     // 干扰点
-    for (let i = 0; i < 15; i++) {
-        svg += `<circle cx="${rnd(5, W - 5)}" cy="${rnd(5, H - 5)}" r="${rnd(1, 2)}" fill="rgba(255,255,255,${rnd(0.1, 0.25).toFixed(2)})"/>`;
+    for (let i = 0; i < 30; i++) {
+        svg += `<circle cx="${rnd(5, W - 5)}" cy="${rnd(5, H - 5)}" r="${rnd(1, 2.5)}" fill="rgba(255,255,255,${rnd(0.2, 0.4).toFixed(2)})"/>`;
     }
-    // 字符（旋转 ±8°，字号 26-30px）
+    // 字符（旋转 ±12°，字号 24-32px）
     for (let i = 0; i < code.length; i++) {
         const x = 25 + i * 38;
         const y = 36 + rnd(-3, 3);
-        const rotate = rnd(-8, 8).toFixed(1);
-        const fontSize = Math.floor(rnd(26, 30));
+        const rotate = rnd(-12, 12).toFixed(1);
+        const fontSize = Math.floor(rnd(24, 32));
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
         svg += `<text x="${x}" y="${y}" font-family="Arial Black,Arial,sans-serif" font-size="${fontSize}" font-weight="900" fill="${color}" transform="rotate(${rotate},${x},${y})">${code[i]}</text>`;
     }

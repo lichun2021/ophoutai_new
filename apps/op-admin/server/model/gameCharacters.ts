@@ -189,20 +189,22 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
         const extData = normalizeExtData(characterData.ext);
         const characterLevel = characterData.character_level || 1;
         
-        // 1. 先根据 subuser_id + uuid 查询角色是否已存在
+        // 1. 先根据 uuid + server_id 查询角色是否已存在（与唯一索引 idx_uuid_server 对齐）
         const existingResult = await sql({
-            query: 'SELECT id, server_id, server_name FROM GameCharacters WHERE subuser_id = ? AND uuid = ? LIMIT 1',
-            values: [characterData.subuser_id, characterData.uuid],
+            query: 'SELECT id, server_id, server_name FROM GameCharacters WHERE uuid = ? AND server_id = ? LIMIT 1',
+            values: [characterData.uuid, characterData.server_id || 1],
         }) as any[];
         
         if (existingResult.length > 0) {
-            // 2. 如果已存在，则执行更新（不更新 server_id 和 server_name）
+            // 2. 如果已存在，则执行更新（同时修正 user_id/subuser_id，清理老数据关联）
             const existingId = existingResult[0].id;
             
             await sql({
                 query: `
                     UPDATE GameCharacters 
                     SET 
+                        user_id = ?,
+                        subuser_id = ?,
                         character_name = ?, 
                         character_level = ?, 
                         ext = ?, 
@@ -210,6 +212,8 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
                     WHERE id = ?
                 `,
                 values: [
+                    characterData.user_id,
+                    characterData.subuser_id,
                     characterData.character_name,
                     characterLevel,
                     extData,

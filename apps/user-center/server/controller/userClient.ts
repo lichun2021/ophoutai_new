@@ -346,12 +346,14 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             };
         }
         
-        // 生成订单号（用于 PaymentRecords 和礼包购买记录）
-        const mchOrderId = `${Date.now()}`;
-        
-           // 同时创建PaymentRecords记录（平台币消费记录）
+        // 生成唯一订单号（时间戳 + 4位随机数，防止毫秒级并发碰撞）
+        const orderTs = Date.now();
+        const orderRand = Math.floor(Math.random() * 9000) + 1000; // 1000~9999
+        const mchOrderId = `${orderTs}${orderRand}`;
+
+        // 同时创建PaymentRecords记录（平台币消费记录）
         // 使用选择的角色信息填充 wuid 和 sub_user_id
-        const transactionId = `PC${Date.now()}${user.id}`;
+        const transactionId = `PC${orderTs}${orderRand}${user.id}`;
         const paymentData = {
             user_id: user.id!,
             sub_user_id: selectedCharacter.subuser_id, // 使用角色的 subuser_id

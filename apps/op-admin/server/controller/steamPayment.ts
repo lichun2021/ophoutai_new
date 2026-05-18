@@ -150,7 +150,7 @@ async function notifyGameServerForSteam(orderDetail: any, orderId: string) {
         const billno = orderDetail.order_id || orderId;
         const rechargeUrl = `${webhost}/script/gmRecharge?playerId=${playerId}&rechargeType=${config.rechargeType}&goodsId=${finalGoodsId}&billno=${billno}`;
 
-        console.log('[Steam Pay] API到账请求:', rechargeUrl);
+        console.log('[Steam Pay] API到账请求2:', rechargeUrl);
 
         const res = await fetch(rechargeUrl, {
             method: 'GET',
