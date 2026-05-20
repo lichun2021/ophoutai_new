@@ -1,4 +1,4 @@
-﻿import * as PaymentModel from '../model/payment';
+import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
@@ -1630,8 +1630,9 @@ export const doPayment = async (evt: H3Event) => {
         params.sign = computeSdkSign(params, sdkSecret);
 
         const debugFields = Object.keys(params).filter(k => k !== 'sign' && k !== '__signed').sort();
-        console.log(`[PaymentProxy] re-sign=${params.sign}, fields=[${debugFields.join(',')}]`);
-        console.log(`[PaymentProxy] -> ${targetUrl}`);
+        console.log(`[${new Date().toISOString()}] [PaymentProxy] params:`, JSON.stringify(params));
+        console.log(`[${new Date().toISOString()}] [PaymentProxy] re-sign=${params.sign}, fields=[${debugFields.join(',')}]`);
+        console.log(`[${new Date().toISOString()}] [PaymentProxy] -> ${targetUrl}`);
 
         const resp = await fetch(targetUrl, {
             method: 'POST',
@@ -1646,20 +1647,20 @@ export const doPayment = async (evt: H3Event) => {
 
         const text = await resp.text();
         if (!text || !text.trim()) {
-            console.error('[PaymentProxy] op-admin empty response');
+            console.error(`[${new Date().toISOString()}] [PaymentProxy] op-admin empty response`);
             return { code: -1, msg: 'payment service unavailable', data: null };
         }
 
         try {
             const result = JSON.parse(text);
-            console.log(`[PaymentProxy] <- code=${result.code}`);
+            console.log(`[${new Date().toISOString()}] [PaymentProxy] <- code=${result.code}`);
             return result;
         } catch {
-            console.error('[PaymentProxy] non-JSON response:', text.slice(0, 200));
+            console.error(`[${new Date().toISOString()}] [PaymentProxy] non-JSON response:`, text.slice(0, 200));
             return { code: -1, msg: 'payment service error', data: null };
         }
     } catch (err: any) {
-        console.error('[PaymentProxy] error:', err?.message || err);
+        console.error(`[${new Date().toISOString()}] [PaymentProxy] error:`, err?.message || err);
         return { code: -1, msg: 'payment service unreachable', data: null };
     }
 };

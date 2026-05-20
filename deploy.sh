@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================
-# 三套应用一键构建 + 部署脚本 7wAvqMlFsNY3vT87
+# 三套应用一键构建 + 部署脚本 mV88VU3dpFf47uF
 # 用法:
 #   ./deploy.sh              # 部署全部三个应用
 #   ./deploy.sh user         # 只部署 user-center
@@ -10,9 +10,9 @@
 # =====================================================
 
 # ============ 服务器配置（按需修改）============
-SERVER_IP="27.124.40.42"
+SERVER_IP="103.85.188.218"
 USERNAME="root"
-SSH_PORT="22"
+SSH_PORT="15069"
 
 # 各应用在服务器上的路径和重启脚本
 USER_REMOTE_PATH="/data/user-center"
@@ -43,11 +43,40 @@ log_warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error()   { echo -e "${RED}[✗]${NC} $1"; }
 log_step()    { echo -e "\n${BOLD}${CYAN}>>> $1${NC}"; }
 
+# 确保子应用依赖已安装，否则 npm run build 会找不到本地 nuxt 命令
+ensure_dependencies() {
+  local APP_LABEL="$1"
+
+  if [ -x "node_modules/.bin/nuxt" ]; then
+    return 0
+  fi
+
+  log_warn "$APP_LABEL 依赖未安装或不完整，开始安装 npm 依赖..."
+  if [ -f "package-lock.json" ]; then
+    npm ci
+  else
+    npm install
+  fi
+
+  if [ $? -ne 0 ]; then
+    log_error "$APP_LABEL 依赖安装失败！"
+    return 1
+  fi
+
+  if [ ! -x "node_modules/.bin/nuxt" ]; then
+    log_error "$APP_LABEL 依赖安装后仍找不到 node_modules/.bin/nuxt"
+    return 1
+  fi
+
+  log_success "$APP_LABEL 依赖安装完成"
+  return 0
+}
+
 # 记录总耗时
 START_TIME=$(date +%s)
 
 # =====================================================
-# 解析参数 → 确定要部署哪些应用 7wAvqMlFsNY3vT87
+# 解析参数 → 确定要部署哪些应用 mV88VU3dpFf47uF
 # =====================================================
 DEPLOY_USER=false
 DEPLOY_AGENT=false
@@ -109,6 +138,12 @@ deploy_app() {
 
   # --- 步骤1: 构建 ---
   log_info "[1/6] 构建 $APP_LABEL..."
+  ensure_dependencies "$APP_LABEL"
+  if [ $? -ne 0 ]; then
+    cd - > /dev/null
+    return 1
+  fi
+
   if [ -d ".output" ]; then
     rm -rf .output
     log_info "已清理旧的 .output"

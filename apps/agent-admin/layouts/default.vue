@@ -1,6 +1,8 @@
 <!-- layouts/default.vue -->
 <template>
   <div class="layout">
+    <!-- 静态预加载图标以打包进 serverBundle -->
+    <UIcon name="i-heroicons-arrow-right-on-rectangle" class="hidden" />
     <!-- 移动端菜单按钮 -->
     <div class="mobile-menu-toggle" v-if="isMobile">
       <UButton

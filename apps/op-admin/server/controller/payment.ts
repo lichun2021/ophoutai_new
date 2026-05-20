@@ -1788,6 +1788,7 @@ export const doPayment = async (evt: H3Event) => {
         }) as any[];
 
         if (user.length === 0) {
+            console.error(`[${new Date().toISOString()}] [支付下单失败] 用户不存在: 传入的 username (参数 f) 为 "${username}"`);
             setResponseStatus(evt, 200);
             return {
                 code: -2,
