@@ -783,14 +783,19 @@ export const userLogin = async (evt: H3Event) => {
 
         let rechargeUrl = '';
         let mallUrl = '';
+        let cdkUrl = '';
         if (userId) {
             const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier');
             const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall');
+            const generatedCdkUrl = await generateUserLoginUrl(userId, '/user/cdk-redeem');
             if (generatedUrl) {
                 rechargeUrl = generatedUrl;
             }
             if (generatedmallUrl) {
                 mallUrl = generatedmallUrl;
+            }
+            if (generatedCdkUrl) {
+                cdkUrl = generatedCdkUrl;
             }
         }
 
@@ -846,6 +851,7 @@ export const userLogin = async (evt: H3Event) => {
                 user: userInfo,
                 rechargeUrl: rechargeUrl,
                 mallUrl: mallUrl,
+                cdkUrl: cdkUrl,
 
                 // 根据该用户支付宝/微信成功充值总额选择游戏服IP
                 gameip: getGameIp(rechargeTotal),
