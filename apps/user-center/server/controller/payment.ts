@@ -1612,7 +1612,6 @@ export const doPayment = async (evt: H3Event) => {
     try {
         const { getSystemParam } = await import('../utils/systemConfig');
         const opAdminUrl = await getSystemParam('op_admin_url', 'https://pay.kccyei.cn');
-        const targetUrl = `${opAdminUrl.replace(/\/+$/, '')}/sdkapi/Unipay/pay`;
 
         let body: any = {};
         const method = evt.node.req.method?.toUpperCase() || 'GET';
@@ -1622,6 +1621,49 @@ export const doPayment = async (evt: H3Event) => {
         const query = getQuery(evt) || {};
         const params = { ...query, ...(body && typeof body === 'object' ? body : {}) };
 
+        const isCashier = params.cashier_payment === 'true' || evt.node.req.url?.includes('/user/cashier/pay');
+        const bjTimeStr = new Date(Date.now() + 8 * 3600000).toISOString().replace('T', ' ').substring(0, 23);
+
+        if (isCashier) {
+            // ⚠️ 必须走内网地址，op-admin 监听 3003 端口，不能用外网域名
+            const cashierTargetUrl = 'http://localhost:3003/api/user/cashier/pay';
+            const targetUrl = cashierTargetUrl;
+            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 触发原样转发 -> ${targetUrl}`);
+
+            // 复制客户端 Headers，过滤 hop-by-hop headers（connection/upgrade/content-length 等）
+            // 这些 headers 在 Node.js fetch 内部转发时会导致 fetch failed
+            const HOP_BY_HOP = new Set(['host', 'connection', 'upgrade', 'content-length', 'transfer-encoding', 'keep-alive', 'proxy-authorization', 'te', 'trailers']);
+            const proxyHeaders: any = {};
+            for (const key of Object.keys(evt.node.req.headers)) {
+                if (!HOP_BY_HOP.has(key.toLowerCase())) {
+                    proxyHeaders[key] = evt.node.req.headers[key];
+                }
+            }
+            proxyHeaders['content-type'] = 'application/json';
+
+            // 内网转发，直接打印完整 Headers（无需脱敏）
+            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 转发Headers:`, JSON.stringify(proxyHeaders));
+            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 转发Body:`, JSON.stringify(params));
+
+            const resp = await fetch(targetUrl, {
+                method: 'POST',
+                headers: proxyHeaders,
+                body: JSON.stringify(params),
+            });
+
+            const text = await resp.text();
+            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 收到响应 ->`, text);
+
+            try {
+                const result = JSON.parse(text);
+                return result;
+            } catch {
+                return { code: -1, msg: 'payment service parse error', data: null };
+            }
+        }
+
+        const targetUrl = `${opAdminUrl.replace(/\/+$/, '')}/sdkapi/Unipay/pay`;
+
         // 清除前端签名（MD5），用 SDK 密钥（HMAC-SHA256）重新签名
         delete params.sign;
         delete params.__signed;
@@ -1630,9 +1672,9 @@ export const doPayment = async (evt: H3Event) => {
         params.sign = computeSdkSign(params, sdkSecret);
 
         const debugFields = Object.keys(params).filter(k => k !== 'sign' && k !== '__signed').sort();
-        console.log(`[PaymentProxy] params:`, JSON.stringify(params));
-        console.log(`[PaymentProxy] re-sign=${params.sign}, fields=[${debugFields.join(',')}]`);
-        console.log(`[PaymentProxy] -> ${targetUrl}`);
+        console.log(`[${bjTimeStr}] [PaymentProxy] params:`, JSON.stringify(params));
+        console.log(`[${bjTimeStr}] [PaymentProxy] re-sign=${params.sign}, fields=[${debugFields.join(',')}]`);
+        console.log(`[${bjTimeStr}] [PaymentProxy] -> ${targetUrl}`);
 
         const resp = await fetch(targetUrl, {
             method: 'POST',
