@@ -1591,7 +1591,7 @@ export const doPayment = async (evt: H3Event) => {
                 body = {};
             }
         }
-        console.log("支付请求:", body);
+        console.log(`[${new Date().toISOString()}] 支付请求:`, body);
 
         // 获取请求参数 - 同时支持GET query 和 POST body
         const query = getQuery(evt) || {};
@@ -1788,7 +1788,7 @@ export const doPayment = async (evt: H3Event) => {
         }) as any[];
 
         if (user.length === 0) {
-            console.error(`[${new Date().toISOString()}] [支付下单失败] 用户不存在: 传入的 username (参数 f) 为 "${username}"`);
+            console.error(`[支付下单失败] 用户不存在: 传入的 username (参数 f) 为 "${username}"`);
             setResponseStatus(evt, 200);
             return {
                 code: -2,
