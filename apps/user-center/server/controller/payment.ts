@@ -1622,13 +1622,13 @@ export const doPayment = async (evt: H3Event) => {
         const params = { ...query, ...(body && typeof body === 'object' ? body : {}) };
 
         const isCashier = params.cashier_payment === 'true' || evt.node.req.url?.includes('/user/cashier/pay');
-        const bjTimeStr = new Date(Date.now() + 8 * 3600000).toISOString().replace('T', ' ').substring(0, 23);
+
 
         if (isCashier) {
             // ⚠️ 必须走内网地址，op-admin 监听 3003 端口，不能用外网域名
             const cashierTargetUrl = 'http://localhost:3003/api/user/cashier/pay';
             const targetUrl = cashierTargetUrl;
-            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 触发原样转发 -> ${targetUrl}`);
+            console.log(`[PaymentProxy] [平台币充值] 触发原样转发 -> ${targetUrl}`);
 
             // 复制客户端 Headers，过滤 hop-by-hop headers（connection/upgrade/content-length 等）
             // 这些 headers 在 Node.js fetch 内部转发时会导致 fetch failed
@@ -1642,8 +1642,8 @@ export const doPayment = async (evt: H3Event) => {
             proxyHeaders['content-type'] = 'application/json';
 
             // 内网转发，直接打印完整 Headers（无需脱敏）
-            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 转发Headers:`, JSON.stringify(proxyHeaders));
-            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 转发Body:`, JSON.stringify(params));
+            console.log(`[PaymentProxy] [平台币充值] 转发Headers:`, JSON.stringify(proxyHeaders));
+            console.log(`[PaymentProxy] [平台币充值] 转发Body:`, JSON.stringify(params));
 
             const resp = await fetch(targetUrl, {
                 method: 'POST',
@@ -1652,7 +1652,7 @@ export const doPayment = async (evt: H3Event) => {
             });
 
             const text = await resp.text();
-            console.log(`[${bjTimeStr}] [PaymentProxy] [平台币充值] 收到响应 ->`, text);
+            console.log(`[PaymentProxy] [平台币充值] 收到响应 ->`, text);
 
             try {
                 const result = JSON.parse(text);
@@ -1672,10 +1672,9 @@ export const doPayment = async (evt: H3Event) => {
         params.sign = computeSdkSign(params, sdkSecret);
 
         const debugFields = Object.keys(params).filter(k => k !== 'sign' && k !== '__signed').sort();
-        console.log(`[${bjTimeStr}] [PaymentProxy] params:`, JSON.stringify(params));
-        console.log(`[${bjTimeStr}] [PaymentProxy] re-sign=${params.sign}, fields=[${debugFields.join(',')}]`);
-        console.log(`[${bjTimeStr}] [PaymentProxy] -> ${targetUrl}`);
-
+        console.log(`[PaymentProxy] params:`, JSON.stringify(params));
+        console.log(`[PaymentProxy] re-sign=${params.sign}, fields=[${debugFields.join(',')}]`);
+        console.log(`[PaymentProxy] -> ${targetUrl}`);
         const resp = await fetch(targetUrl, {
             method: 'POST',
             headers: {

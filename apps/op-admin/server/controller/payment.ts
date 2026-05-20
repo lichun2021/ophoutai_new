@@ -1781,7 +1781,7 @@ export const doPayment = async (evt: H3Event) => {
         }
 
 
-        const bjTimeStr = new Date(Date.now() + 8 * 3600000).toISOString().replace('T', ' ').substring(0, 23);
+
         let dbHost = 'unknown';
         let dbName = 'unknown';
         try {
@@ -1793,11 +1793,11 @@ export const doPayment = async (evt: H3Event) => {
             }
         } catch {}
 
-        console.log(`[${bjTimeStr}] [doPayment] 开始校验用户是否存在...`);
-        console.log(`[${bjTimeStr}] [doPayment] 数据库环境 -> Host: ${dbHost}, Database: ${dbName}`);
-        console.log(`[${bjTimeStr}] [doPayment] 校验参数 -> username (f): "${username}" (类型: ${typeof username}, 长度: ${String(username || '').length})`);
-        console.log(`[${bjTimeStr}] [doPayment] 执行SQL -> SELECT id, platform_coins, game_code, channel_code FROM users WHERE username = ? OR thirdparty_uid = ?`);
-        console.log(`[${bjTimeStr}] [doPayment] SQL绑定值 -> ["${username}", "${username}"]`);
+        console.log(`[doPayment] 开始校验用户是否存在...`);
+        console.log(`[doPayment] 数据库环境 -> Host: ${dbHost}, Database: ${dbName}`);
+        console.log(`[doPayment] 校验参数 -> username (f): "${username}" (类型: ${typeof username}, 长度: ${String(username || '').length})`);
+        console.log(`[doPayment] 执行SQL -> SELECT id, platform_coins, game_code, channel_code FROM users WHERE username = ? OR thirdparty_uid = ?`);
+        console.log(`[doPayment] SQL绑定值 -> ["${username}", "${username}"]`);
 
         // 验证用户是否存在 - 支持主用户名或子用户名查询，同时获取channel_code和game_code
         const user = await sql({
@@ -1805,10 +1805,10 @@ export const doPayment = async (evt: H3Event) => {
             values: [username, username],
         }) as any[];
 
-        console.log(`[${bjTimeStr}] [doPayment] SQL执行完毕，匹配用户记录数 -> ${user.length}`);
+        console.log(`[doPayment] SQL执行完毕，匹配用户记录数 -> ${user.length}`);
 
         if (user.length === 0) {
-            console.error(`[${bjTimeStr}] [doPayment] ❌ [支付下单失败] 用户不存在: 传入的 username 为 "${username}"`);
+            console.error(`[doPayment] ❌ [支付下单失败] 用户不存在: 传入的 username 为 "${username}"`);
             setResponseStatus(evt, 200);
             return {
                 code: -2,
@@ -1818,7 +1818,7 @@ export const doPayment = async (evt: H3Event) => {
         }
 
         const userData = user[0];
-        console.log(`[${bjTimeStr}] [doPayment] ✅ 用户校验成功:`, JSON.stringify(userData));
+        console.log(`[doPayment] ✅ 用户校验成功:`, JSON.stringify(userData));
         const userId = userData.id;
         const userPlatformCoins = parseFloat(userData.platform_coins) || 0;
         const userGameCode = userData.game_code || '';
