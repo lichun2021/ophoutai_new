@@ -169,16 +169,8 @@ deploy_app() {
   fi
 
   # --- 步骤3: 打包 ---
-  log_info "[2/6] 打包 .output + node_modules → $ZIP_NAME..."
+  log_info "[2/6] 打包 .output → $ZIP_NAME..."
   rm -f "$ZIP_NAME"
-
-  # 本地先确保生产依赖已安装（仅安装 prod deps）
-  if [ ! -d "node_modules" ]; then
-    log_info "  本地 node_modules 不存在，运行 npm install --omit=dev..."
-    npm install --omit=dev --ignore-scripts --prefer-offline -q
-  fi
-
-  # 打包 .output
   cd .output
   zip -r "../$ZIP_NAME" . -q
   if [ $? -ne 0 ]; then
@@ -187,15 +179,12 @@ deploy_app() {
     return 1
   fi
   cd ..
-
-  # 把 node_modules 一并打入 zip（服务器不需再执行 npm install）
-  if [ -d "node_modules" ]; then
-    zip -r "$ZIP_NAME" node_modules -q
-    log_info "  node_modules 已打入 zip"
-  fi
-
+  # package.json 一并打入，供服务器 npm install 使用
+  [ -f package.json ]      && zip -u "$ZIP_NAME" package.json      -q
+  [ -f package-lock.json ] && zip -u "$ZIP_NAME" package-lock.json -q
   local ZIP_SIZE=$(du -sh "$ZIP_NAME" | cut -f1)
   log_success "打包完成 ($ZIP_SIZE)"
+
 
 
   # --- 步骤4: 上传 ---
@@ -212,9 +201,10 @@ deploy_app() {
 
   # --- 步骤5: 服务器上解压 ---
   log_info "[4/6] 服务器解压..."
+  # 删除旧文件时保留 node_modules，避免每次重装依赖
   ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
     cd $REMOTE_PATH &&
-    find . -maxdepth 1 -mindepth 1 ! -name '$ZIP_NAME' -exec rm -rf {} + 2>/dev/null;
+    find . -maxdepth 1 -mindepth 1 ! -name 'node_modules' ! -name '$ZIP_NAME' -exec rm -rf {} + 2>/dev/null;
     unzip -oq $ZIP_NAME -d . &&
     rm -f $ZIP_NAME
   "
@@ -225,6 +215,31 @@ deploy_app() {
   fi
   log_success "解压完成"
 
+  # 安装运行时依赖：
+  #   - node_modules 不存在时自动安装（首次部署 / 手动清理后）
+  #   - 传入 --install 时强制重装（新增 npm 包时用）
+  if ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/package.json ]"; then
+    NEED_INSTALL=false
+    if [ "$INSTALL_DEPS" = true ]; then
+      NEED_INSTALL=true
+      log_info "[4.5/6] --install 强制重装依赖..."
+    elif ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/node_modules ]"; then
+      NEED_INSTALL=true
+      log_info "[4.5/6] node_modules 不存在，自动安装依赖..."
+    fi
+
+    if [ "$NEED_INSTALL" = true ]; then
+      ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
+        cd $REMOTE_PATH &&
+        npm install --omit=dev --ignore-scripts 2>&1 | tail -5
+      "
+      if [ $? -ne 0 ]; then
+        log_warn "npm install 执行异常，请手动检查"
+      else
+        log_success "依赖安装完成"
+      fi
+    fi
+  fi
 
   # --- 步骤6: 重启服务 ---
   log_info "[5/6] 重启 PM2 服务 ($PM2_NAME)..."
