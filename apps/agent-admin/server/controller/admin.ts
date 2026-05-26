@@ -1,17 +1,17 @@
-import {H3Event, readBody, readMultipartFormData, createError, defineEventHandler, getQuery, getHeader} from 'h3';
+import { H3Event, readBody, readMultipartFormData, createError, defineEventHandler, getQuery, getHeader } from 'h3';
 import * as AdminModel from '../model/admin';
 import * as PlatformCoinsModel from '../model/platformCoins';
 import * as PaymentModel from '../model/payment';
 import crypto from 'crypto';
-import {sql} from '../db';
+import { sql } from '../db';
 import { getItemName, formatGiftItemsDisplay } from '../utils/itemConfig';
 import { extractWorldIdFromBName } from '../model/gameServers';
 import { queryRechargeDaily, countRechargeDaily } from '../model/rechargeDaily';
 import { convertToChinaDateString, getChinaDateString, getChinaDateStringDaysAgo, getChinaYesterdayString } from '../utils/timezone';
 
 
-export const read = async(evt?: H3Event) => {
-    try{
+export const read = async (evt?: H3Event) => {
+    try {
         const result = await AdminModel.read();
         const admins = Array.isArray(result) ? (result as any[]) : [];
 
@@ -166,7 +166,7 @@ export const read = async(evt?: H3Event) => {
         return {
             data: enriched,
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('管理员读取失败:', e);
         throw createError({
             status: 500,
@@ -175,9 +175,9 @@ export const read = async(evt?: H3Event) => {
     }
 }
 
-export const login = async(evt:H3Event) => {
-    try{
-        const body =  await readBody(evt);
+export const login = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
         const name = String(body?.name || '').trim();
         const pwd = String(body?.password || '');
         const admin = await AdminModel.getByName(name);
@@ -199,7 +199,7 @@ export const login = async(evt:H3Event) => {
 
             // 获取管理员的完整权限信息（包含持久化的channelCodes）
             const adminWithPermissions = await AdminModel.getAdminWithPermissions(admin.id);
-            
+
             if (!adminWithPermissions) {
                 return { data: null };
             }
@@ -209,7 +209,7 @@ export const login = async(evt:H3Event) => {
                 const refreshedChannelCodes = await AdminModel.refreshAdminPermissions(admin.id);
                 adminWithPermissions.allowed_channel_codes = refreshedChannelCodes;
             }
-            
+
             const permissions = {
                 level: adminWithPermissions.level,
                 channel_codes: adminWithPermissions.allowed_channel_codes,
@@ -236,7 +236,7 @@ export const login = async(evt:H3Event) => {
                 data: null,
             };
         }
-    }catch(e: any){
+    } catch (e: any) {
         console.error('登录失败:', e);
         throw createError({
             status: 500,
@@ -248,20 +248,20 @@ export const login = async(evt:H3Event) => {
 
 
 // 刷新单个管理员权限
-export const refreshPermissions = async(evt:H3Event) => {
-    try{
+export const refreshPermissions = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id } = body;
-        
+
         if (!admin_id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID',
             });
         }
-        
+
         const channelCodes = await AdminModel.refreshAdminPermissions(admin_id);
-        
+
         return {
             success: true,
             message: '权限刷新成功',
@@ -270,7 +270,7 @@ export const refreshPermissions = async(evt:H3Event) => {
                 channel_codes: channelCodes
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('刷新权限失败:', e);
         throw createError({
             status: 500,
@@ -280,15 +280,15 @@ export const refreshPermissions = async(evt:H3Event) => {
 }
 
 // 批量刷新所有管理员权限
-export const refreshAllPermissions = async(evt:H3Event) => {
-    try{
+export const refreshAllPermissions = async (evt: H3Event) => {
+    try {
         await AdminModel.refreshAllAdminPermissions();
-        
+
         return {
             success: true,
             message: '所有管理员权限刷新成功'
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('批量刷新权限失败:', e);
         throw createError({
             status: 500,
@@ -363,20 +363,20 @@ export const getRechargeDailyRecords = async (evt: H3Event) => {
 }
 
 // 手动更新管理员权限
-export const updatePermissions = async(evt:H3Event) => {
-    try{
+export const updatePermissions = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id, channel_codes } = body;
-        
+
         if (!admin_id || !Array.isArray(channel_codes)) {
             throw createError({
                 status: 400,
                 message: '参数错误：需要admin_id和channel_codes数组',
             });
         }
-        
+
         await AdminModel.updateChannelCodes(admin_id, channel_codes);
-        
+
         return {
             success: true,
             message: '权限更新成功',
@@ -385,7 +385,7 @@ export const updatePermissions = async(evt:H3Event) => {
                 channel_codes
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('更新权限失败:', e);
         throw createError({
             status: 500,
@@ -395,15 +395,15 @@ export const updatePermissions = async(evt:H3Event) => {
 }
 
 // 获取所有游戏列表
-export const getAllGames = async(evt:H3Event) => {
-    try{
+export const getAllGames = async (evt: H3Event) => {
+    try {
         const games = await AdminModel.getAllGames();
-        
+
         return {
             success: true,
             data: games
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取游戏列表失败:', e);
         throw createError({
             status: 500,
@@ -413,25 +413,25 @@ export const getAllGames = async(evt:H3Event) => {
 }
 
 // 根据管理员权限获取游戏列表
-export const getFilteredGames = async(evt:H3Event) => {
-    try{
+export const getFilteredGames = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id } = body;
-        
+
         if (!admin_id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID',
             });
         }
-        
+
         const games = await AdminModel.getFilteredGames(admin_id);
-        
+
         return {
             success: true,
             data: games
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取过滤游戏列表失败:', e);
         throw createError({
             status: 500,
@@ -443,30 +443,30 @@ export const getFilteredGames = async(evt:H3Event) => {
 
 
 // 更新管理员游戏权限
-export const updateGamePermissions = async(evt:H3Event) => {
-    try{
+export const updateGamePermissions = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id, game_ids } = body;
-        
+
         if (!admin_id || !Array.isArray(game_ids)) {
             throw createError({
                 status: 400,
                 message: '参数错误：需要admin_id和game_ids数组',
             });
         }
-        
+
         // 获取更新前的权限，计算被移除的游戏ID
         const adminBefore = await AdminModel.getAdminWithPermissions(admin_id);
         const beforeGameIds = adminBefore?.allowed_game_ids || [];
         const removedGameIds = beforeGameIds.filter(id => !game_ids.includes(id));
-        
+
         // 更新当前管理员的游戏权限
         await AdminModel.updateGameIds(admin_id, game_ids);
-        
+
         // 总是触发级联更新下级代理权限（确保下级权限不超出上级范围）
         // 传递更新后的权限给级联更新函数，避免从数据库重新获取时出现延迟
         await AdminModel.cascadeUpdateGamePermissionsWithNewPermissions(admin_id, game_ids, removedGameIds);
-        
+
         return {
             success: true,
             message: '游戏权限更新成功，下级权限已同步',
@@ -476,7 +476,7 @@ export const updateGamePermissions = async(evt:H3Event) => {
                 removed_games: removedGameIds
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('更新游戏权限失败:', e);
         throw createError({
             status: 500,
@@ -486,20 +486,20 @@ export const updateGamePermissions = async(evt:H3Event) => {
 }
 
 // 检查管理员游戏权限
-export const checkGamePermission = async(evt:H3Event) => {
-    try{
+export const checkGamePermission = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id, game_id } = body;
-        
+
         if (!admin_id || !game_id) {
             throw createError({
                 status: 400,
                 message: '参数错误：需要admin_id和game_id',
             });
         }
-        
+
         const hasPermission = await AdminModel.hasGamePermission(admin_id, game_id);
-        
+
         return {
             success: true,
             data: {
@@ -508,7 +508,7 @@ export const checkGamePermission = async(evt:H3Event) => {
                 has_permission: hasPermission
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('检查游戏权限失败:', e);
         throw createError({
             status: 500,
@@ -518,18 +518,18 @@ export const checkGamePermission = async(evt:H3Event) => {
 }
 
 // 获取可管理的下级管理员列表
-export const getManageableAdmins = async(evt:H3Event) => {
-    try{
+export const getManageableAdmins = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id } = body;
-        
+
         if (!admin_id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID',
             });
         }
-        
+
         // 检查是否有编辑权限
         const canEdit = await AdminModel.canEditGamePermissions(admin_id);
         if (!canEdit) {
@@ -538,14 +538,14 @@ export const getManageableAdmins = async(evt:H3Event) => {
                 message: '无权限编辑游戏权限',
             });
         }
-        
+
         const manageableAdmins = await AdminModel.getManageableAdmins(admin_id);
-        
+
         return {
             success: true,
             data: manageableAdmins
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取可管理管理员失败:', e);
         throw createError({
             status: 500,
@@ -555,27 +555,27 @@ export const getManageableAdmins = async(evt:H3Event) => {
 }
 
 // 检查是否可以编辑游戏权限
-export const checkEditPermission = async(evt:H3Event) => {
-    try{
+export const checkEditPermission = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id } = body;
-        
+
         if (!admin_id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID',
             });
         }
-        
+
         const canEdit = await AdminModel.canEditGamePermissions(admin_id);
-        
+
         return {
             success: true,
             data: {
                 can_edit: canEdit
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('检查编辑权限失败:', e);
         throw createError({
             status: 500,
@@ -585,15 +585,15 @@ export const checkEditPermission = async(evt:H3Event) => {
 }
 
 // 同步所有代理的游戏权限
-export const syncAllGamePermissions = async(evt:H3Event) => {
-    try{
+export const syncAllGamePermissions = async (evt: H3Event) => {
+    try {
         await AdminModel.syncAllGamePermissions();
-        
+
         return {
             success: true,
             message: '所有代理的游戏权限同步完成'
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('同步游戏权限失败:', e);
         throw createError({
             status: 500,
@@ -605,28 +605,28 @@ export const syncAllGamePermissions = async(evt:H3Event) => {
 // 从所有代理中移除指定游戏权限
 // 修改管理员密码
 // 已禁用：修改管理员密码功能
-export const changePassword = async(evt:H3Event) => {
+export const changePassword = async (evt: H3Event) => {
     throw createError({ status: 403, statusMessage: 'Forbidden' });
 }
 
 // 更新管理员个人信息
-export const updateProfile = async(evt:H3Event) => {
-    try{
+export const updateProfile = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id, qq_account, tg_account } = body;
-        
+
         if (!admin_id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID',
             });
         }
-        
+
         const success = await AdminModel.updateProfile(admin_id, {
             qq_account: qq_account || '',
             tg_account: tg_account || ''
         });
-        
+
         if (success) {
             return {
                 success: true,
@@ -638,7 +638,7 @@ export const updateProfile = async(evt:H3Event) => {
                 message: '个人信息更新失败',
             });
         }
-    }catch(e: any){
+    } catch (e: any) {
         console.error('更新个人信息失败:', e);
         throw createError({
             status: 500,
@@ -648,20 +648,20 @@ export const updateProfile = async(evt:H3Event) => {
 }
 
 // 获取管理员个人详细信息
-export const getProfile = async(evt:H3Event) => {
-    try{
+export const getProfile = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { admin_id } = body;
-        
+
         if (!admin_id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID',
             });
         }
-        
+
         const profile = await AdminModel.getAdminProfile(admin_id);
-        
+
         if (profile) {
             return {
                 success: true,
@@ -673,7 +673,7 @@ export const getProfile = async(evt:H3Event) => {
                 message: '管理员不存在',
             });
         }
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取个人信息失败:', e);
         throw createError({
             status: 500,
@@ -682,25 +682,25 @@ export const getProfile = async(evt:H3Event) => {
     }
 }
 
-export const removeGameFromAllAdmins = async(evt:H3Event) => {
-    try{
+export const removeGameFromAllAdmins = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { game_id } = body;
-        
+
         if (!game_id) {
             throw createError({
                 status: 400,
                 message: '缺少游戏ID',
             });
         }
-        
+
         await AdminModel.removeGameFromAllAdmins(game_id);
-        
+
         return {
             success: true,
             message: `已从所有代理中移除游戏权限: ${game_id}`
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('移除游戏权限失败:', e);
         throw createError({
             status: 500,
@@ -710,25 +710,25 @@ export const removeGameFromAllAdmins = async(evt:H3Event) => {
 }
 
 // 创建代理
-export const createPromoter = async(evt:H3Event) => {
-    try{
+export const createPromoter = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
-        const { 
-            name, 
-            password, 
-            level, 
-            channel_code, 
-            phone, 
-            settlement_type, 
-            divide_rate, 
-            tg_account, 
-            qq_account, 
+        const {
+            name,
+            password,
+            level,
+            channel_code,
+            phone,
+            settlement_type,
+            divide_rate,
+            tg_account,
+            qq_account,
             email,
             parent_admin_id,
             parent_channel_code,
             current_admin_id
         } = body;
-        
+
         // 验证必填项
         if (!name || !password || !channel_code) {
             throw createError({
@@ -736,7 +736,7 @@ export const createPromoter = async(evt:H3Event) => {
                 message: '缺少必填项：代理名称、密码、渠道代码',
             });
         }
-        
+
         // 验证等级和上级选择
         if (level >= 2 && level <= 4 && !parent_admin_id) {
             throw createError({
@@ -744,14 +744,14 @@ export const createPromoter = async(evt:H3Event) => {
                 message: '创建2-4级代理时必须选择上级代理',
             });
         }
-        
+
         // 获取当前操作者信息
         const currentAdminId = current_admin_id;
         let currentAdmin = null;
         if (currentAdminId) {
             currentAdmin = await AdminModel.getAdminWithPermissions(currentAdminId);
         }
-        
+
         // 验证分成比例权限
         if (divide_rate !== undefined && divide_rate > 0) {
             if (!currentAdmin) {
@@ -760,12 +760,12 @@ export const createPromoter = async(evt:H3Event) => {
                     message: '无法获取当前用户信息',
                 });
             }
-            
+
             // 超级管理员可以设置任意比例
             if (currentAdmin.level !== 0) {
                 const currentDivideRate = currentAdmin.divide_rate || 0;
                 const maxAllowedRate = Math.max(0, currentDivideRate - 5);
-                
+
                 if (divide_rate > maxAllowedRate) {
                     throw createError({
                         status: 400,
@@ -774,26 +774,26 @@ export const createPromoter = async(evt:H3Event) => {
                 }
             }
         }
-        
+
         // 验证渠道代码格式和唯一性
         const { validateChannelCode } = await import('../utils/channelCodeValidator');
         const channelValidation = await validateChannelCode(channel_code);
-        
+
         if (!channelValidation.valid) {
             throw createError({
                 status: 400,
                 message: channelValidation.message,
             });
         }
-        
+
         // 使用清理后的渠道代码
         const cleanChannelCode = channelValidation.cleanCode || channel_code.trim();
-        
+
         // 获取创建者的游戏权限，让新创建的代理继承
         let inheritedGameIds = [];
         if (currentAdmin && currentAdmin.allowed_game_ids) {
-            inheritedGameIds = Array.isArray(currentAdmin.allowed_game_ids) 
-                ? currentAdmin.allowed_game_ids 
+            inheritedGameIds = Array.isArray(currentAdmin.allowed_game_ids)
+                ? currentAdmin.allowed_game_ids
                 : JSON.parse(currentAdmin.allowed_game_ids || '[]');
         }
 
@@ -835,7 +835,7 @@ export const createPromoter = async(evt:H3Event) => {
             allowed_channel_codes: [],
             allowed_game_ids: inheritedGameIds // 继承创建者的游戏权限
         };
-        
+
         // 插入管理员记录
         const result = await AdminModel.insert(adminData) as any;
         const newAdminId = result.insertId;
@@ -843,12 +843,12 @@ export const createPromoter = async(evt:H3Event) => {
         // 📝 记录创建日志
         try {
             const { insertGmOperationLog } = await import('../model/gmOperationLogs');
-            
+
             // 获取客户端 IP
             const headers = getHeaders(evt);
-            const clientIp = (headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 
-                             (headers['x-real-ip'] as string) || 
-                             evt.node.req.socket.remoteAddress || 'unknown';
+            const clientIp = (headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+                (headers['x-real-ip'] as string) ||
+                evt.node.req.socket.remoteAddress || 'unknown';
 
             await insertGmOperationLog({
                 op_type: 'create_admin',
@@ -856,9 +856,9 @@ export const createPromoter = async(evt:H3Event) => {
                 player_id: '0',
                 player_name: 'system',
                 open_id: 'system',
-                request_params: { 
-                    new_admin_name: name, 
-                    new_admin_level: level, 
+                request_params: {
+                    new_admin_name: name,
+                    new_admin_level: level,
                     new_channel_code: cleanChannelCode,
                     divide_rate: divide_rate,
                     client_ip: clientIp // 记录 IP 到请求参数中
@@ -871,10 +871,10 @@ export const createPromoter = async(evt:H3Event) => {
         } catch (logError) {
             console.error('记录创建管理员日志失败:', logError);
         }
-        
+
         // 如果有上级代理，创建代理关系
         let resolvedParentChannelCode = parent_channel_code;
-        
+
         // 如果没有传递parent_channel_code但有parent_admin_id，则从数据库获取
         if (parent_admin_id && !resolvedParentChannelCode) {
             const parentAdmin = await AdminModel.getAdminWithPermissions(parent_admin_id);
@@ -882,11 +882,11 @@ export const createPromoter = async(evt:H3Event) => {
                 resolvedParentChannelCode = parentAdmin.channel_code;
             }
         }
-        
+
         if (resolvedParentChannelCode && channel_code) {
             try {
                 const AgentRelationships = await import('../model/agentRelationships');
-                
+
                 // 检查关系是否已存在
                 const existingRelations = await AgentRelationships.findByChildChannelCode(channel_code);
                 if (existingRelations.length > 0) {
@@ -902,14 +902,14 @@ export const createPromoter = async(evt:H3Event) => {
                 // 代理关系创建失败不影响管理员创建，继续执行
             }
         }
-        
+
         // 刷新新代理的权限
         try {
             await AdminModel.refreshAdminPermissions(newAdminId);
         } catch (permissionError) {
             console.error('刷新新代理权限失败:', permissionError);
         }
-        
+
         // 向上级联刷新所有上级代理的权限
         if (channel_code) {
             try {
@@ -945,7 +945,7 @@ export const createPromoter = async(evt:H3Event) => {
                 level
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('创建代理失败:', e);
         throw createError({
             status: 500,
@@ -955,31 +955,31 @@ export const createPromoter = async(evt:H3Event) => {
 }
 
 // 更新代理信息
-export const updatePromoter = async(evt:H3Event) => {
-    try{
+export const updatePromoter = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
-        const { 
+        const {
             id,
-            name, 
-            password, 
-            level, 
-            channel_code, 
-            phone, 
-            settlement_type, 
-            divide_rate, 
-            tg_account, 
-            qq_account, 
+            name,
+            password,
+            level,
+            channel_code,
+            phone,
+            settlement_type,
+            divide_rate,
+            tg_account,
+            qq_account,
             email,
             current_admin_id
         } = body;
-        
+
         if (!id) {
             throw createError({
                 status: 400,
                 message: '缺少代理ID',
             });
         }
-        
+
         // 验证必填项
         if (!name || !channel_code) {
             throw createError({
@@ -987,7 +987,7 @@ export const updatePromoter = async(evt:H3Event) => {
                 message: '缺少必填项：代理名称、渠道代码',
             });
         }
-        
+
         // 获取当前操作者信息
         const currentAdminId = current_admin_id;
         let currentAdmin = null;
@@ -995,7 +995,7 @@ export const updatePromoter = async(evt:H3Event) => {
             currentAdmin = await AdminModel.getAdminWithPermissions(currentAdminId);
             console.log(`更新代理 - 获取当前操作者信息: ID=${currentAdminId}, Level=${currentAdmin?.level}, DivideRate=${currentAdmin?.divide_rate}`);
         }
-        
+
         // 验证分成比例权限
         if (divide_rate !== undefined && divide_rate > 0) {
             if (!currentAdmin) {
@@ -1004,12 +1004,12 @@ export const updatePromoter = async(evt:H3Event) => {
                     message: '无法获取当前用户信息',
                 });
             }
-            
+
             // 超级管理员可以设置任意比例
             if (currentAdmin.level !== 0) {
                 const currentDivideRate = currentAdmin.divide_rate || 0;
                 const maxAllowedRate = Math.max(0, currentDivideRate - 5);
-                
+
                 if (divide_rate > maxAllowedRate) {
                     throw createError({
                         status: 400,
@@ -1018,7 +1018,7 @@ export const updatePromoter = async(evt:H3Event) => {
                 }
             }
         }
-        
+
         // 检查代理是否存在
         const existingAdmin = await AdminModel.getAdminWithPermissions(id);
         if (!existingAdmin) {
@@ -1027,21 +1027,21 @@ export const updatePromoter = async(evt:H3Event) => {
                 message: '代理不存在',
             });
         }
-        
+
         // 验证渠道代码格式和唯一性（排除当前代理）
         const { validateChannelCode } = await import('../utils/channelCodeValidator');
         const channelValidation = await validateChannelCode(channel_code, id);
-        
+
         if (!channelValidation.valid) {
             throw createError({
                 status: 400,
                 message: channelValidation.message,
             });
         }
-        
+
         // 使用清理后的渠道代码
         const cleanChannelCode = channelValidation.cleanCode || channel_code.trim();
-        
+
         // 准备更新数据
         const updateData: any = {
             name,
@@ -1054,22 +1054,22 @@ export const updatePromoter = async(evt:H3Event) => {
             qq_account: qq_account || '',
             email: email || ''
         };
-        
+
         // 如果提供了密码，则更新密码
         if (password && password.trim() !== '') {
             updateData.password = password;
         }
-        
+
         // 更新管理员信息
         await AdminModel.updateAdmin(id, updateData);
-        
+
         // 刷新权限
         try {
             await AdminModel.refreshAdminPermissions(id);
         } catch (permissionError) {
             console.error('刷新权限失败:', permissionError);
         }
-        
+
         return {
             success: true,
             message: '代理信息更新成功',
@@ -1080,7 +1080,7 @@ export const updatePromoter = async(evt:H3Event) => {
                 level: updateData.level
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('更新代理失败:', e);
         throw createError({
             status: 500,
@@ -1090,18 +1090,18 @@ export const updatePromoter = async(evt:H3Event) => {
 }
 
 // 删除代理
-export const deletePromoter = async(evt:H3Event) => {
-    try{
+export const deletePromoter = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { id, channel_code } = body;
-        
+
         if (!id) {
             throw createError({
                 status: 400,
                 message: '缺少代理ID',
             });
         }
-        
+
         // 检查代理是否存在
         const existingAdmin = await AdminModel.getAdminWithPermissions(id);
         if (!existingAdmin) {
@@ -1110,7 +1110,7 @@ export const deletePromoter = async(evt:H3Event) => {
                 message: '代理不存在',
             });
         }
-        
+
         // 检查是否为超级管理员（超级管理员不能被删除）
         if (existingAdmin.level === 0) {
             throw createError({
@@ -1118,19 +1118,19 @@ export const deletePromoter = async(evt:H3Event) => {
                 message: '超级管理员不能被删除',
             });
         }
-        
+
         // 删除相关的代理关系
         if (channel_code) {
             try {
                 const AgentRelationships = await import('../model/agentRelationships');
-                
+
                 // 删除作为上级的关系
                 const childRelations = await AgentRelationships.findByParentChannelCode(channel_code);
                 for (const relation of childRelations) {
                     await AgentRelationships.remove(relation.id!);
                     console.log(`删除代理关系: ${channel_code} -> ${relation.child_channel_code}`);
                 }
-                
+
                 // 删除作为下级的关系
                 const parentRelations = await AgentRelationships.findByChildChannelCode(channel_code);
                 for (const relation of parentRelations) {
@@ -1142,17 +1142,17 @@ export const deletePromoter = async(evt:H3Event) => {
                 // 代理关系删除失败不阻止管理员删除，继续执行
             }
         }
-        
+
         // 删除管理员记录
         await AdminModel.remove(id);
-        
+
         // 刷新其他管理员的权限（因为代理关系变化）
         try {
             await AdminModel.refreshAllAdminPermissions();
         } catch (permissionError) {
             console.error('刷新权限失败:', permissionError);
         }
-        
+
         return {
             success: true,
             message: '代理删除成功',
@@ -1162,7 +1162,7 @@ export const deletePromoter = async(evt:H3Event) => {
                 channel_code: existingAdmin.channel_code
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('删除代理失败:', e);
         throw createError({
             status: 500,
@@ -1172,25 +1172,25 @@ export const deletePromoter = async(evt:H3Event) => {
 }
 
 // 切换代理状态
-export const togglePromoterStatus = async(evt:H3Event) => {
-    try{
+export const togglePromoterStatus = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { id, is_active } = body;
-        
+
         if (!id) {
             throw createError({
                 status: 400,
                 message: '缺少代理ID',
             });
         }
-        
+
         if (is_active === undefined) {
             throw createError({
                 status: 400,
                 message: '缺少状态参数',
             });
         }
-        
+
         // 检查代理是否存在
         const existingAdmin = await AdminModel.getAdminWithPermissions(id);
         if (!existingAdmin) {
@@ -1199,10 +1199,10 @@ export const togglePromoterStatus = async(evt:H3Event) => {
                 message: '代理不存在',
             });
         }
-        
+
         // 切换状态
         await AdminModel.toggleAdminStatus(id, is_active);
-        
+
         return {
             success: true,
             message: `代理状态已${is_active ? '启用' : '禁用'}`,
@@ -1212,7 +1212,7 @@ export const togglePromoterStatus = async(evt:H3Event) => {
                 is_active
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('切换代理状态失败:', e);
         throw createError({
             status: 500,
@@ -1222,54 +1222,54 @@ export const togglePromoterStatus = async(evt:H3Event) => {
 }
 
 // 检查和修复代理关系
-export const checkAndFixAgentRelationships = async(evt:H3Event) => {
-    try{
+export const checkAndFixAgentRelationships = async (evt: H3Event) => {
+    try {
         console.log('开始检查和修复代理关系...');
-        
+
         // 获取所有管理员
         const allAdmins = await AdminModel.read();
         const AgentRelationships = await import('../model/agentRelationships');
-        
+
         console.log(`当前管理员数量: ${allAdmins.length}`);
-        
+
         // 显示当前管理员信息
         allAdmins.forEach(admin => {
             console.log(`管理员: ${admin.name} (ID: ${admin.id}, Channel: ${admin.channel_code}, Level: ${admin.level})`);
         });
-        
+
         // 获取现有的代理关系
         const existingRelations = await AgentRelationships.read();
         console.log(`现有代理关系数量: ${existingRelations.length}`);
-        
+
         existingRelations.forEach(relation => {
             console.log(`现有关系: ${relation.parent_channel_code} -> ${relation.child_channel_code}`);
         });
-        
+
         // 根据初始数据建立正确的代理关系
         const expectedRelations = [
             { parent_channel_code: 'channelB', child_channel_code: 'channelC' },
             { parent_channel_code: 'channelB', child_channel_code: 'channelD' },
             { parent_channel_code: 'channelC', child_channel_code: 'channelE' }
         ];
-        
+
         console.log('期望的代理关系:');
         expectedRelations.forEach(relation => {
             console.log(`期望关系: ${relation.parent_channel_code} -> ${relation.child_channel_code}`);
         });
-        
+
         // 检查并创建缺失的关系
         let createdCount = 0;
         for (const expectedRelation of expectedRelations) {
-            const exists = existingRelations.some(existing => 
+            const exists = existingRelations.some(existing =>
                 existing.parent_channel_code === expectedRelation.parent_channel_code &&
                 existing.child_channel_code === expectedRelation.child_channel_code
             );
-            
+
             if (!exists) {
                 // 验证渠道代码是否存在
                 const parentExists = allAdmins.some(admin => admin.channel_code === expectedRelation.parent_channel_code);
                 const childExists = allAdmins.some(admin => admin.channel_code === expectedRelation.child_channel_code);
-                
+
                 if (parentExists && childExists) {
                     try {
                         await AgentRelationships.insert(expectedRelation);
@@ -1285,11 +1285,11 @@ export const checkAndFixAgentRelationships = async(evt:H3Event) => {
                 console.log(`✓ 关系已存在: ${expectedRelation.parent_channel_code} -> ${expectedRelation.child_channel_code}`);
             }
         }
-        
+
         // 重新获取更新后的关系
         const updatedRelations = await AgentRelationships.read();
         console.log(`修复后代理关系数量: ${updatedRelations.length}`);
-        
+
         // 测试代理关系查询
         console.log('\n测试代理关系查询:');
         for (const admin of allAdmins.filter(a => a.channel_code)) {
@@ -1299,7 +1299,7 @@ export const checkAndFixAgentRelationships = async(evt:H3Event) => {
                 console.log(`${admin.channel_code} - 下级: [${children.join(', ')}], 上级: ${parent || '无'}`);
             }
         }
-        
+
         // 检查并设置初始游戏权限（如果下级代理没有权限的话）
         console.log('\n检查并设置初始游戏权限:');
         const channelPermissions = {
@@ -1308,16 +1308,16 @@ export const checkAndFixAgentRelationships = async(evt:H3Event) => {
             'channelD': [1, 2],    // agent3 有游戏1,2
             'channelE': [4, 5]     // agent4 有游戏4,5
         };
-        
+
         let permissionUpdateCount = 0;
         for (const admin of allAdmins.filter(a => a.channel_code)) {
             const adminWithPermissions = await AdminModel.getAdminWithPermissions(admin.id);
             if (adminWithPermissions) {
                 const currentPermissions = adminWithPermissions.allowed_game_ids || [];
                 const expectedPermissions = channelPermissions[admin.channel_code as keyof typeof channelPermissions] || [];
-                
+
                 console.log(`${admin.channel_code} - 当前权限: [${currentPermissions.join(', ')}], 期望权限: [${expectedPermissions.join(', ')}]`);
-                
+
                 if (currentPermissions.length === 0 && expectedPermissions.length > 0) {
                     await AdminModel.updateGameIds(admin.id, expectedPermissions);
                     console.log(`✓ 已设置 ${admin.channel_code} 的初始游戏权限: [${expectedPermissions.join(', ')}]`);
@@ -1325,7 +1325,7 @@ export const checkAndFixAgentRelationships = async(evt:H3Event) => {
                 }
             }
         }
-        
+
         return {
             success: true,
             message: `代理关系检查完成，创建了 ${createdCount} 个新关系，设置了 ${permissionUpdateCount} 个代理的初始权限`,
@@ -1337,7 +1337,7 @@ export const checkAndFixAgentRelationships = async(evt:H3Event) => {
                 permission_updates: permissionUpdateCount
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('检查代理关系失败:', e);
         throw createError({
             status: 500,
@@ -1347,38 +1347,38 @@ export const checkAndFixAgentRelationships = async(evt:H3Event) => {
 }
 
 // 创建游戏
-export const createGame = async(evt:H3Event) => {
-    try{
+export const createGame = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
-        const { 
-            game_name, 
-            icon_url, 
-            supported_devices, 
-            register_url, 
-            ios_download_url, 
-            android_download_url, 
+        const {
+            game_name,
+            icon_url,
+            supported_devices,
+            register_url,
+            ios_download_url,
+            android_download_url,
             description,
-            admin_id 
+            admin_id
         } = body;
-        
+
         if (!admin_id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID',
             });
         }
-        
+
         // 检查权限 - 只有超级管理员能添加游戏
         const AdminModel = await import('../model/admin');
         const currentAdmin = await AdminModel.getAdminWithPermissions(admin_id);
-        
+
         if (!currentAdmin || currentAdmin.level !== 0) {
             throw createError({
                 status: 403,
                 message: '只有超级管理员可以添加游戏',
             });
         }
-        
+
         // 验证必填项
         if (!game_name || !supported_devices) {
             throw createError({
@@ -1386,7 +1386,7 @@ export const createGame = async(evt:H3Event) => {
                 message: '游戏名称和支持设备为必填项',
             });
         }
-        
+
         // 检查游戏名称是否已存在
         const GamesModel = await import('../model/games');
         const existingGame = await GamesModel.findByGameName(game_name);
@@ -1396,7 +1396,7 @@ export const createGame = async(evt:H3Event) => {
                 message: '游戏名称已存在',
             });
         }
-        
+
         // 创建游戏
         await GamesModel.insert({
             game_name,
@@ -1408,12 +1408,12 @@ export const createGame = async(evt:H3Event) => {
             description: description || '',
             is_active: 1
         });
-        
+
         return {
             success: true,
             message: '游戏创建成功'
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('创建游戏失败:', e);
         throw createError({
             status: 500,
@@ -1423,39 +1423,39 @@ export const createGame = async(evt:H3Event) => {
 }
 
 // 更新游戏信息
-export const updateGame = async(evt:H3Event) => {
-    try{
+export const updateGame = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
-        const { 
+        const {
             id,
-            game_name, 
-            icon_url, 
-            supported_devices, 
-            register_url, 
-            ios_download_url, 
-            android_download_url, 
+            game_name,
+            icon_url,
+            supported_devices,
+            register_url,
+            ios_download_url,
+            android_download_url,
             description,
-            admin_id 
+            admin_id
         } = body;
-        
+
         if (!admin_id || !id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID或游戏ID',
             });
         }
-        
+
         // 检查权限 - 只有超级管理员能编辑游戏
         const AdminModel = await import('../model/admin');
         const currentAdmin = await AdminModel.getAdminWithPermissions(admin_id);
-        
+
         if (!currentAdmin || currentAdmin.level !== 0) {
             throw createError({
                 status: 403,
                 message: '只有超级管理员可以编辑游戏',
             });
         }
-        
+
         // 检查游戏是否存在
         const GamesModel = await import('../model/games');
         const existingGame = await GamesModel.findById(id);
@@ -1465,7 +1465,7 @@ export const updateGame = async(evt:H3Event) => {
                 message: '游戏不存在',
             });
         }
-        
+
         // 如果修改了游戏名称，检查是否与其他游戏重名
         if (game_name && game_name !== existingGame.game_name) {
             const duplicateGame = await GamesModel.findByGameName(game_name);
@@ -1476,7 +1476,7 @@ export const updateGame = async(evt:H3Event) => {
                 });
             }
         }
-        
+
         // 更新游戏信息
         await GamesModel.update(id, {
             game_name,
@@ -1487,12 +1487,12 @@ export const updateGame = async(evt:H3Event) => {
             android_download_url,
             description
         });
-        
+
         return {
             success: true,
             message: '游戏信息更新成功'
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('更新游戏失败:', e);
         throw createError({
             status: 500,
@@ -1502,29 +1502,29 @@ export const updateGame = async(evt:H3Event) => {
 }
 
 // 删除游戏
-export const deleteGame = async(evt:H3Event) => {
-    try{
+export const deleteGame = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { id, admin_id } = body;
-        
+
         if (!admin_id || !id) {
             throw createError({
                 status: 400,
                 message: '缺少管理员ID或游戏ID',
             });
         }
-        
+
         // 检查权限 - 只有超级管理员能删除游戏
         const AdminModel = await import('../model/admin');
         const currentAdmin = await AdminModel.getAdminWithPermissions(admin_id);
-        
+
         if (!currentAdmin || currentAdmin.level !== 0) {
             throw createError({
                 status: 403,
                 message: '只有超级管理员可以删除游戏',
             });
         }
-        
+
         // 检查游戏是否存在
         const GamesModel = await import('../model/games');
         const existingGame = await GamesModel.findById(id);
@@ -1534,18 +1534,18 @@ export const deleteGame = async(evt:H3Event) => {
                 message: '游戏不存在',
             });
         }
-        
+
         // 删除游戏前，先从所有管理员的权限中移除该游戏
         await AdminModel.removeGameFromAllAdmins(id);
-        
+
         // 删除游戏
         await GamesModel.remove(id);
-        
+
         return {
             success: true,
             message: '游戏删除成功'
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('删除游戏失败:', e);
         throw createError({
             status: 500,
@@ -1555,29 +1555,29 @@ export const deleteGame = async(evt:H3Event) => {
 }
 
 // 切换游戏状态
-export const toggleGameStatus = async(evt:H3Event) => {
-    try{
+export const toggleGameStatus = async (evt: H3Event) => {
+    try {
         const body = await readBody(evt);
         const { id, is_active, admin_id } = body;
-        
+
         if (!admin_id || !id || is_active === undefined) {
             throw createError({
                 status: 400,
                 message: '缺少必要参数',
             });
         }
-        
+
         // 检查权限 - 只有超级管理员能切换游戏状态
         const AdminModel = await import('../model/admin');
         const currentAdmin = await AdminModel.getAdminWithPermissions(admin_id);
-        
+
         if (!currentAdmin || currentAdmin.level !== 0) {
             throw createError({
                 status: 403,
                 message: '只有超级管理员可以切换游戏状态',
             });
         }
-        
+
         // 检查游戏是否存在
         const GamesModel = await import('../model/games');
         const existingGame = await GamesModel.findById(id);
@@ -1587,15 +1587,15 @@ export const toggleGameStatus = async(evt:H3Event) => {
                 message: '游戏不存在',
             });
         }
-        
+
         // 更新游戏状态
         await GamesModel.updateStatus(id, is_active ? 1 : 0);
-        
+
         return {
             success: true,
             message: `游戏已${is_active ? '启用' : '禁用'}`
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('切换游戏状态失败:', e);
         throw createError({
             status: 500,
@@ -1605,10 +1605,10 @@ export const toggleGameStatus = async(evt:H3Event) => {
 }
 
 // 设置初始游戏权限
-export const setInitialGamePermissions = async(evt:H3Event) => {
-    try{
+export const setInitialGamePermissions = async (evt: H3Event) => {
+    try {
         console.log('开始设置初始游戏权限...');
-        
+
         // 预设的权限配置
         const channelPermissions = {
             'channelB': [1, 2, 3], // agent1 有游戏1,2,3
@@ -1616,20 +1616,20 @@ export const setInitialGamePermissions = async(evt:H3Event) => {
             'channelD': [1, 2],    // agent3 有游戏1,2
             'channelE': [4, 5]     // agent4 有游戏4,5
         };
-        
+
         const allAdmins = await AdminModel.read();
         let permissionUpdateCount = 0;
-        
+
         for (const admin of allAdmins.filter(a => a.channel_code)) {
             if (!admin.channel_code) continue;
-            
+
             const adminWithPermissions = await AdminModel.getAdminWithPermissions(admin.id);
             if (adminWithPermissions) {
                 const currentPermissions = adminWithPermissions.allowed_game_ids || [];
                 const expectedPermissions = channelPermissions[admin.channel_code as keyof typeof channelPermissions] || [];
-                
+
                 console.log(`${admin.channel_code} (${admin.name}) - 当前权限: [${currentPermissions.join(', ')}], 设置权限: [${expectedPermissions.join(', ')}]`);
-                
+
                 if (expectedPermissions.length > 0) {
                     await AdminModel.updateGameIds(admin.id, expectedPermissions);
                     console.log(`✓ 已设置 ${admin.channel_code} (${admin.name}) 的游戏权限: [${expectedPermissions.join(', ')}]`);
@@ -1637,7 +1637,7 @@ export const setInitialGamePermissions = async(evt:H3Event) => {
                 }
             }
         }
-        
+
         return {
             success: true,
             message: `已为 ${permissionUpdateCount} 个代理设置初始游戏权限`,
@@ -1646,7 +1646,7 @@ export const setInitialGamePermissions = async(evt:H3Event) => {
                 permissions: channelPermissions
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('设置初始游戏权限失败:', e);
         throw createError({
             status: 500,
@@ -1656,18 +1656,18 @@ export const setInitialGamePermissions = async(evt:H3Event) => {
 }
 
 // 获取用户登录记录
-export const getUserLoginLogs = async(evt:H3Event) => {
-    try{
+export const getUserLoginLogs = async (evt: H3Event) => {
+    try {
         const query = getQuery(evt);
         const page = Number(query.page) || 1;
         const pageSize = Number(query.pageSize) || 20;
         const statsOnly = query.statsOnly === 'true';
-        
+
         // 权限验证和获取允许的渠道
         let allowedChannelCodes: string[] = [];
         const authorizationHeader = getHeader(evt, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         if (token) {
             try {
                 const adminResult = await AdminModel.getAdminWithPermissions(token);
@@ -1678,8 +1678,8 @@ export const getUserLoginLogs = async(evt:H3Event) => {
                 }
             } catch (error) {
                 throw createError({
-                   status: 403,
-                   message: '权限验证失败',
+                    status: 403,
+                    message: '权限验证失败',
                 });
             }
         } else {
@@ -1688,7 +1688,7 @@ export const getUserLoginLogs = async(evt:H3Event) => {
                 message: '未提供认证token',
             });
         }
-        
+
         const filters: any = {};
         if (query.username) filters.username = query.username as string;
         if (query.sub_user_name) filters.sub_user_name = query.sub_user_name as string;
@@ -1697,9 +1697,9 @@ export const getUserLoginLogs = async(evt:H3Event) => {
         if (query.channel_code) filters.channel_code = query.channel_code as string;
         if (query.startDate) filters.startDate = query.startDate as string;
         if (query.endDate) filters.endDate = query.endDate as string;
-        
+
         const UserLoginLogsModel = await import('../model/userLoginLogs');
-        
+
         // 如果只需要统计数据
         if (statsOnly) {
             const stats = await UserLoginLogsModel.getLoginStatsForDateRange(filters.startDate, filters.endDate, allowedChannelCodes);
@@ -1711,13 +1711,13 @@ export const getUserLoginLogs = async(evt:H3Event) => {
                 }
             };
         }
-        
+
         // 获取完整的日志数据
         const [logs, total] = await Promise.all([
             UserLoginLogsModel.getLoginLogs(page, pageSize, filters, allowedChannelCodes),
             UserLoginLogsModel.getLoginLogsCount(filters, allowedChannelCodes)
         ]);
-        
+
         return {
             success: true,
             data: {
@@ -1730,7 +1730,7 @@ export const getUserLoginLogs = async(evt:H3Event) => {
                 }
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取用户登录记录失败:', e);
         throw createError({
             status: 500,
@@ -1740,16 +1740,16 @@ export const getUserLoginLogs = async(evt:H3Event) => {
 }
 
 // 获取今日登录统计
-export const getTodayLoginStats = async(evt:H3Event) => {
-    try{
+export const getTodayLoginStats = async (evt: H3Event) => {
+    try {
         const UserLoginLogsModel = await import('../model/userLoginLogs');
         const stats = await UserLoginLogsModel.getTodayLoginStats();
-        
+
         return {
             success: true,
             data: stats
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取今日登录统计失败:', e);
         throw createError({
             status: 500,
@@ -1759,29 +1759,29 @@ export const getTodayLoginStats = async(evt:H3Event) => {
 }
 
 // 获取下级渠道代码列表
-export const getChildChannels = async(evt:H3Event) => {
-    try{
+export const getChildChannels = async (evt: H3Event) => {
+    try {
         // 同时兼容 JSON body 与 query 传参，避免前端签名参数注入影响原有参数位置
         const body: any = await readBody(evt).catch(() => ({}));
         const query: any = getQuery(evt);
         const channel_code = body?.channel_code ?? query?.channel_code;
         const adminId = body?.adminId ?? query?.adminId ?? query?.admin_id;
         const parentChannelCode = body?.parentChannelCode ?? query?.parentChannelCode;
-        
+
         // 如果有父级渠道代码，获取该渠道的下一级（二级选择框）
         if (parentChannelCode) {
             try {
                 // 使用AgentRelationships表查找真正的下级渠道
                 const AgentRelationships = await import('../model/agentRelationships');
                 const childChannelCodes = await AgentRelationships.getDirectChildChannelCodes(parentChannelCode);
-                
+
                 if (childChannelCodes.length === 0) {
                     return {
                         success: true,
                         data: []
                     };
                 }
-                
+
                 // 根据下级渠道代码获取管理员详细信息
                 const channelPlaceholders = childChannelCodes.map(() => '?').join(',');
                 const childAdminsResult = await sql({
@@ -1790,13 +1790,13 @@ export const getChildChannels = async(evt:H3Event) => {
                             ORDER BY name`,
                     values: childChannelCodes
                 }) as any;
-                
+
                 const childChannels = childAdminsResult.map((admin: any) => ({
                     channel_code: admin.channel_code,
                     channel_name: admin.name || admin.channel_code,
                     level: admin.level
                 }));
-                
+
                 return {
                     success: true,
                     data: childChannels
@@ -1809,7 +1809,7 @@ export const getChildChannels = async(evt:H3Event) => {
                 };
             }
         }
-        
+
         // 如果提供了adminId，使用allowed_channel_codes获取可查看的下级渠道（一级选择框）
         if (adminId) {
             const adminInfo = await AdminModel.getAdminWithPermissions(parseInt(adminId));
@@ -1819,10 +1819,10 @@ export const getChildChannels = async(evt:H3Event) => {
                     message: '管理员不存在',
                 });
             }
-            
+
             // 根据当前级别确定直接下一级（一级选择框）
             let targetLevel: number | null = null;
-            
+
             if (adminInfo.level === 0) {
                 // 0级：直接下一级是1级
                 targetLevel = 1;
@@ -1839,14 +1839,14 @@ export const getChildChannels = async(evt:H3Event) => {
                 // 4级：没有下级
                 targetLevel = null;
             }
-            
+
             if (targetLevel === null) {
                 return {
                     success: true,
                     data: []
                 };
             }
-            
+
             // 查询直接下一级的管理员
             const childAdminsResult = await sql({
                 query: `SELECT id, name, channel_code, level FROM admins 
@@ -1854,7 +1854,7 @@ export const getChildChannels = async(evt:H3Event) => {
                         ORDER BY name`,
                 values: [targetLevel]
             }) as any;
-            
+
             // 权限过滤逻辑
             let filteredAdmins = [];
             if (adminInfo.level === 0) {
@@ -1863,23 +1863,23 @@ export const getChildChannels = async(evt:H3Event) => {
             } else {
                 // 非超级管理员只能看到allowed_channel_codes中的代理
                 const allowedChannels = adminInfo.allowed_channel_codes || [];
-                filteredAdmins = childAdminsResult.filter((admin: any) => 
+                filteredAdmins = childAdminsResult.filter((admin: any) =>
                     allowedChannels.includes(admin.channel_code)
                 );
             }
-            
+
             const childChannels = filteredAdmins.map((admin: any) => ({
                 channel_code: admin.channel_code,
                 channel_name: admin.name || admin.channel_code,
                 level: admin.level
             }));
-            
+
             return {
                 success: true,
                 data: childChannels
             };
         }
-        
+
         // 原有逻辑：根据渠道代码获取下级渠道
         if (!channel_code) {
             throw createError({
@@ -1887,15 +1887,15 @@ export const getChildChannels = async(evt:H3Event) => {
                 message: '缺少渠道代码或级别参数',
             });
         }
-        
+
         const AgentRelationships = await import('../model/agentRelationships');
         const childChannelCodes = await AgentRelationships.getAllChildChannelCodes(channel_code);
-        
+
         return {
             success: true,
             data: childChannelCodes
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取下级渠道失败:', e);
         throw createError({
             status: 500,
@@ -1905,24 +1905,24 @@ export const getChildChannels = async(evt:H3Event) => {
 }
 
 // 获取用户注册记录
-export const getUsers = async(evt:H3Event) => {
-    try{
+export const getUsers = async (evt: H3Event) => {
+    try {
         const query = getQuery(evt);
         const page = Number(query.page) || 1;
         const pageSize = Number(query.pageSize) || 20;
         const statsOnly = query.statsOnly === 'true';
-        
+
         // 权限检查 - 获取当前登录管理员的权限
         const authorizationHeader = getHeader(evt, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         let adminPermissions = null;
         let allowedChannelCodes: string[] = [];
-        
+
         if (token) {
             try {
                 const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
-                
+
                 if (!adminWithPermissions) {
                     throw createError({
                         status: 403,
@@ -1931,7 +1931,7 @@ export const getUsers = async(evt:H3Event) => {
                 }
 
                 adminPermissions = adminWithPermissions;
-                
+
                 // 超级管理员(level 0)可以查看所有数据
                 if (adminWithPermissions.level === 0) {
                     allowedChannelCodes = []; // 空数组表示无限制
@@ -1939,7 +1939,7 @@ export const getUsers = async(evt:H3Event) => {
                     // 普通管理员使用 allowed_channel_codes 权限
                     allowedChannelCodes = adminWithPermissions.allowed_channel_codes || [];
                 }
-                
+
                 console.log(`管理员 ${adminWithPermissions.name} 的用户数据权限:`, {
                     level: adminWithPermissions.level,
                     allowedChannelCodes: allowedChannelCodes
@@ -1957,7 +1957,7 @@ export const getUsers = async(evt:H3Event) => {
                 message: '未提供认证token',
             });
         }
-        
+
         const filters: any = {};
         if (query.user_id) filters.user_id = Number(query.user_id);
         if (query.username) filters.username = query.username as string;
@@ -1966,10 +1966,10 @@ export const getUsers = async(evt:H3Event) => {
         if (query.channel_code) filters.channel_code = query.channel_code as string;
         if (query.startDate) filters.startDate = query.startDate as string;
         if (query.endDate) filters.endDate = query.endDate as string;
-        
-        
+
+
         const UserModel = await import('../model/user');
-        
+
         // 如果只需要统计数据
         if (statsOnly) {
             const stats = await getUserStatsForDateRange(filters.startDate, filters.endDate, allowedChannelCodes);
@@ -1981,13 +1981,13 @@ export const getUsers = async(evt:H3Event) => {
                 }
             };
         }
-        
+
         // 获取完整的用户数据
         const [users, total] = await Promise.all([
             getUsersWithFilters(page, pageSize, filters, allowedChannelCodes),
             getUsersCount(filters, allowedChannelCodes)
         ]);
-        
+
         return {
             success: true,
             data: {
@@ -2000,7 +2000,7 @@ export const getUsers = async(evt:H3Event) => {
                 }
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取用户注册记录失败:', e);
         throw createError({
             status: 500,
@@ -2169,64 +2169,64 @@ export const verifyUserPassword = async (evt: H3Event) => {
 // 获取用户列表（带筛选和分页）
 const getUsersWithFilters = async (page: number, pageSize: number, filters: any, allowedChannelCodes: string[] = []) => {
     const offset = (page - 1) * pageSize;
-    
+
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.user_id) {
         whereConditions.push('id = ?');
         values.push(filters.user_id);
     }
-    
+
     if (filters.username) {
         whereConditions.push('username LIKE ?');
         values.push(`%${filters.username}%`);
     }
-    
+
     if (filters.iphone) {
         whereConditions.push('iphone LIKE ?');
         values.push(`%${filters.iphone}%`);
     }
-    
+
     if (filters.thirdparty_uid) {
         whereConditions.push('thirdparty_uid LIKE ?');
         values.push(`%${filters.thirdparty_uid}%`);
     }
-    
+
     if (filters.channel_code) {
         whereConditions.push('channel_code = ?');
         values.push(filters.channel_code);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     let query = 'SELECT id, username, iphone, thirdparty_uid, channel_code, game_code, platform_coins, status, created_at FROM users';
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    
+
     values.push(pageSize, offset);
-    
+
     const result = await sql({
         query: query,
         values: values,
     });
-    
+
     return result;
 };
 
@@ -2234,95 +2234,95 @@ const getUsersWithFilters = async (page: number, pageSize: number, filters: any,
 const getUsersCount = async (filters: any, allowedChannelCodes: string[] = []) => {
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.user_id) {
         whereConditions.push('id = ?');
         values.push(filters.user_id);
     }
-    
+
     if (filters.username) {
         whereConditions.push('username LIKE ?');
         values.push(`%${filters.username}%`);
     }
-    
+
     if (filters.iphone) {
         whereConditions.push('iphone LIKE ?');
         values.push(`%${filters.iphone}%`);
     }
-    
+
     if (filters.thirdparty_uid) {
         whereConditions.push('thirdparty_uid LIKE ?');
         values.push(`%${filters.thirdparty_uid}%`);
     }
-    
+
     if (filters.channel_code) {
         whereConditions.push('channel_code = ?');
         values.push(filters.channel_code);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     let query = 'SELECT COUNT(*) as total FROM users';
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
-    
+
     const result = await sql({
         query: query,
         values: values,
     }) as any;
-    
+
     return result[0].total;
 };
 
 // 获取指定日期范围的用户统计
 const getUserStatsForDateRange = async (startDate?: string, endDate?: string, allowedChannelCodes: string[] = []) => {
     const today = getChinaDateString();
-    
+
     // 今日注册统计
     let todayQuery = `SELECT COUNT(*) as today_register_count FROM users WHERE DATE(created_at) = ?`;
     let todayValues = [today];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         todayQuery += ` AND channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`;
         todayValues.push(...allowedChannelCodes);
     }
-    
+
     const todayResult = await sql({
         query: todayQuery,
         values: todayValues,
     }) as any;
-    
+
     // 总用户数
     let totalQuery = 'SELECT COUNT(*) as total_users FROM users';
     let totalValues: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         totalQuery += ` WHERE channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`;
         totalValues.push(...allowedChannelCodes);
     }
-    
+
     const totalResult = await sql({
         query: totalQuery,
         values: totalValues,
     }) as any;
-    
+
     return {
         today_register_count: todayResult[0].today_register_count,
         total_users: totalResult[0].total_users
@@ -2334,7 +2334,7 @@ const getUserStatsForDateRange = async (startDate?: string, endDate?: string, al
 export const getChannelPaymentStats = async (evt: H3Event) => {
     try {
         const { gatewayParamSets } = await import('../utils/paymentGateways');
-        
+
         // 计算最近7天的日期范围
         const endDate = getChinaDateString();
         const startDate = getChinaDateStringDaysAgo(6); // 包含今天在内的最近7天
@@ -2361,7 +2361,7 @@ export const getChannelPaymentStats = async (evt: H3Event) => {
 
         // 整理数据格式
         const result: Record<string, any> = {};
-        
+
         // 生成最近7天的日期列表作为索引
         const dateList: string[] = [];
         for (let i = 0; i < 7; i++) {
@@ -2402,7 +2402,7 @@ export const getChannelPaymentStats = async (evt: H3Event) => {
                 amount: channel.daily[date]?.amount || '0.00',
                 count: channel.daily[date]?.count || 0
             }));
-            
+
             return {
                 ...channel,
                 totalAmount: channel.totalAmount.toFixed(2),
@@ -2426,24 +2426,24 @@ export const getChannelPaymentStats = async (evt: H3Event) => {
     }
 };
 
-export const getPaymentRecords = async(evt:H3Event) => {
-    try{
+export const getPaymentRecords = async (evt: H3Event) => {
+    try {
         const query = getQuery(evt);
         const page = Number(query.page) || 1;
         const pageSize = Number(query.pageSize) || 20;
         const statsOnly = query.statsOnly === 'true';
-        
+
         // 权限检查 - 获取当前登录管理员的权限
         const authorizationHeader = getHeader(evt, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         let adminPermissions = null;
         let allowedChannelCodes: string[] = [];
-        
+
         if (token) {
             try {
                 const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
-                
+
                 if (!adminWithPermissions) {
                     throw createError({
                         status: 403,
@@ -2452,7 +2452,7 @@ export const getPaymentRecords = async(evt:H3Event) => {
                 }
 
                 adminPermissions = adminWithPermissions;
-                
+
                 // 超级管理员(level 0)可以查看所有数据
                 if (adminWithPermissions.level === 0) {
                     allowedChannelCodes = []; // 空数组表示无限制
@@ -2460,7 +2460,7 @@ export const getPaymentRecords = async(evt:H3Event) => {
                     // 普通管理员使用 allowed_channel_codes 权限
                     allowedChannelCodes = adminWithPermissions.allowed_channel_codes || [];
                 }
-                
+
                 console.log(`管理员 ${adminWithPermissions.name} 的支付数据权限:`, {
                     level: adminWithPermissions.level,
                     allowedChannelCodes: allowedChannelCodes
@@ -2478,7 +2478,7 @@ export const getPaymentRecords = async(evt:H3Event) => {
                 message: '未提供认证token',
             });
         }
-        
+
         const filters: any = {};
         if (query.transaction_id) filters.transaction_id = query.transaction_id as string;
         if (query.user_id) filters.user_id = query.user_id as string;
@@ -2490,7 +2490,7 @@ export const getPaymentRecords = async(evt:H3Event) => {
         if (query.level2_agent) filters.level2_agent = query.level2_agent as string;
         if (query.startDate) filters.startDate = query.startDate as string;
         if (query.endDate) filters.endDate = query.endDate as string;
-        
+
         // 如果只需要统计数据
         if (statsOnly) {
             const [todayStats, queryStats] = await Promise.all([
@@ -2505,14 +2505,14 @@ export const getPaymentRecords = async(evt:H3Event) => {
                 }
             };
         }
-        
+
         // 获取完整的充值记录数据
         const [payments, total, currentQueryStats] = await Promise.all([
             getPaymentRecordsWithFilters(page, pageSize, filters, allowedChannelCodes),
             getPaymentRecordsCount(filters, allowedChannelCodes),
             getCurrentQueryStats(filters, allowedChannelCodes)
         ]);
-        
+
         return {
             success: true,
             data: {
@@ -2526,7 +2526,7 @@ export const getPaymentRecords = async(evt:H3Event) => {
                 currentQueryStats
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取充值记录失败:', e);
         throw createError({
             status: 500,
@@ -2572,28 +2572,28 @@ const applyPaymentMethodFilter = (filters: any, whereConditions: string[], value
 // 获取充值记录列表（带筛选和分页）
 const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filters: any, allowedChannelCodes: string[] = []) => {
     const offset = (page - 1) * pageSize;
-    
+
     console.log('getPaymentRecordsWithFilters 参数:', { page, pageSize, filters, allowedChannelCodes });
-    
+
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.transaction_id) {
         whereConditions.push('pr.transaction_id LIKE ?');
         values.push(`%${filters.transaction_id}%`);
     }
-    
+
     if (filters.user_id) {
         // 清理user_id参数，移除可能的空格和特殊字符
         const cleanUserId = filters.user_id.toString().trim().replace(/^\+/, '');
         console.log('getPaymentRecordsWithFilters 清理后的user_id:', cleanUserId, '原始值:', filters.user_id);
-        
+
         // 兼容多个ID的查询：子账号ID、游戏账号ID、游戏角色ID
         whereConditions.push(`(
             pr.user_id = ? OR 
@@ -2605,41 +2605,41 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
         )`);
         values.push(cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId);
     }
-    
+
     if (filters.mch_order_id) {
         whereConditions.push('pr.mch_order_id LIKE ?');
         values.push(`%${filters.mch_order_id}%`);
     }
-    
+
     if (filters.payment_status) {
         whereConditions.push('pr.payment_status = ?');
         values.push(filters.payment_status);
     }
-    
+
     applyPaymentMethodFilter(filters, whereConditions, values);
-    
+
     if (filters.game_id) {
         whereConditions.push('g.id = ?');
         values.push(filters.game_id);
     }
-    
+
     if (filters.level1_agent || filters.level2_agent) {
         // 如果有代理筛选，选择优先级更高的那个
         const targetAgent = filters.level2_agent || filters.level1_agent;
         whereConditions.push('u.channel_code = ?');
         values.push(targetAgent);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(pr.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(pr.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     let query = `SELECT 
         pr.id,
         pr.user_id,
@@ -2661,16 +2661,16 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
         pr.msg,
         pr.server_url,
         pr.device,
-        COALESCE(u.channel_code, pr.channel_code) as channel_code,
+        COALESCE(ANY_VALUE(u.channel_code), pr.channel_code) as channel_code,
         pr.game_code,
         pr.payment_status,
         pr.ptb_before,
         pr.ptb_change,
         pr.ptb_after,
-        g.game_name,
-        COALESCE(su.wuid, pr.wuid) as role_id_from_join,
-        gc.character_name as role_name,
-        ps.payment_channel
+        ANY_VALUE(g.game_name) as game_name,
+        COALESCE(ANY_VALUE(su.wuid), pr.wuid) as role_id_from_join,
+        ANY_VALUE(gc.character_name) as role_name,
+        ANY_VALUE(ps.payment_channel) as payment_channel
     FROM paymentrecords pr 
     LEFT JOIN users u ON pr.user_id = u.id 
     LEFT JOIN games g ON u.game_code = g.game_code
@@ -2681,19 +2681,19 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
     query += ' GROUP BY pr.id ORDER BY pr.created_at DESC LIMIT ? OFFSET ?';
-    
+
     values.push(pageSize, offset);
-    
+
     console.log('执行查询:', query);
     console.log('查询参数:', values);
-    
+
     const result = await sql({
         query: query,
         values: values,
     }) as any[];
-    
+
     console.log('查询结果数量:', result.length);
-    
+
     // 使用 Map 进一步去重（基于 id），防止 GROUP BY 在某些情况下仍可能产生重复
     const uniqueResults = new Map();
     for (const row of result) {
@@ -2705,33 +2705,33 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
             uniqueResults.set(row.id, row);
         }
     }
-    
+
     return Array.from(uniqueResults.values());
 };
 
 // 获取充值记录总数
 const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[] = []) => {
     console.log('getPaymentRecordsCount 参数:', { filters, allowedChannelCodes });
-    
+
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.transaction_id) {
         whereConditions.push('pr.transaction_id LIKE ?');
         values.push(`%${filters.transaction_id}%`);
     }
-    
+
     if (filters.user_id) {
         // 清理user_id参数，移除可能的空格和特殊字符
         const cleanUserId = filters.user_id.toString().trim().replace(/^\+/, '');
         console.log('getPaymentRecordsCount 清理后的user_id:', cleanUserId, '原始值:', filters.user_id);
-        
+
         // 兼容多个ID的查询：子账号ID、游戏账号ID、游戏角色ID
         whereConditions.push(`(
             pr.user_id = ? OR 
@@ -2743,41 +2743,41 @@ const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[
         )`);
         values.push(cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId);
     }
-    
+
     if (filters.mch_order_id) {
         whereConditions.push('pr.mch_order_id LIKE ?');
         values.push(`%${filters.mch_order_id}%`);
     }
-    
+
     if (filters.payment_status) {
         whereConditions.push('pr.payment_status = ?');
         values.push(filters.payment_status);
     }
-    
+
     applyPaymentMethodFilter(filters, whereConditions, values);
-    
+
     if (filters.game_id) {
         whereConditions.push('g.id = ?');
         values.push(filters.game_id);
     }
-    
+
     if (filters.level1_agent || filters.level2_agent) {
         // 如果有代理筛选，选择优先级更高的那个
         const targetAgent = filters.level2_agent || filters.level1_agent;
         whereConditions.push('u.channel_code = ?');
         values.push(targetAgent);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(pr.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(pr.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     let query = `SELECT COUNT(*) as total 
     FROM paymentrecords pr 
     LEFT JOIN users u ON pr.user_id = u.id 
@@ -2786,43 +2786,43 @@ const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
-    
+
     console.log('计数查询:', query);
     console.log('计数参数:', values);
-    
+
     const result = await sql({
         query: query,
         values: values,
     }) as any;
-    
+
     console.log('计数结果:', result[0].total);
-    
+
     return result[0].total;
 };
 
 // 获取当前查询条件下的所有订单统计
 const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] = []) => {
     console.log('getCurrentQueryStats 参数:', { filters, allowedChannelCodes });
-    
+
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.transaction_id) {
         whereConditions.push('pr.transaction_id LIKE ?');
         values.push(`%${filters.transaction_id}%`);
     }
-    
+
     if (filters.user_id) {
         // 清理user_id参数，移除可能的空格和特殊字符
         const cleanUserId = filters.user_id.toString().trim().replace(/^\+/, '');
         console.log('getCurrentQueryStats 清理后的user_id:', cleanUserId, '原始值:', filters.user_id);
-        
+
         whereConditions.push(`(
             pr.user_id = ? OR 
             su.id = ? OR 
@@ -2833,40 +2833,40 @@ const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] 
         )`);
         values.push(cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId);
     }
-    
+
     if (filters.mch_order_id) {
         whereConditions.push('pr.mch_order_id LIKE ?');
         values.push(`%${filters.mch_order_id}%`);
     }
-    
+
     if (filters.payment_status) {
         whereConditions.push('pr.payment_status = ?');
         values.push(filters.payment_status);
     }
-    
+
     applyPaymentMethodFilter(filters, whereConditions, values);
-    
+
     if (filters.game_id) {
         whereConditions.push('g.id = ?');
         values.push(filters.game_id);
     }
-    
+
     if (filters.level1_agent || filters.level2_agent) {
         const targetAgent = filters.level2_agent || filters.level1_agent;
         whereConditions.push('u.channel_code = ?');
         values.push(targetAgent);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(pr.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(pr.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     let query = `SELECT 
         COUNT(*) as count,
         COALESCE(SUM(pr.amount), 0) as amount 
@@ -2874,19 +2874,19 @@ const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] 
     LEFT JOIN users u ON pr.user_id = u.id 
     LEFT JOIN games g ON u.game_code = g.game_code
     LEFT JOIN subusers su ON pr.sub_user_id = su.id`;
-    
+
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
-    
+
     console.log('当前查询统计 SQL:', query);
     console.log('当前查询统计参数:', values);
-    
+
     const result = await sql({
         query: query,
         values: values,
     }) as any[];
-    
+
     return {
         count: result[0].count,
         amount: parseFloat(result[0].amount).toFixed(2)
@@ -2896,7 +2896,7 @@ const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] 
 // 获取指定日期范围的充值统计
 const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string, isTodayStats: boolean = false, filters?: any, allowedChannelCodes: string[] = []) => {
     const today = getChinaDateString();
-    
+
     if (isTodayStats) {
         // 今日统计：计算总的成功订单数和金额（排除平台币购买）
         let todaySuccessQuery = `
@@ -2908,7 +2908,7 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             WHERE DATE(pr.created_at) = ? AND pr.payment_status = 3
             AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
         `;
-        
+
         let todayTotalQuery = `
             SELECT 
                 COUNT(*) as count,
@@ -2917,10 +2917,10 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             LEFT JOIN users u ON pr.user_id = u.id 
             WHERE DATE(pr.created_at) = ?
         `;
-        
+
         let todaySuccessValues = [today];
         let todayTotalValues = [today];
-        
+
         // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
         if (allowedChannelCodes.length > 0) {
             const channelFilter = ` AND u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`;
@@ -2929,12 +2929,12 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             todaySuccessValues.push(...allowedChannelCodes);
             todayTotalValues.push(...allowedChannelCodes);
         }
-        
+
         const [todaySuccessResult, todayTotalResult] = await Promise.all([
             sql({ query: todaySuccessQuery, values: todaySuccessValues }),
             sql({ query: todayTotalQuery, values: todayTotalValues })
         ]) as any[];
-        
+
         return {
             todaySuccessCount: todaySuccessResult[0].count,
             todaySuccessAmount: parseFloat(todaySuccessResult[0].amount).toFixed(2),
@@ -2947,21 +2947,21 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
         let whereConditionsAll = ['1=1'];
         let values: any[] = [];
         let valuesAll: any[] = [];
-        
+
         if (startDate) {
             whereConditions.push('DATE(pr.created_at) >= ?');
             whereConditionsAll.push('DATE(pr.created_at) >= ?');
             values.push(startDate);
             valuesAll.push(startDate);
         }
-        
+
         if (endDate) {
             whereConditions.push('DATE(pr.created_at) <= ?');
             whereConditionsAll.push('DATE(pr.created_at) <= ?');
             values.push(endDate);
             valuesAll.push(endDate);
         }
-        
+
         // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
         if (allowedChannelCodes.length > 0) {
             whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
@@ -2969,7 +2969,7 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             values.push(...allowedChannelCodes);
             valuesAll.push(...allowedChannelCodes);
         }
-        
+
         // 添加其他筛选条件
         if (filters) {
             if (filters.transaction_id) {
@@ -2978,12 +2978,12 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
                 values.push(`%${filters.transaction_id}%`);
                 valuesAll.push(`%${filters.transaction_id}%`);
             }
-            
+
             if (filters.user_id) {
                 // 清理user_id参数，移除可能的空格和特殊字符
                 const cleanUserId = filters.user_id.toString().trim().replace(/^\+/, '');
                 console.log('getPaymentStatsForDateRange 清理后的user_id:', cleanUserId, '原始值:', filters.user_id);
-                
+
                 // 兼容多个ID的查询：子账号ID、游戏账号ID、游戏角色ID
                 whereConditions.push(`(
                     pr.user_id = ? OR 
@@ -3004,33 +3004,33 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
                 values.push(cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId);
                 valuesAll.push(cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId, cleanUserId);
             }
-            
+
             if (filters.mch_order_id) {
                 whereConditions.push('pr.mch_order_id LIKE ?');
                 whereConditionsAll.push('pr.mch_order_id LIKE ?');
                 values.push(`%${filters.mch_order_id}%`);
                 valuesAll.push(`%${filters.mch_order_id}%`);
             }
-            
+
             if (filters.payment_status) {
                 whereConditions.push('pr.payment_status = ?');
                 whereConditionsAll.push('pr.payment_status = ?');
                 values.push(filters.payment_status);
                 valuesAll.push(filters.payment_status);
             }
-            
+
             if (filters.payment_method) {
                 applyPaymentMethodFilter(filters, whereConditions, values);
                 applyPaymentMethodFilter(filters, whereConditionsAll, valuesAll);
             }
-            
+
             if (filters.game_id) {
                 whereConditions.push('g.id = ?');
                 whereConditionsAll.push('g.id = ?');
                 values.push(filters.game_id);
                 valuesAll.push(filters.game_id);
             }
-            
+
             if (filters.level1_agent || filters.level2_agent) {
                 // 如果有代理筛选，选择优先级更高的那个
                 const targetAgent = filters.level2_agent || filters.level1_agent;
@@ -3040,10 +3040,10 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
                 valuesAll.push(targetAgent);
             }
         }
-        
+
         const successConditions = whereConditions.join(' AND ');
         const allConditions = whereConditionsAll.join(' AND ');
-        
+
         let querySuccessQuery = `
             SELECT 
                 COUNT(*) as count,
@@ -3054,7 +3054,7 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             LEFT JOIN subusers su ON pr.sub_user_id = su.id
             WHERE ${successConditions}
         `;
-        
+
         let queryTotalQuery = `
             SELECT 
                 COUNT(*) as count,
@@ -3065,12 +3065,12 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
             LEFT JOIN subusers su ON pr.sub_user_id = su.id
             WHERE ${allConditions}
         `;
-        
+
         const [querySuccessResult, queryTotalResult] = await Promise.all([
             sql({ query: querySuccessQuery, values: values }),
             sql({ query: queryTotalQuery, values: valuesAll })
         ]) as any[];
-        
+
         return {
             querySuccessCount: querySuccessResult[0].count,
             querySuccessAmount: parseFloat(querySuccessResult[0].amount).toFixed(2),
@@ -3081,18 +3081,18 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
 };
 
 // 获取角色查询记录
-export const getGameCharacters = async(evt:H3Event) => {
-    try{
+export const getGameCharacters = async (evt: H3Event) => {
+    try {
         const query = getQuery(evt);
         const page = Number(query.page) || 1;
         const pageSize = Number(query.pageSize) || 20;
         const statsOnly = query.statsOnly === 'true';
-        
+
         // 权限验证和获取允许的渠道
         let allowedChannelCodes: string[] = [];
         const authorizationHeader = getHeader(evt, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         if (token) {
             try {
                 const adminResult = await AdminModel.getAdminWithPermissions(token);
@@ -3103,8 +3103,8 @@ export const getGameCharacters = async(evt:H3Event) => {
                 }
             } catch (error) {
                 throw createError({
-                   status: 403,
-                   message: '权限验证失败',
+                    status: 403,
+                    message: '权限验证失败',
                 });
             }
         } else {
@@ -3113,7 +3113,7 @@ export const getGameCharacters = async(evt:H3Event) => {
                 message: '未提供认证token',
             });
         }
-        
+
         const filters: any = {};
         if (query.user_id) filters.user_id = query.user_id as string;
         if (query.subuser_id) filters.subuser_id = query.subuser_id as string;
@@ -3124,7 +3124,7 @@ export const getGameCharacters = async(evt:H3Event) => {
         if (query.server_id) filters.server_id = query.server_id as string;
         if (query.startDate) filters.startDate = query.startDate as string;
         if (query.endDate) filters.endDate = query.endDate as string;
-        
+
         // 如果只需要统计数据
         if (statsOnly) {
             const stats = await getCharacterStatsForDateRange(filters.startDate, filters.endDate, allowedChannelCodes);
@@ -3136,13 +3136,13 @@ export const getGameCharacters = async(evt:H3Event) => {
                 }
             };
         }
-        
+
         // 获取完整的角色数据
         const [characters, total] = await Promise.all([
             getGameCharactersWithFilters(page, pageSize, filters, allowedChannelCodes),
             getGameCharactersCount(filters, allowedChannelCodes)
         ]);
-        
+
         return {
             success: true,
             data: {
@@ -3155,7 +3155,7 @@ export const getGameCharacters = async(evt:H3Event) => {
                 }
             }
         };
-    }catch(e: any){
+    } catch (e: any) {
         console.error('获取角色查询记录失败:', e);
         throw createError({
             status: 500,
@@ -3167,61 +3167,61 @@ export const getGameCharacters = async(evt:H3Event) => {
 // 获取角色列表（带筛选和分页）
 const getGameCharactersWithFilters = async (page: number, pageSize: number, filters: any, allowedChannelCodes: string[] = []) => {
     const offset = (page - 1) * pageSize;
-    
+
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`)
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.user_id) {
         whereConditions.push('gc.user_id = ?');
         values.push(filters.user_id);
     }
-    
+
     if (filters.subuser_id) {
         whereConditions.push('gc.subuser_id = ?');
         values.push(filters.subuser_id);
     }
-    
+
     if (filters.subuser_name) {
         whereConditions.push('su.username LIKE ?');
         values.push(`%${filters.subuser_name}%`);
     }
-    
+
     if (filters.character_name) {
         whereConditions.push('gc.character_name LIKE ?');
         values.push(`%${filters.character_name}%`);
     }
-    
+
     if (filters.uuid) {
         whereConditions.push('gc.uuid LIKE ?');
         values.push(`%${filters.uuid}%`);
     }
-    
+
     if (filters.game_id) {
         whereConditions.push('gc.game_id = ?');
         values.push(filters.game_id);
     }
-    
+
     if (filters.server_id) {
         whereConditions.push('gc.server_id = ?');
         values.push(filters.server_id);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(gc.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(gc.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     let query = `
         SELECT 
             gc.*,
@@ -3234,19 +3234,19 @@ const getGameCharactersWithFilters = async (page: number, pageSize: number, filt
         LEFT JOIN subusers su ON gc.subuser_id = su.id
         LEFT JOIN games g ON gc.game_id = g.id
     `;
-    
+
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
     query += ' ORDER BY gc.created_at DESC LIMIT ? OFFSET ?';
-    
+
     values.push(pageSize, offset);
-    
+
     const result = await sql({
         query: query,
         values: values,
     });
-    
+
     return result;
 };
 
@@ -3254,58 +3254,58 @@ const getGameCharactersWithFilters = async (page: number, pageSize: number, filt
 const getGameCharactersCount = async (filters: any, allowedChannelCodes: string[] = []) => {
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`)
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.user_id) {
         whereConditions.push('gc.user_id = ?');
         values.push(filters.user_id);
     }
-    
+
     if (filters.subuser_id) {
         whereConditions.push('gc.subuser_id = ?');
         values.push(filters.subuser_id);
     }
-    
+
     if (filters.subuser_name) {
         whereConditions.push('su.username LIKE ?');
         values.push(`%${filters.subuser_name}%`);
     }
-    
+
     if (filters.character_name) {
         whereConditions.push('gc.character_name LIKE ?');
         values.push(`%${filters.character_name}%`);
     }
-    
+
     if (filters.uuid) {
         whereConditions.push('gc.uuid LIKE ?');
         values.push(`%${filters.uuid}%`);
     }
-    
+
     if (filters.game_id) {
         whereConditions.push('gc.game_id = ?');
         values.push(filters.game_id);
     }
-    
+
     if (filters.server_id) {
         whereConditions.push('gc.server_id = ?');
         values.push(filters.server_id);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(gc.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(gc.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     let query = `
         SELECT COUNT(*) as total 
         FROM gamecharacters gc 
@@ -3313,23 +3313,23 @@ const getGameCharactersCount = async (filters: any, allowedChannelCodes: string[
         LEFT JOIN subusers su ON gc.subuser_id = su.id
         LEFT JOIN games g ON gc.game_id = g.id
     `;
-    
+
     if (whereConditions.length > 0) {
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
-    
+
     const result = await sql({
         query: query,
         values: values,
     }) as any;
-    
+
     return result[0].total;
 };
 
 // 获取指定日期范围的角色统计
 const getCharacterStatsForDateRange = async (startDate?: string, endDate?: string, allowedChannelCodes: string[] = []) => {
     const today = getChinaDateString();
-    
+
     // 今日创建角色统计
     let todayQuery = `
         SELECT COUNT(*) as today_character_count
@@ -3338,18 +3338,18 @@ const getCharacterStatsForDateRange = async (startDate?: string, endDate?: strin
         WHERE DATE(gc.created_at) = ?
     `;
     let todayValues = [today];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         todayQuery += ` AND u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`;
         todayValues.push(...allowedChannelCodes);
     }
-    
+
     const todayResult = await sql({
         query: todayQuery,
         values: todayValues,
     }) as any;
-    
+
     // 总角色数
     let totalQuery = `
         SELECT COUNT(*) as total_characters 
@@ -3357,18 +3357,18 @@ const getCharacterStatsForDateRange = async (startDate?: string, endDate?: strin
         LEFT JOIN users u ON gc.user_id = u.id
     `;
     let totalValues: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         totalQuery += ` WHERE u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`;
         totalValues.push(...allowedChannelCodes);
     }
-    
+
     const totalResult = await sql({
         query: totalQuery,
         values: totalValues,
     }) as any;
-    
+
     return {
         today_character_count: todayResult[0].today_character_count,
         total_characters: totalResult[0].total_characters
@@ -3376,7 +3376,7 @@ const getCharacterStatsForDateRange = async (startDate?: string, endDate?: strin
 };
 
 // 获取数据概览统计（按游戏分组）
-export const getDataOverview = async(evt: H3Event) => {
+export const getDataOverview = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
         const startDate = query.startDate as string || getPastDate(7); // 默认7天
@@ -3384,14 +3384,14 @@ export const getDataOverview = async(evt: H3Event) => {
         const channelCode = query.channelCode as string || '';
         const adminId = query.adminId as string || '';
         const gameId = query.gameId as string || '';
-        
+
         // 获取当前操作用户信息（用于权限判断）
-        let currentUserInfo: { level: number, allowed_channel_codes: string[], allowed_game_ids: number[] } = { 
-            level: 0, 
-            allowed_channel_codes: [], 
-            allowed_game_ids: [] 
+        let currentUserInfo: { level: number, allowed_channel_codes: string[], allowed_game_ids: number[] } = {
+            level: 0,
+            allowed_channel_codes: [],
+            allowed_game_ids: []
         };
-        
+
         if (adminId) {
             try {
                 const adminResult = await AdminModel.getAdminWithPermissions(parseInt(adminId));
@@ -3409,13 +3409,13 @@ export const getDataOverview = async(evt: H3Event) => {
 
         // 确定要使用的权限（用于数据过滤）
         let allowedChannels: string[] = [];
-        
+
         if (channelCode) {
             // 用户选择了具体渠道，查询该渠道及其所有下级渠道的数据
             const AgentRelationships = await import('../model/agentRelationships');
             const childChannels = await AgentRelationships.getAllChildChannelCodes(channelCode);
             allowedChannels = [channelCode, ...childChannels];
-            
+
             console.log('[概述数据查询] 选择了具体渠道:', {
                 selectedChannel: channelCode,
                 allChannels: allowedChannels
@@ -3439,20 +3439,20 @@ export const getDataOverview = async(evt: H3Event) => {
         let gameCodeFilter = '';
         if (gameId) {
             // 检查权限
-            if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0 && 
+            if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0 &&
                 !currentUserInfo.allowed_game_ids.includes(parseInt(gameId))) {
                 return {
                     success: false,
                     message: '无权限查看该游戏数据'
                 };
             }
-            
+
             // 获取游戏代码
             const gameResult = await sql({
                 query: "SELECT game_code FROM games WHERE id = ?",
                 values: [parseInt(gameId)]
             }) as any;
-            
+
             if (gameResult.length > 0) {
                 gameCodeFilter = gameResult[0].game_code;
             }
@@ -3478,7 +3478,7 @@ export const getDataOverview = async(evt: H3Event) => {
                 query: `SELECT game_code FROM games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
                 values: currentUserInfo.allowed_game_ids
             }) as any;
-            
+
             if (gameCodesResult.length > 0) {
                 const gameCodes = gameCodesResult.map((g: any) => g.game_code);
                 conditions.push(`ds.game_code IN (${gameCodes.map(() => '?').join(',')})`);
@@ -3530,7 +3530,7 @@ export const getDataOverview = async(evt: H3Event) => {
                 query: `SELECT game_code FROM games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
                 values: currentUserInfo.allowed_game_ids
             }) as any;
-            
+
             if (gameCodesResult.length > 0) {
                 const gameCodes = gameCodesResult.map((g: any) => g.game_code);
                 gameStatsConditions.push(`ds.game_code IN (${gameCodes.map(() => '?').join(',')})`);
@@ -3591,7 +3591,7 @@ export const getDataOverview = async(evt: H3Event) => {
                 totalArpu: totalArpu.toFixed(2),
                 newArpu: newArpu.toFixed(2),
                 newPayArpu: newPayArpu.toFixed(2),
-                
+
                 // 游戏详细数据
                 gameStats: gameStats.map((game: any) => ({
                     gameId: game.game_id,
@@ -3605,11 +3605,11 @@ export const getDataOverview = async(evt: H3Event) => {
                     payRate: Number(game.pay_rate).toFixed(0),
                     arpu: Number(game.arpu).toFixed(2)
                 })),
-                
+
                 // 统计周期
                 startDate,
                 endDate,
-                
+
                 // 权限信息
                 adminLevel: currentUserInfo.level,
                 allowedChannels: currentUserInfo.level > 0 ? allowedChannels : null,
@@ -3627,7 +3627,7 @@ export const getDataOverview = async(evt: H3Event) => {
 };
 
 // 获取日报详细数据（按日期分组）
-export const getDailyReportDetails = async(evt: H3Event) => {
+export const getDailyReportDetails = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
         const startDate = query.startDate as string || getPastDate(7);
@@ -3635,14 +3635,14 @@ export const getDailyReportDetails = async(evt: H3Event) => {
         const channelCode = query.channelCode as string || '';
         const adminId = query.adminId as string || '';
         const gameId = query.gameId as string || '';
-        
+
         // 获取当前用户权限信息
-        let currentUserInfo: { level: number, allowed_channel_codes: string[], allowed_game_ids: number[] } = { 
-            level: 0, 
-            allowed_channel_codes: [], 
-            allowed_game_ids: [] 
+        let currentUserInfo: { level: number, allowed_channel_codes: string[], allowed_game_ids: number[] } = {
+            level: 0,
+            allowed_channel_codes: [],
+            allowed_game_ids: []
         };
-        
+
         if (adminId) {
             try {
                 const adminResult = await AdminModel.getAdminWithPermissions(parseInt(adminId));
@@ -3661,7 +3661,7 @@ export const getDailyReportDetails = async(evt: H3Event) => {
         // 确定要使用的权限（用于数据过滤）
         let allowedChannels: string[] = [];
         let allowedGameIds: number[] = [];
-        
+
         if (channelCode) {
             // 用户选择了具体渠道
             allowedChannels = [channelCode];
@@ -3680,20 +3680,20 @@ export const getDailyReportDetails = async(evt: H3Event) => {
         let gameCodeFilter = '';
         if (gameId) {
             // 检查权限
-            if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0 && 
+            if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0 &&
                 !currentUserInfo.allowed_game_ids.includes(parseInt(gameId))) {
                 return {
                     success: false,
                     message: '无权限查看该游戏数据'
                 };
             }
-            
+
             // 获取游戏代码
             const gameResult = await sql({
                 query: "SELECT game_code FROM games WHERE id = ?",
                 values: [parseInt(gameId)]
             }) as any;
-            
+
             if (gameResult.length > 0) {
                 gameCodeFilter = gameResult[0].game_code;
             }
@@ -3719,7 +3719,7 @@ export const getDailyReportDetails = async(evt: H3Event) => {
                 query: `SELECT game_code FROM games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
                 values: currentUserInfo.allowed_game_ids
             }) as any;
-            
+
             if (gameCodesResult.length > 0) {
                 const gameCodes = gameCodesResult.map((g: any) => g.game_code);
                 conditions.push(`ds.game_code IN (${gameCodes.map(() => '?').join(',')})`);
@@ -3813,7 +3813,7 @@ export const getDailyReportDetails = async(evt: H3Event) => {
 };
 
 // 获取详细的数据概览表格（按渠道或日期分组）
-export const getDataOverviewDetails = async(evt: H3Event) => {
+export const getDataOverviewDetails = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
         const startDate = query.startDate as string || getPastDate(7);
@@ -3822,11 +3822,11 @@ export const getDataOverviewDetails = async(evt: H3Event) => {
         const page = Number(query.page) || 1;
         const pageSize = Number(query.pageSize) || 20;
         const adminId = query.adminId as string || '';
-        
+
         // 获取用户权限
         let adminInfo = { level: 0, allowed_channel_codes: [] as string[] };
         let allowedChannels: string[] = [];
-        
+
         if (adminId) {
             try {
                 const adminResult = await AdminModel.getAdminWithPermissions(parseInt(adminId));
@@ -3840,14 +3840,14 @@ export const getDataOverviewDetails = async(evt: H3Event) => {
                 console.error('获取管理员信息失败:', error);
             }
         }
-        
+
         if (adminInfo.level > 0) {
             allowedChannels = adminInfo.allowed_channel_codes;
         }
 
         let channelFilter = '';
         let channelValues: string[] = [];
-        
+
         if (adminInfo.level > 0 && allowedChannels.length > 0) {
             channelFilter = ` AND u.channel_code COLLATE utf8mb4_unicode_ci IN (${allowedChannels.map(() => '?').join(',')})`;
             channelValues = allowedChannels;
@@ -3855,7 +3855,7 @@ export const getDataOverviewDetails = async(evt: H3Event) => {
 
         let groupField = '';
         let orderField = '';
-        
+
         if (groupBy === 'channel') {
             groupField = 'u.channel_code';
             orderField = 'u.channel_code';
@@ -3945,7 +3945,7 @@ export const getDataOverviewDetails = async(evt: H3Event) => {
             WHERE DATE(u.created_at) BETWEEN ? AND ?
             ${channelFilter}
         `;
-        
+
         const countResult = await sql({
             query: countQuery,
             values: [startDate, endDate, ...channelValues]
@@ -4010,7 +4010,7 @@ const getCurrentDate = (): string => {
 // 辅助函数：格式化日期为字符串 - 确保返回正确的日期格式
 const formatDateToString = (dateValue: any): string => {
     if (!dateValue) return '';
-    
+
     // 如果是字符串
     if (typeof dateValue === 'string') {
         // 如果包含时间部分，只取日期部分
@@ -4022,7 +4022,7 @@ const formatDateToString = (dateValue: any): string => {
             return dateValue;
         }
     }
-    
+
     // 如果是Date对象，使用本地时区的年月日
     if (dateValue instanceof Date) {
         const year = dateValue.getFullYear();
@@ -4030,7 +4030,7 @@ const formatDateToString = (dateValue: any): string => {
         const day = String(dateValue.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     }
-    
+
     // 尝试解析为Date对象
     try {
         const date = new Date(dateValue);
@@ -4043,7 +4043,7 @@ const formatDateToString = (dateValue: any): string => {
     } catch (e) {
         console.error('日期格式化失败:', dateValue, e);
     }
-    
+
     return String(dateValue);
 };
 
@@ -4065,18 +4065,18 @@ const generateDateRange = (startDate: string, endDate: string): Date[] => {
     const dates: Date[] = [];
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     const current = new Date(start);
     while (current <= end) {
         dates.push(new Date(current));
         current.setDate(current.getDate() + 1);
     }
-    
+
     return dates;
 };
 
 // LTV数据获取接口
-export const getLTVData = async(evt: H3Event) => {
+export const getLTVData = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
         const {
@@ -4109,18 +4109,18 @@ export const getLTVData = async(evt: H3Event) => {
         // 管理员权限过滤
         if (adminId) {
             const adminPermissions = await AdminModel.getAdminWithPermissions(parseInt(adminId as string));
-            
+
             if (adminPermissions && adminPermissions.level > 0) {
                 // 非超级管理员，需要按权限过滤
                 const allowedChannels = adminPermissions.allowed_channel_codes || [];
                 const allowedGames = adminPermissions.allowed_game_ids || [];
-                
+
                 if (allowedChannels.length > 0) {
                     const channelPlaceholders = allowedChannels.map(() => '?').join(',');
                     whereConditions.push(`ls.channel_code IN (${channelPlaceholders})`);
                     queryParams.push(...allowedChannels);
                 }
-                
+
                 if (allowedGames.length > 0) {
                     const gamePlaceholders = allowedGames.map(() => '?').join(',');
                     whereConditions.push(`(ls.game_code IN (${gamePlaceholders}) OR ls.game_code = '')`);
@@ -4299,7 +4299,7 @@ export const getLTVData = async(evt: H3Event) => {
 }
 
 // 获取LTV趋势图数据
-export const getLTVTrendData = async(evt: H3Event) => {
+export const getLTVTrendData = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
         const {
@@ -4325,17 +4325,17 @@ export const getLTVTrendData = async(evt: H3Event) => {
         // 管理员权限过滤
         if (adminId) {
             const adminPermissions = await AdminModel.getAdminWithPermissions(parseInt(adminId as string));
-            
+
             if (adminPermissions && adminPermissions.level > 0) {
                 const allowedChannels = adminPermissions.allowed_channel_codes || [];
                 const allowedGames = adminPermissions.allowed_game_ids || [];
-                
+
                 if (allowedChannels.length > 0) {
                     const channelPlaceholders = allowedChannels.map(() => '?').join(',');
                     whereConditions.push(`ls.channel_code IN (${channelPlaceholders})`);
                     queryParams.push(...allowedChannels);
                 }
-                
+
                 if (allowedGames.length > 0) {
                     const gamePlaceholders = allowedGames.map(() => '?').join(',');
                     whereConditions.push(`(ls.game_code IN (${gamePlaceholders}) OR ls.game_code = '')`);
@@ -4422,25 +4422,25 @@ export const getLTVTrendData = async(evt: H3Event) => {
 // ==================== 平台币相关API ====================
 
 // 代理间转账
-export const adminTransferPlatformCoins = async(evt: H3Event) => {
+export const adminTransferPlatformCoins = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         const { from_channel_code, to_channel_code, amount, remark, operator_channel_code } = body;
-        
+
         if (!from_channel_code || !to_channel_code || !amount) {
             throw createError({
                 status: 400,
                 message: '缺少必要参数',
             });
         }
-        
+
         if (amount === 0) {
             throw createError({
                 status: 400,
                 message: '转账金额不能为0',
             });
         }
-        
+
         const result = await PlatformCoinsModel.transferBetweenAdmins(
             from_channel_code,
             to_channel_code,
@@ -4448,7 +4448,7 @@ export const adminTransferPlatformCoins = async(evt: H3Event) => {
             remark || '',
             operator_channel_code || ''
         );
-        
+
         return {
             success: true,
             message: result.message,
@@ -4464,7 +4464,7 @@ export const adminTransferPlatformCoins = async(evt: H3Event) => {
 }
 
 // 代理给玩家转账
-export const adminTransferToPlayer = async(evt: H3Event) => {
+export const adminTransferToPlayer = async (evt: H3Event) => {
     try {
         const authorizationHeader = getHeader(evt, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
@@ -4478,14 +4478,14 @@ export const adminTransferToPlayer = async(evt: H3Event) => {
 
         const body = await readBody(evt);
         const { admin_channel_code, user_id, amount, remark, operator_channel_code } = body;
-        
+
         if (!admin_channel_code || !user_id || !amount) {
             throw createError({
                 status: 400,
                 message: '缺少必要参数',
             });
         }
-        
+
         // 验证user_id是否为有效数字
         const parsedUserId = parseInt(user_id.toString());
         if (isNaN(parsedUserId) || parsedUserId <= 0) {
@@ -4494,14 +4494,14 @@ export const adminTransferToPlayer = async(evt: H3Event) => {
                 message: '用户ID必须是有效的正整数',
             });
         }
-        
+
         if (amount === 0) {
             throw createError({
                 status: 400,
                 message: '转账金额不能为0',
             });
         }
-        
+
         const result = await PlatformCoinsModel.transferToPlayer(
             admin_channel_code,
             parsedUserId.toString(),
@@ -4509,7 +4509,7 @@ export const adminTransferToPlayer = async(evt: H3Event) => {
             remark || '',
             operator_channel_code || ''
         );
-        
+
         return {
             success: true,
             message: result.message,
@@ -4525,25 +4525,25 @@ export const adminTransferToPlayer = async(evt: H3Event) => {
 }
 
 // 管理员分配平台币（现在受余额限制）
-export const allocatePlatformCoins = async(evt: H3Event) => {
+export const allocatePlatformCoins = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         const { from_channel_code, to_channel_code, amount, remark, operator_channel_code } = body;
-        
+
         if (!from_channel_code || !to_channel_code || !amount) {
             throw createError({
                 status: 400,
                 message: '缺少必要参数',
             });
         }
-        
+
         if (amount <= 0) {
             throw createError({
                 status: 400,
                 message: '分配金额必须大于0',
             });
         }
-        
+
         const result = await PlatformCoinsModel.allocatePlatformCoins(
             from_channel_code,
             to_channel_code,
@@ -4551,7 +4551,7 @@ export const allocatePlatformCoins = async(evt: H3Event) => {
             remark || '',
             operator_channel_code || ''
         );
-        
+
         return {
             success: true,
             message: result.message,
@@ -4567,28 +4567,28 @@ export const allocatePlatformCoins = async(evt: H3Event) => {
 }
 
 // 获取代理间转账记录
-export const getAdminPlatformCoinTransactions = async(evt: H3Event) => {
+export const getAdminPlatformCoinTransactions = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         const { channel_code, page = 1, page_size = 20 } = body;
-        
+
         if (!channel_code) {
             throw createError({
                 status: 400,
                 message: '缺少渠道代码',
             });
         }
-        
+
         // 安全处理分页参数
         const parsedPage = Math.max(1, parseInt(page.toString()) || 1);
         const parsedPageSize = Math.max(1, Math.min(100, parseInt(page_size.toString()) || 20));
-        
+
         const result = await PlatformCoinsModel.getAdminTransactions(
             channel_code,
             parsedPage,
             parsedPageSize
         );
-        
+
         return {
             success: true,
             data: result
@@ -4603,28 +4603,28 @@ export const getAdminPlatformCoinTransactions = async(evt: H3Event) => {
 }
 
 // 获取代理给玩家转账记录
-export const getAdminToPlayerTransactions = async(evt: H3Event) => {
+export const getAdminToPlayerTransactions = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         const { channel_code, page = 1, page_size = 20 } = body;
-        
+
         if (!channel_code) {
             throw createError({
                 status: 400,
                 message: '缺少渠道代码',
             });
         }
-        
+
         // 安全处理分页参数
         const parsedPage = Math.max(1, parseInt(page.toString()) || 1);
         const parsedPageSize = Math.max(1, Math.min(100, parseInt(page_size.toString()) || 20));
-        
+
         const result = await PlatformCoinsModel.getAdminToPlayerTransactions(
             channel_code,
             parsedPage,
             parsedPageSize
         );
-        
+
         return {
             success: true,
             data: result
@@ -4639,20 +4639,20 @@ export const getAdminToPlayerTransactions = async(evt: H3Event) => {
 }
 
 // 获取代理余额
-export const getAdminPlatformCoinBalance = async(evt: H3Event) => {
+export const getAdminPlatformCoinBalance = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         const { channel_code } = body;
-        
+
         if (!channel_code) {
             throw createError({
                 status: 400,
                 message: '缺少渠道代码',
             });
         }
-        
+
         const result = await PlatformCoinsModel.getAdminBalance(channel_code);
-        
+
         return {
             success: true,
             data: result
@@ -4667,18 +4667,18 @@ export const getAdminPlatformCoinBalance = async(evt: H3Event) => {
 }
 
 // 检查玩家是否属于指定代理渠道
-export const checkUserChannel = async(evt: H3Event) => {
+export const checkUserChannel = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
         const { user_id, admin_channel_code } = body;
-        
+
         if (!user_id || !admin_channel_code) {
             throw createError({
                 status: 400,
                 message: '缺少必要参数',
             });
         }
-        
+
         // 验证user_id是否为有效数字
         const parsedUserId = parseInt(user_id.toString());
         if (isNaN(parsedUserId) || parsedUserId <= 0) {
@@ -4687,23 +4687,23 @@ export const checkUserChannel = async(evt: H3Event) => {
                 message: '用户ID必须是有效的正整数',
             });
         }
-        
+
         // 获取管理员信息
         const adminResult = await sql({
             query: 'SELECT level, allowed_channel_codes FROM admins WHERE channel_code = ? AND is_active = 1',
             values: [admin_channel_code]
         }) as any[];
-        
+
         if (adminResult.length === 0) {
             throw createError({
                 status: 404,
                 message: '代理不存在',
             });
         }
-        
+
         const adminLevel = adminResult[0].level || 0;
         const allowedChannels = adminResult[0].allowed_channel_codes || [];
-        
+
         // 超级管理员可以发放给任何玩家
         if (adminLevel === 0) {
             // 仍需要验证玩家是否存在
@@ -4711,14 +4711,14 @@ export const checkUserChannel = async(evt: H3Event) => {
                 query: 'SELECT channel_code FROM users WHERE id = ?',
                 values: [parsedUserId]
             }) as any[];
-            
+
             if (userResult.length === 0) {
                 throw createError({
                     status: 404,
                     message: '玩家不存在',
                 });
             }
-            
+
             return {
                 success: true,
                 message: '超级管理员权限验证通过',
@@ -4727,22 +4727,22 @@ export const checkUserChannel = async(evt: H3Event) => {
                 }
             };
         }
-        
+
         // 普通代理需要验证渠道权限
         const userResult = await sql({
             query: 'SELECT channel_code FROM users WHERE id = ?',
             values: [parsedUserId]
         }) as any[];
-        
+
         if (userResult.length === 0) {
             throw createError({
                 status: 404,
                 message: '玩家不存在',
             });
         }
-        
+
         const userChannelCode = userResult[0].channel_code;
-        
+
         // 检查玩家的渠道是否在代理的allowed_channel_codes中
         if (!allowedChannels.includes(userChannelCode)) {
             return {
@@ -4750,7 +4750,7 @@ export const checkUserChannel = async(evt: H3Event) => {
                 message: '该玩家不属于您的管理渠道范围'
             };
         }
-        
+
         return {
             success: true,
             message: '玩家渠道验证通过',
@@ -4768,7 +4768,7 @@ export const checkUserChannel = async(evt: H3Event) => {
 }
 
 
-export const getChannelData = async(evt: H3Event) => {
+export const getChannelData = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
         const {
@@ -4797,10 +4797,10 @@ export const getChannelData = async(evt: H3Event) => {
         // 获取管理员权限信息
         let adminPermissions = null;
         let allowedChannels: string[] = [];
-        
+
         if (adminId) {
             adminPermissions = await AdminModel.getAdminWithPermissions(parseInt(adminId as string));
-            
+
             if (adminPermissions) {
                 if (adminPermissions.level === 0) {
                     // 超级管理员，无限制
@@ -4815,18 +4815,18 @@ export const getChannelData = async(evt: H3Event) => {
         // 构建查询条件
         let conditions = ['stat_date BETWEEN ? AND ?'];
         let params = [startDate, endDate];
-        
+
         // 渠道过滤
         if (channelCode) {
             // 用户选择了具体渠道，查询该渠道及其所有下级渠道的数据
             const AgentRelationships = await import('../model/agentRelationships');
             const childChannels = await AgentRelationships.getAllChildChannelCodes(channelCode.toString());
             const targetChannels = [channelCode.toString(), ...childChannels];
-            
+
             const channelPlaceholders = targetChannels.map(() => '?').join(',');
             conditions.push(`channel_code IN (${channelPlaceholders})`);
             params.push(...targetChannels);
-            
+
             console.log('[渠道数据查询] 选择了具体渠道:', {
                 selectedChannel: channelCode,
                 allChannels: targetChannels
@@ -4836,7 +4836,7 @@ export const getChannelData = async(evt: H3Event) => {
             const channelPlaceholders = allowedChannels.map(() => '?').join(',');
             conditions.push(`channel_code IN (${channelPlaceholders})`);
             params.push(...allowedChannels);
-            
+
             console.log('[渠道数据查询] 使用管理员权限:', {
                 allowedChannels
             });
@@ -4844,7 +4844,7 @@ export const getChannelData = async(evt: H3Event) => {
             // 超级管理员，不限制渠道
             console.log('[渠道数据查询] 超级管理员，不限制渠道');
         }
-        
+
         // 游戏过滤
         if (gameId) {
             conditions.push('game_code = ?');
@@ -4869,7 +4869,7 @@ export const getChannelData = async(evt: H3Event) => {
             ORDER BY stat_date DESC
             LIMIT ? OFFSET ?
         `;
-        
+
         // 计算总数 - 按日期分组后的记录数
         const countQuery = `
             SELECT COUNT(DISTINCT stat_date) as total
@@ -4931,7 +4931,7 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
     try {
         const query = getQuery(evt);
         const adminId = parseInt(query.admin_id as string) || null;
-        
+
         if (!adminId) {
             throw createError({
                 status: 400,
@@ -4962,23 +4962,23 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
         } else {
             // 其他代理：只显示直接下级代理（下一级别的代理）
             const targetLevel = currentAdmin.level + 1; // 目标级别：当前级别+1
-            
+
             console.log(`[渠道结算数据] 当前管理员: ${currentAdmin.name} (级别${currentAdmin.level})`);
             console.log(`[渠道结算数据] 查找直接下级代理 (级别${targetLevel})`);
-            
+
             const allowedChannelCodes = currentAdmin.allowed_channel_codes || [];
-            
+
             if (allowedChannelCodes.length > 0) {
                 // 清理空格并排除自己的渠道代码
                 const cleanedChannelCodes = allowedChannelCodes
                     .map((code: any) => typeof code === 'string' ? code.trim() : code)
                     .filter((code: any) => code && code !== '');
-                    
+
                 const childChannelCodes = cleanedChannelCodes.filter(code => code !== currentAdmin.channel_code);
-                
+
                 if (childChannelCodes.length > 0) {
                     const placeholders = childChannelCodes.map(() => '?').join(',');
-                    
+
                     // 只查找指定级别的直接下级代理
                     const result = await sql({
                         query: `SELECT * FROM admins 
@@ -4989,7 +4989,7 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
                         values: [...childChannelCodes, targetLevel]
                     });
                     childAgents = result as any[];
-                    
+
                     console.log(`[渠道结算数据] 找到 ${childAgents.length} 个级别${targetLevel}的直接下级代理:`);
                     childAgents.forEach(agent => {
                         console.log(`  - ${agent.name} (${agent.channel_code}) 级别${agent.level}`);
@@ -5012,7 +5012,7 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
 
         for (const agent of childAgents) {
             console.log(`[渠道结算数据] 处理代理: ${agent.name} (${agent.channel_code})`);
-            
+
             // 获取该代理管辖的所有渠道代码（使用allowed_channel_codes）
             let allChannelCodes = [];
             try {
@@ -5027,18 +5027,18 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
                     // 如果没有allowed_channel_codes，至少包含自己的渠道代码
                     allChannelCodes = [agent.channel_code];
                 }
-                
+
                 // 清理空格并去重
                 allChannelCodes = allChannelCodes
                     .map((code: any) => typeof code === 'string' ? code.trim() : code)
                     .filter((code: any) => code && code !== '')
                     .filter((code: any, index: number, arr: any[]) => arr.indexOf(code) === index);
-                
+
                 // 确保包含代理自己的渠道代码
                 if (!allChannelCodes.includes(agent.channel_code)) {
                     allChannelCodes.unshift(agent.channel_code);
                 }
-                
+
                 console.log(`[渠道结算数据] 代理 ${agent.name} 管辖的渠道:`, allChannelCodes);
             } catch (e) {
                 console.warn(`解析代理 ${agent.name} 的 allowed_channel_codes 失败，使用默认渠道代码`);
@@ -5086,7 +5086,7 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
             const yesterdayAmount = parseFloat(yesterdayPayments[0]?.total || 0);
             const todayAmount = parseFloat(todayPayments[0]?.total || 0);
             const totalAmount = parseFloat(totalPayments[0]?.total || 0);
-            
+
             // 计算结算金额 (流水 * 分成比例 / 100)
             const divideRate = (agent.divide_rate || 0) / 100;
             const yesterdaySettlement = yesterdayAmount * divideRate;
@@ -5144,18 +5144,18 @@ export const getGiftPackageRecords = async (evt: H3Event) => {
         const query = getQuery(evt);
         const page = Number(query.page) || 1;
         const pageSize = Number(query.pageSize) || 20;
-        
+
         // 权限检查 - 获取当前登录管理员的权限
         const authorizationHeader = getHeader(evt, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         let adminPermissions = null;
         let allowedChannelCodes: string[] = [];
-        
+
         if (token) {
             try {
                 const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
-                
+
                 if (!adminWithPermissions) {
                     throw createError({
                         status: 403,
@@ -5164,7 +5164,7 @@ export const getGiftPackageRecords = async (evt: H3Event) => {
                 }
 
                 adminPermissions = adminWithPermissions;
-                
+
                 // 超级管理员(level 0)可以查看所有数据
                 if (adminWithPermissions.level === 0) {
                     allowedChannelCodes = []; // 空数组表示无限制
@@ -5172,7 +5172,7 @@ export const getGiftPackageRecords = async (evt: H3Event) => {
                     // 普通管理员使用 allowed_channel_codes 权限
                     allowedChannelCodes = adminWithPermissions.allowed_channel_codes || [];
                 }
-                
+
                 console.log(`管理员 ${adminWithPermissions.name} 的礼包数据权限:`, {
                     level: adminWithPermissions.level,
                     allowedChannelCodes: allowedChannelCodes
@@ -5190,7 +5190,7 @@ export const getGiftPackageRecords = async (evt: H3Event) => {
                 message: '未提供认证token',
             });
         }
-        
+
         const filters: any = {};
         if (query.user_id) filters.user_id = parseInt(query.user_id as string);
         if (query.thirdparty_uid) filters.thirdparty_uid = query.thirdparty_uid as string;
@@ -5201,14 +5201,14 @@ export const getGiftPackageRecords = async (evt: H3Event) => {
         if (query.startDate) filters.startDate = query.startDate as string;
         if (query.endDate) filters.endDate = query.endDate as string;
         if (query.package_name) filters.package_name = query.package_name as string;
-        
+
         // 获取礼包记录数据
         const [records, total, stats] = await Promise.all([
             getGiftPackageRecordsWithFilters(page, pageSize, filters, allowedChannelCodes),
             getGiftPackageRecordsCount(filters, allowedChannelCodes),
             getGiftPackageRecordsStats(filters, allowedChannelCodes)
         ]);
-        
+
         return {
             success: true,
             data: {
@@ -5235,66 +5235,66 @@ export const getGiftPackageRecords = async (evt: H3Event) => {
 // 获取礼包记录列表（带筛选和分页）
 const getGiftPackageRecordsWithFilters = async (page: number, pageSize: number, filters: any, allowedChannelCodes: string[] = []) => {
     const offset = (page - 1) * pageSize;
-    
+
     console.log('getGiftPackageRecordsWithFilters 参数:', { page, pageSize, filters, allowedChannelCodes });
-    
+
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.user_id) {
         whereConditions.push('gpr.user_id = ?');
         values.push(filters.user_id);
     }
-    
+
     if (filters.thirdparty_uid) {
         whereConditions.push('gpr.thirdparty_uid LIKE ?');
         values.push(`%${filters.thirdparty_uid}%`);
     }
-    
+
     if (filters.mch_order_id) {
         whereConditions.push('gpr.mch_order_id LIKE ?');
         values.push(`%${filters.mch_order_id}%`);
     }
-    
+
     if (filters.package_name) {
         whereConditions.push('gpr.package_name LIKE ?');
         values.push(`%${filters.package_name}%`);
     }
-    
+
     if (filters.status) {
         whereConditions.push('gpr.status = ?');
         values.push(filters.status);
     }
-    
+
     if (filters.game_delivery_status) {
         whereConditions.push('gpr.game_delivery_status = ?');
         values.push(filters.game_delivery_status);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(gpr.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(gpr.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     // 礼包类型过滤（基于礼包表的category字段）
     if (filters.packageType && filters.packageType !== 'all') {
         whereConditions.push('egp.category = ?');
         values.push(filters.packageType);
     }
-    
+
     const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
-    
+
     const query = `
         SELECT 
             gpr.*,
@@ -5319,14 +5319,14 @@ const getGiftPackageRecordsWithFilters = async (page: number, pageSize: number, 
         ORDER BY gpr.created_at DESC 
         LIMIT ?, ?
     `;
-    
+
     values.push(offset, pageSize);
-    
+
     const records = await sql({
         query,
         values,
     }) as any[];
-    
+
     return records;
 };
 
@@ -5334,61 +5334,61 @@ const getGiftPackageRecordsWithFilters = async (page: number, pageSize: number, 
 const getGiftPackageRecordsCount = async (filters: any, allowedChannelCodes: string[] = []) => {
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.user_id) {
         whereConditions.push('gpr.user_id = ?');
         values.push(filters.user_id);
     }
-    
+
     if (filters.thirdparty_uid) {
         whereConditions.push('gpr.thirdparty_uid LIKE ?');
         values.push(`%${filters.thirdparty_uid}%`);
     }
-    
+
     if (filters.mch_order_id) {
         whereConditions.push('gpr.mch_order_id LIKE ?');
         values.push(`%${filters.mch_order_id}%`);
     }
-    
+
     if (filters.package_name) {
         whereConditions.push('gpr.package_name LIKE ?');
         values.push(`%${filters.package_name}%`);
     }
-    
+
     if (filters.status) {
         whereConditions.push('gpr.status = ?');
         values.push(filters.status);
     }
-    
+
     if (filters.game_delivery_status) {
         whereConditions.push('gpr.game_delivery_status = ?');
         values.push(filters.game_delivery_status);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(gpr.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(gpr.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     // 礼包类型过滤（基于礼包表的category字段）
     if (filters.packageType && filters.packageType !== 'all') {
         whereConditions.push('egp.category = ?');
         values.push(filters.packageType);
     }
-    
+
     const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
-    
+
     const query = `
         SELECT COUNT(*) as total 
         FROM giftpackagepurchaserecords gpr
@@ -5396,12 +5396,12 @@ const getGiftPackageRecordsCount = async (filters: any, allowedChannelCodes: str
         LEFT JOIN externalgiftpackages egp ON gpr.package_id = egp.id
         ${whereClause}
     `;
-    
+
     const result = await sql({
         query,
         values,
     }) as any[];
-    
+
     return result[0]?.total || 0;
 };
 
@@ -5409,53 +5409,53 @@ const getGiftPackageRecordsCount = async (filters: any, allowedChannelCodes: str
 const getGiftPackageRecordsStats = async (filters: any, allowedChannelCodes: string[] = []) => {
     let whereConditions = [];
     let values: any[] = [];
-    
+
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`u.channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
-    
+
     if (filters.user_id) {
         whereConditions.push('gpr.user_id = ?');
         values.push(filters.user_id);
     }
-    
+
     if (filters.thirdparty_uid) {
         whereConditions.push('gpr.thirdparty_uid LIKE ?');
         values.push(`%${filters.thirdparty_uid}%`);
     }
-    
+
     if (filters.mch_order_id) {
         whereConditions.push('gpr.mch_order_id LIKE ?');
         values.push(`%${filters.mch_order_id}%`);
     }
-    
+
     if (filters.package_name) {
         whereConditions.push('gpr.package_name LIKE ?');
         values.push(`%${filters.package_name}%`);
     }
-    
+
     if (filters.status) {
         whereConditions.push('gpr.status = ?');
         values.push(filters.status);
     }
-    
+
     if (filters.game_delivery_status) {
         whereConditions.push('gpr.game_delivery_status = ?');
         values.push(filters.game_delivery_status);
     }
-    
+
     if (filters.startDate) {
         whereConditions.push('DATE(gpr.created_at) >= ?');
         values.push(filters.startDate);
     }
-    
+
     if (filters.endDate) {
         whereConditions.push('DATE(gpr.created_at) <= ?');
         values.push(filters.endDate);
     }
-    
+
     // 礼包类型过滤（通过remark字段分析）
     if (filters.packageType) {
         if (filters.packageType === 'purchased') {
@@ -5466,9 +5466,9 @@ const getGiftPackageRecordsStats = async (filters: any, allowedChannelCodes: str
             whereConditions.push("gpr.remark LIKE '%累计消费达到%'");
         }
     }
-    
+
     const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
-    
+
     const query = `
         SELECT 
             COUNT(*) as totalRecords,
@@ -5479,12 +5479,12 @@ const getGiftPackageRecordsStats = async (filters: any, allowedChannelCodes: str
         LEFT JOIN users u ON gpr.user_id = u.id
         ${whereClause}
     `;
-    
+
     const result = await sql({
         query,
         values,
     }) as any[];
-    
+
     return result[0] || {
         totalRecords: 0,
         totalAmount: 0,

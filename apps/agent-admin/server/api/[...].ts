@@ -10,18 +10,65 @@ import { listActive } from '../model/gameServers';
 
 const router = createRouter();
 
+// op-admin 地址（默认 3003）
+const OP_ADMIN_URL = (process.env.OP_ADMIN_URL || 'http://localhost:3003').replace(/\/+$/, '');
+
+// 透明转发到 op-admin 的辅助函数
+const proxyToOpAdmin = defineEventHandler(async (event: H3Event) => {
+  const url = getRequestURL(event);
+  const method = (getMethod(event) || 'GET').toUpperCase();
+  const targetUrl = `${OP_ADMIN_URL}${url.pathname}${url.search || ''}`;
+  console.log(`[op-proxy] ${method} ${targetUrl}`);
+
+  const inHeaders = getHeaders(event);
+  const fwdHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(inHeaders)) {
+    if (k.toLowerCase() === 'host') continue;
+    if (v !== undefined) fwdHeaders[k] = String(v);
+  }
+  fwdHeaders['x-forwarded-by'] = 'agent-admin';
+
+  let body: string | undefined;
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    try {
+      const raw = await readBody(event);
+      if (raw) body = typeof raw === 'string' ? raw : JSON.stringify(raw);
+    } catch { /* ignore */ }
+  }
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  let upstream: Response;
+  try {
+    upstream = await fetch(targetUrl, { method, headers: fwdHeaders, body, signal: ctrl.signal });
+  } catch (err: any) {
+    clearTimeout(timer);
+    throw createError({ statusCode: err?.name === 'AbortError' ? 504 : 502, statusMessage: 'Bad Gateway' });
+  }
+  clearTimeout(timer);
+
+  setResponseStatus(event, upstream.status);
+  upstream.headers.forEach((v, k) => {
+    if (k.toLowerCase() === 'transfer-encoding') return;
+    event.node.res.setHeader(k, v);
+  });
+  const text = await upstream.text();
+  try { return JSON.parse(text); } catch { return text; }
+});
+
+
 // 日志包装函数
 const withLogging = (handler: Function, apiName: string) => {
   return defineEventHandler(async (event: H3Event) => {
     const startTime = Date.now();
     const requestId = `req_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const headers = getHeaders(event);
     const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
     const userAgent = (headers['user-agent'] as string) || 'unknown';
     const method = getMethod(event);
     const url = getRequestURL(event);
-    
+
     let requestBody: any = {};
     let queryParams: any = {};
     try {
@@ -32,13 +79,13 @@ const withLogging = (handler: Function, apiName: string) => {
     } catch (e) {
       requestBody = {};
     }
-    
+
     console.log(`[API] ${method} ${url.pathname} | IP: ${ipAddress.split(',')[0]}`);
 
     let response: any = {};
     let error: any = null;
     let statusCode = 200;
-    
+
     try {
       try {
         const url = getRequestURL(event);
@@ -63,14 +110,14 @@ const withLogging = (handler: Function, apiName: string) => {
         message: e.statusMessage || e.message || "系统错误",
         data: null
       };
-      try { setResponseStatus(event, statusCode); } catch {}
+      try { setResponseStatus(event, statusCode); } catch { }
     }
-    
+
     if (error) {
       console.error(`[API] 错误: ${error.message}`);
     }
     console.log('==========================================');
-    
+
     return response;
   });
 };
@@ -88,20 +135,20 @@ const adminWrap = (handler: Function, apiName: string) => {
     if (qId !== undefined && String(qId) !== String(v.adminId)) {
       throw createError({ statusCode: 403, statusMessage: 'Forbidden: adminId mismatch' });
     }
-    if (['POST','PUT','PATCH','DELETE'].includes((getMethod(event) || 'GET').toUpperCase())) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes((getMethod(event) || 'GET').toUpperCase())) {
       try {
         const body: any = await readBody(event);
         const bId = body?.adminId ?? body?.admin_id;
         if (bId !== undefined && String(bId) !== String(v.adminId)) {
           throw createError({ statusCode: 403, statusMessage: 'Forbidden: adminId mismatch' });
         }
-      } catch {}
+      } catch { }
     }
     try {
       delete event.node.req.headers['authorization'];
       delete event.node.req.headers['Authorization'];
       event.node.req.headers['authorization'] = String(v.adminId);
-    } catch {}
+    } catch { }
     return await handler(event);
   }, apiName);
 };
@@ -133,7 +180,7 @@ router.post('/admin/login', defineEventHandler(async (event) => {
         `admin_sid=${sid}; Path=/; HttpOnly; SameSite=Lax`
       ]);
     }
-  } catch {}
+  } catch { }
   return result;
 }));
 
@@ -192,5 +239,38 @@ router.get('/admin/system-params/:key', defineEventHandler(SystemParamsCtrl.getS
 
 router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知接口'));
 router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知接口'));
+
+// ========== 转发到 op-admin 的接口 ==========
+
+// create-promoter：调用 op-admin 内部接口（/internal/），用 x-internal-secret 认证
+router.post('/admin/create-promoter', adminWrap(async (event: H3Event) => {
+  const body = await readBody(event);
+  const internalSecret = process.env.API_SIGN_KEY || 'q12eiedu24fi3rf434g34g';
+  const targetUrl = `${OP_ADMIN_URL}/api/internal/admin/create-promoter`;
+  console.log(`[op-proxy] POST ${targetUrl}`);
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  let upstream: Response;
+  try {
+    upstream = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-internal-secret': internalSecret,
+        'x-forwarded-by': 'agent-admin',
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timer);
+    throw createError({ statusCode: err?.name === 'AbortError' ? 504 : 502, statusMessage: 'Bad Gateway' });
+  }
+  clearTimeout(timer);
+
+  const text = await upstream.text();
+  try { return JSON.parse(text); } catch { return text; }
+}, '创建代理'));
 
 export default useBase('/api', router.handler);
