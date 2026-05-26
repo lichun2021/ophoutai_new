@@ -293,7 +293,7 @@ class StatsCollector {
     async saveDailyStats(dateStr, channelCode, gameCode, stats) {
         try {
             const insertSql = `
-                INSERT INTO DailyStats (
+                INSERT INTO dailystats (
                     stat_date, channel_code, game_code, 
                     active_users, new_users, register_users, valid_register_users, character_count, yesterday_retention,
                     pay_users, new_pay_users, recharge_users, recharge_times, high_value_users, high_value_users_200,
@@ -352,7 +352,7 @@ class StatsCollector {
     async saveLtvStats(dateStr, channelCode, gameCode, ltvStats) {
         try {
             const insertSql = `
-                INSERT INTO LTVStats (
+                INSERT INTO ltvstats (
                     stat_date, channel_code, game_code, new_users,
                     ltv1_amount, ltv1_arpu, ltv2_amount, ltv2_arpu, ltv3_amount, ltv3_arpu,
                     ltv4_amount, ltv4_arpu, ltv5_amount, ltv5_arpu, ltv6_amount, ltv6_arpu,
