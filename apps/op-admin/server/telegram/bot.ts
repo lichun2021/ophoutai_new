@@ -13,39 +13,39 @@ const checkAccess = async (ctx: Context, next: () => Promise<void>) => {
         await next();
         return;
     }
-    
+
     const userId = ctx.from?.id;
     const chatId = ctx.chat?.id;
-    
+
     // 动态读取权限配置
     const accessConfig = await getTelegramAccessConfig();
-    
-    // 如果没有配置任何限制，则所有人都可以使用
-    const hasUserLimit = accessConfig.allowedUserIds && accessConfig.allowedUserIds.length > 0;
-    const hasGroupLimit = accessConfig.allowedGroupIds && accessConfig.allowedGroupIds.length > 0;
-    
+
+    const hasUserLimit  = accessConfig.allowedUserIds?.length  > 0;
+    const hasGroupLimit = accessConfig.allowedGroupIds?.length > 0;
+
+    // 没有配置任何限制 → 所有人可用
     if (!hasUserLimit && !hasGroupLimit) {
-        // 没有任何限制，直接放行
         await next();
         return;
     }
-    
-    // 检查用户权限
-    const userAllowed = !hasUserLimit || (userId && accessConfig.allowedUserIds.includes(userId));
-    
-    // 检查群组权限（仅当在群组中时）
-    const isInGroup = chatId && chatId < 0;
-    const groupAllowed = !hasGroupLimit || (isInGroup && accessConfig.allowedGroupIds.includes(chatId));
-    
-    // OR 逻辑：满足用户权限 OR 群组权限任一即可
-    if (userAllowed || groupAllowed) {
+
+    // 用户 ID 白名单：此用户在列表中
+    const isUserAllowed = hasUserLimit && !!userId && accessConfig.allowedUserIds.includes(userId);
+
+    // 群组 ID 白名单：当前消息来自白名单群组
+    const isInGroup = !!chatId && chatId < 0;
+    const isGroupAllowed = hasGroupLimit && isInGroup && accessConfig.allowedGroupIds.includes(chatId);
+
+    // 满足任一条件放行
+    if (isUserAllowed || isGroupAllowed) {
         await next();
         return;
     }
-    
+
     // 都不满足，拒绝访问
     await ctx.reply('你没有权限使用此机器人\n\n发送 /myid 查看你的ID，联系管理员添加权限。');
 };
+
 
 // ==================== 工具函数 ====================
 
