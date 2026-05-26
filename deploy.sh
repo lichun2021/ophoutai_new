@@ -197,13 +197,12 @@ deploy_app() {
   fi
   log_success "上传完成"
 
-  # --- 步骤5: 服务器上解压 + 安装运行时依赖 ---
+  # --- 步骤5: 服务器上解压 ---
   log_info "[4/6] 服务器解压..."
-  # unzip：必须把选项放在压缩包名前；-o 与 -q 合并为 -oq；勿在包名后再写 -q（否则会被当成「要解压的文件名」）
+  # 删除旧文件时跳过 node_modules，避免每次重装依赖
   ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
     cd $REMOTE_PATH &&
-    find . -type f ! -name '$ZIP_NAME' -delete 2>/dev/null;
-    find . -mindepth 1 -type d -empty -delete 2>/dev/null;
+    find . -maxdepth 1 -mindepth 1 ! -name 'node_modules' ! -name '$ZIP_NAME' -exec rm -rf {} + 2>/dev/null;
     unzip -oq $ZIP_NAME -d . &&
     rm -f $ZIP_NAME
   "
@@ -214,19 +213,32 @@ deploy_app() {
   fi
   log_success "解压完成"
 
-  # 安装运行时依赖（仅当传入 --install 时执行，处理 grammy 等未内联到 .output 的包）
-  if [ "$INSTALL_DEPS" = true ] && ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/package.json ]"; then
-    log_info "[4.5/6] 服务器安装运行时依赖 (npm install --omit=dev)..."
-    ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
-      cd $REMOTE_PATH &&
-      npm install --omit=dev --ignore-scripts --prefer-offline 2>&1 | tail -5
-    "
-    if [ $? -ne 0 ]; then
-      log_warn "npm install 执行异常，请手动检查"
-    else
-      log_success "运行时依赖安装完成"
+  # 安装运行时依赖：
+  #   - node_modules 不存在时自动安装（首次部署 / 手动清理后）
+  #   - 传入 --install 时强制重装（新增 npm 包时用）
+  if ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/package.json ]"; then
+    NEED_INSTALL=false
+    if [ "$INSTALL_DEPS" = true ]; then
+      NEED_INSTALL=true
+      log_info "[4.5/6] --install 强制重装依赖..."
+    elif ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/node_modules ]"; then
+      NEED_INSTALL=true
+      log_info "[4.5/6] node_modules 不存在，自动安装依赖..."
+    fi
+
+    if [ "$NEED_INSTALL" = true ]; then
+      ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
+        cd $REMOTE_PATH &&
+        npm install --omit=dev --ignore-scripts --prefer-offline 2>&1 | tail -5
+      "
+      if [ $? -ne 0 ]; then
+        log_warn "npm install 执行异常，请手动检查"
+      else
+        log_success "依赖安装完成"
+      fi
     fi
   fi
+
 
   # --- 步骤6: 重启服务 ---
   log_info "[5/6] 重启 PM2 服务 ($PM2_NAME)..."
