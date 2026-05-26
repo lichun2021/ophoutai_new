@@ -1,0 +1,12 @@
+{
+  "name": "quantum-stats",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "daily-stats": "node scripts/daily-stats.js",
+    "test": "node scripts/test.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0"
+  }
+}

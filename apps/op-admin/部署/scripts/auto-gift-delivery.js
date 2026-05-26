@@ -60,13 +60,13 @@ async function updateDeliveryRemark(connection, recordId, status, message) {
     const msg = String(message || '').trim();
     if (!msg) {
         await connection.execute(
-            'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ? WHERE id = ?',
+            'UPDATE giftpackagepurchaserecords SET game_delivery_status = ? WHERE id = ?',
             [status, recordId]
         );
         return;
     }
     await connection.execute(
-        `UPDATE GiftPackagePurchaseRecords
+        `UPDATE giftpackagepurchaserecords
          SET game_delivery_status = ?,
              remark = CASE
                  WHEN remark IS NULL OR remark = '' THEN ?
@@ -105,7 +105,7 @@ try {
         // 1. 统计平台币消费
         const platformCoinQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as daily_amount
-            FROM PaymentRecords pr
+            FROM paymentrecords pr
             WHERE pr.wuid IN (
                 SELECT DISTINCT uuid FROM gamecharacters 
                 WHERE subuser_id = ? AND server_id = ?
@@ -121,7 +121,7 @@ try {
         // 2. 统计微信/支付宝购买礼包的金额（×10转换为平台币）
         const thirdPartyGiftQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as gift_amount
-            FROM PaymentRecords pr
+            FROM paymentrecords pr
             WHERE pr.role_id IN (
                 SELECT DISTINCT uuid FROM gamecharacters 
                 WHERE subuser_id = ? AND server_id = ?
@@ -159,7 +159,7 @@ async function getUserTotalConsumeByServer(connection, subUserId, serverId) {
         // 1. 统计平台币消费
         const platformCoinQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as total_amount
-            FROM PaymentRecords pr
+            FROM paymentrecords pr
             WHERE pr.wuid IN (
                 SELECT DISTINCT uuid FROM gamecharacters 
                 WHERE subuser_id = ? AND server_id = ?
@@ -174,7 +174,7 @@ async function getUserTotalConsumeByServer(connection, subUserId, serverId) {
         // 2. 统计微信/支付宝购买礼包的金额（×10转换为平台币）
         const thirdPartyGiftQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as gift_amount
-            FROM PaymentRecords pr
+            FROM paymentrecords pr
             WHERE pr.role_id IN (
                 SELECT DISTINCT uuid FROM gamecharacters 
                 WHERE subuser_id = ? AND server_id = ?
@@ -213,7 +213,7 @@ async function getUserServerList(connection, subUserId, targetDate) {
             WHERE gc.subuser_id = ? 
             AND gc.server_id IS NOT NULL
             AND EXISTS (
-                SELECT 1 FROM PaymentRecords pr
+                SELECT 1 FROM paymentrecords pr
                 WHERE pr.wuid = gc.uuid
                 AND DATE(pr.created_at) = ?
                 AND pr.payment_status IN (3, 4)
@@ -228,7 +228,7 @@ async function getUserServerList(connection, subUserId, targetDate) {
             WHERE gc.subuser_id = ? 
             AND gc.server_id IS NOT NULL
             AND EXISTS (
-                SELECT 1 FROM PaymentRecords pr
+                SELECT 1 FROM paymentrecords pr
                 WHERE pr.role_id = gc.uuid
                 AND DATE(pr.created_at) = ?
                 AND pr.payment_status IN (3, 4)
@@ -264,7 +264,7 @@ async function getUserServerList(connection, subUserId, targetDate) {
 async function getActiveGiftPackagesByCategory(connection, category) {
     try {
         const query = `
-            SELECT * FROM ExternalGiftPackages 
+            SELECT * FROM externalgiftpackages 
             WHERE is_active = 1 
             AND category = ?
             AND (start_time IS NULL OR start_time <= NOW()) 
@@ -294,9 +294,9 @@ async function hasUserReceivedPackageByServer(connection, subUserId, packageId, 
     try {
         let query = `
             SELECT COUNT(*) as count
-            FROM GiftPackagePurchaseRecords 
+            FROM giftpackagepurchaserecords 
             WHERE user_id IN (
-                SELECT parent_user_id FROM SubUsers WHERE id = ?
+                SELECT parent_user_id FROM subusers WHERE id = ?
             )
             AND package_id = ?
             AND status = 'delivered'
@@ -318,7 +318,7 @@ async function hasUserReceivedPackageByServer(connection, subUserId, packageId, 
         logInfo(`🔍 [重复检查] 参数: [${values.join(', ')}]`);
         
         // 先查询主账号ID用于调试
-        const [userRows] = await connection.execute('SELECT parent_user_id FROM SubUsers WHERE id = ?', [subUserId]);
+        const [userRows] = await connection.execute('SELECT parent_user_id FROM subusers WHERE id = ?', [subUserId]);
         const parentUserId = userRows[0]?.parent_user_id;
         logInfo(`🔍 [重复检查] 子账号${subUserId}对应主账号: ${parentUserId}`);
         
@@ -333,9 +333,9 @@ async function hasUserReceivedPackageByServer(connection, subUserId, packageId, 
         let failedRecordId = null;
         if (!hasReceived) {
             let failedQuery = `
-                SELECT id FROM GiftPackagePurchaseRecords 
+                SELECT id FROM giftpackagepurchaserecords 
                 WHERE user_id IN (
-                    SELECT parent_user_id FROM SubUsers WHERE id = ?
+                    SELECT parent_user_id FROM subusers WHERE id = ?
                 )
                 AND package_id = ?
                 AND status = 'paid'
@@ -364,7 +364,7 @@ async function hasUserReceivedPackageByServer(connection, subUserId, packageId, 
             logWarn(`⚠️ [每日礼包] 未找到${targetDate}的记录，检查现有记录...`);
             const [existingRows] = await connection.execute(`
                 SELECT DATE(created_at) as record_date, COUNT(*) as count 
-                FROM GiftPackagePurchaseRecords 
+                FROM giftpackagepurchaserecords 
                 WHERE user_id = ? AND package_id = ? AND status = 'delivered' 
                 AND game_delivery_status = 'success' AND remark LIKE ? 
                 GROUP BY DATE(created_at) 
@@ -388,8 +388,8 @@ async function getUserInfo(connection, subUserId) {
     try {
         const query = `
             SELECT su.*, u.thirdparty_uid, u.channel_code 
-            FROM SubUsers su
-            LEFT JOIN Users u ON su.parent_user_id = u.id
+            FROM subusers su
+            LEFT JOIN users u ON su.parent_user_id = u.id
             WHERE su.id = ?
         `;
         
@@ -448,7 +448,7 @@ async function createAutoGiftRecord(connection, userInfo, giftPackage, rechargeA
         
         logInfo(`📝 [创建记录] 补发模式=${!!targetDate}, 目标日期=${targetDate}, 创建时间=${createdAt || 'NOW()'}`);
         
-        const query = `INSERT INTO GiftPackagePurchaseRecords 
+        const query = `INSERT INTO giftpackagepurchaserecords 
             (user_id, thirdparty_uid, package_id, package_code, package_name, quantity, 
              unit_price, total_amount, balance_before, balance_after, gift_items, 
              status, game_delivery_status, remark, created_at) 
@@ -513,7 +513,7 @@ async function deliverGiftToGame(connection, purchaseRecordId, userInfo, serverI
         
         // 获取购买记录
         const [recordRows] = await connection.execute(
-            'SELECT * FROM GiftPackagePurchaseRecords WHERE id = ?',
+            'SELECT * FROM giftpackagepurchaserecords WHERE id = ?',
             [purchaseRecordId]
         );
         
@@ -539,7 +539,7 @@ async function deliverGiftToGame(connection, purchaseRecordId, userInfo, serverI
         const bname = `game_${partitionId}`;
         const serverIdNum = Number(partitionId);
         const [serverCfgRows] = await connection.execute(
-            'SELECT name, webhost, dbip, dbuser, dbpass, bname FROM GameServers WHERE server_id = ? OR bname = ? OR name = ? LIMIT 1',
+            'SELECT name, webhost, dbip, dbuser, dbpass, bname FROM gameservers WHERE server_id = ? OR bname = ? OR name = ? LIMIT 1',
             [Number.isFinite(serverIdNum) ? serverIdNum : -1, bname, bname]
         );
         const serverCfg = serverCfgRows[0];
@@ -572,7 +572,7 @@ async function deliverGiftToGame(connection, purchaseRecordId, userInfo, serverI
 
         // 更新状态为正在发送
         await connection.execute(
-            'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, delivery_attempts = delivery_attempts + 1 WHERE id = ?',
+            'UPDATE giftpackagepurchaserecords SET game_delivery_status = ?, delivery_attempts = delivery_attempts + 1 WHERE id = ?',
             ['sent', purchaseRecordId]
         );
 
@@ -640,7 +640,7 @@ async function deliverGiftToGame(connection, purchaseRecordId, userInfo, serverI
 
         // 更新游戏响应数据
         await connection.execute(
-            'UPDATE GiftPackagePurchaseRecords SET game_delivery_data = ? WHERE id = ?',
+            'UPDATE giftpackagepurchaserecords SET game_delivery_data = ? WHERE id = ?',
             [JSON.stringify(respData), purchaseRecordId]
         );
 
@@ -648,7 +648,7 @@ async function deliverGiftToGame(connection, purchaseRecordId, userInfo, serverI
         const resultCode = respData?.code;
         if (resultCode === 0 || resultCode === 200) {
             await connection.execute(
-                'UPDATE GiftPackagePurchaseRecords SET status = ?, game_delivery_status = ?, delivered_at = NOW() WHERE id = ?',
+                'UPDATE giftpackagepurchaserecords SET status = ?, game_delivery_status = ?, delivered_at = NOW() WHERE id = ?',
                 ['delivered', 'success', purchaseRecordId]
             );
             logInfo(`礼包发放成功: 记录ID=${purchaseRecordId}`);
@@ -857,7 +857,7 @@ async function getUsersWithRecharge(connection, targetDate) {
         // 1. 获取当日有平台币消费的子账号
         const platformQuery = `
             SELECT DISTINCT COALESCE(pr.sub_user_id, gc.subuser_id) AS sub_user_id
-            FROM PaymentRecords pr
+            FROM paymentrecords pr
             LEFT JOIN gamecharacters gc ON gc.uuid = pr.wuid
             WHERE DATE(pr.created_at) = ?
             AND pr.payment_status IN (3, 4)
@@ -868,7 +868,7 @@ async function getUsersWithRecharge(connection, targetDate) {
         // 2. 获取当日有微信/支付宝购买礼包的子账号
         const giftQuery = `
             SELECT DISTINCT gc.subuser_id AS sub_user_id
-            FROM PaymentRecords pr
+            FROM paymentrecords pr
             JOIN gamecharacters gc ON gc.uuid = pr.role_id
             WHERE DATE(pr.created_at) = ?
             AND pr.payment_status IN (3, 4)
