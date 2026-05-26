@@ -1,6 +1,8 @@
 // Telegram Bot 数据服务层
 import { sql } from '../db';
 import * as PaymentModel from '../model/payment';
+import { listActive, extractWorldIdFromBName } from '../model/gameServers';
+import { createGameServerClient } from '../controller/gameServerClient';
 
 // 获取今天的日期范围（中国时区）
 const getTodayRange = () => {
@@ -173,37 +175,59 @@ export const getTodayRechargeDetails = async () => {
 };
 
 /**
- * 获取在线用户统计（基于 userloginlogs 登录日志，不使用 IDIP）
- * - 近 15 分钟登录过的不重复用户数（当前在线近似）
- * - 近 1 小时 / 今日登录用户数
+ * 获取在线用户统计
+ * 复用后台"在线玩家"页面的 REST 查询逻辑，结果与页面一致
  */
 export const getOnlineStats = async () => {
     try {
-        const today = getChinaDateString();
+        const allServers = await listActive();
+        const servers = allServers.filter(s => (s as any).count_online !== 0);
 
-        const result = await sql({
-            query: `
-                SELECT
-                    COUNT(DISTINCT CASE WHEN login_time >= DATE_SUB(NOW(), INTERVAL 15 MINUTE) THEN username END) AS online_15m,
-                    COUNT(DISTINCT CASE WHEN login_time >= DATE_SUB(NOW(), INTERVAL 60 MINUTE) THEN username END) AS online_1h,
-                    COUNT(DISTINCT CASE WHEN DATE(login_time) = ? THEN username END) AS login_today
-                FROM userloginlogs
-                WHERE login_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            `,
-            values: [today],
-        }) as any[];
+        if (servers.length === 0) {
+            return { totalOnline: 0, totalRegister: 0, servers: [], error: '没有启用的游戏服' };
+        }
 
-        const row = result[0] || {};
-        return {
-            online15m:  Number(row.online_15m  || 0),
-            online1h:   Number(row.online_1h   || 0),
-            loginToday: Number(row.login_today || 0),
-        };
+        const results = await Promise.allSettled(servers.map(async (s) => {
+            const worldId = ((s as any).server_id ?? extractWorldIdFromBName(s.bname || '')) || s.id || 1;
+            const areaId = Number(worldId);
+            const webhost = (s.webhost || '').replace(/\/$/, '');
+
+            try {
+                const client = createGameServerClient(webhost, 'rest', 3000);
+                const resp = await client.getServerStatus({ serverId: String(worldId), areaId });
+                const data = resp.data || {} as any;
+                return {
+                    id: s.id,
+                    name: s.name,
+                    register: data.registerCount || 0,
+                    online: data.onlineCount || 0,
+                    onlineAndroid: data.onlineAndroid || 0,
+                    onlineIOS: data.onlineIOS || 0,
+                };
+            } catch (err: any) {
+                console.error(`[Bot在线查询] ${s.name} 失败:`, err.message);
+                return { id: s.id, name: s.name, register: 0, online: 0, onlineAndroid: 0, onlineIOS: 0, error: err.message };
+            }
+        }));
+
+        let totalOnline = 0;
+        let totalRegister = 0;
+        const serverStats: any[] = [];
+        results.forEach(r => {
+            if (r.status === 'fulfilled' && r.value) {
+                totalOnline += r.value.online;
+                totalRegister += r.value.register;
+                serverStats.push(r.value);
+            }
+        });
+
+        return { totalOnline, totalRegister, servers: serverStats };
     } catch (error) {
         console.error('[Bot在线查询] 失败:', error);
-        return { online15m: 0, online1h: 0, loginToday: 0, error: String(error) };
+        return { totalOnline: 0, totalRegister: 0, servers: [], error: String(error) };
     }
 };
+
 
 /**
  * 查询订单详情
