@@ -20,24 +20,25 @@ const checkAccess = async (ctx: Context, next: () => Promise<void>) => {
     // 动态读取权限配置
     const accessConfig = await getTelegramAccessConfig();
 
-    const hasUserLimit  = accessConfig.allowedUserIds?.length  > 0;
-    const hasGroupLimit = accessConfig.allowedGroupIds?.length > 0;
+    // 如果没有配置任何限制，则所有人都可以使用
+    const hasUserLimit = accessConfig.allowedUserIds && accessConfig.allowedUserIds.length > 0;
+    const hasGroupLimit = accessConfig.allowedGroupIds && accessConfig.allowedGroupIds.length > 0;
 
-    // 没有配置任何限制 → 所有人可用
     if (!hasUserLimit && !hasGroupLimit) {
+        // 没有任何限制，直接放行
         await next();
         return;
     }
 
-    // 用户 ID 白名单：此用户在列表中
-    const isUserAllowed = hasUserLimit && !!userId && accessConfig.allowedUserIds.includes(userId);
+    // 检查用户权限
+    const userAllowed = !hasUserLimit || (userId && accessConfig.allowedUserIds.includes(userId));
 
-    // 群组 ID 白名单：当前消息来自白名单群组
-    const isInGroup = !!chatId && chatId < 0;
-    const isGroupAllowed = hasGroupLimit && isInGroup && accessConfig.allowedGroupIds.includes(chatId);
+    // 检查群组权限（仅当在群组中时）
+    const isInGroup = chatId && chatId < 0;
+    const groupAllowed = !hasGroupLimit || (isInGroup && accessConfig.allowedGroupIds.includes(chatId));
 
-    // 满足任一条件放行
-    if (isUserAllowed || isGroupAllowed) {
+    // OR 逻辑：满足用户权限 OR 群组权限任一即可
+    if (userAllowed || groupAllowed) {
         await next();
         return;
     }
@@ -45,7 +46,6 @@ const checkAccess = async (ctx: Context, next: () => Promise<void>) => {
     // 都不满足，拒绝访问
     await ctx.reply('你没有权限使用此机器人\n\n发送 /myid 查看你的ID，联系管理员添加权限。');
 };
-
 
 // ==================== 工具函数 ====================
 
@@ -71,7 +71,7 @@ export const initBot = () => {
 
     // 创建 Bot 实例，配置 API 域名
     const botOptions: any = {};
-    
+
     if (telegramConfig.apiRoot) {
         botOptions.client = {
             apiRoot: telegramConfig.apiRoot
@@ -82,12 +82,12 @@ export const initBot = () => {
     }
 
     bot = new Bot(telegramConfig.botToken, botOptions);
-    
+
     // 应用权限验证中间件
     bot.use(checkAccess);
-    
+
     // ==================== 命令处理器 ====================
-    
+
     // /start - 欢迎消息
     bot.command('start', async (ctx) => {
         const welcomeMessage = `欢迎使用运营管理机器人！
@@ -102,10 +102,10 @@ export const initBot = () => {
 /myid - 查看当前ID（用于配置白名单）
 
 提示：你也可以使用快捷菜单按钮来快速访问功能。`;
-        
+
         await ctx.reply(welcomeMessage);
     });
-    
+
     // /help - 帮助信息
     bot.command('help', async (ctx) => {
         const helpMessage = `命令说明：
@@ -125,10 +125,10 @@ export const initBot = () => {
 
 配置白名单：
 使用 /myid 命令获取ID，然后编辑 server/config/telegram.json 文件添加授权。`;
-        
+
         await ctx.reply(helpMessage);
     });
-    
+
     // /menu - 显示快捷菜单
     bot.command('menu', async (ctx) => {
         const keyboard = new InlineKeyboard()
@@ -136,28 +136,28 @@ export const initBot = () => {
             .text('充值数据', 'action_recharge').row()
             .text('在线人数', 'action_online')
             .text('查询订单', 'action_order_prompt');
-        
+
         await ctx.reply('请选择功能：', {
             reply_markup: keyboard
         });
     });
-    
+
     // /stats - 今日综合统计
     bot.command('stats', async (ctx) => {
         try {
             await ctx.reply('正在查询数据，请稍候...');
-            
+
             // 调用服务层获取数据
             const stats = await TelegramService.getTodayStats();
-            
+
             const rechargeData = stats.recharge;
             const loginData = stats.login;
             const onlineData = stats.online;
-            
-            const successRate = rechargeData.total_orders > 0 
+
+            const successRate = rechargeData.total_orders > 0
                 ? ((rechargeData.success_orders / rechargeData.total_orders) * 100).toFixed(1)
                 : '0.0';
-            
+
             const message = `【今日数据统计】${stats.dateStr}
 
 【充值数据】
@@ -173,30 +173,30 @@ export const initBot = () => {
 当前在线：${formatNumber(onlineData.online_users || 0)} 人
 
 更新时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
-            
+
             await ctx.reply(message);
-            
+
         } catch (error) {
             console.error('查询统计数据失败:', error);
             await ctx.reply('查询失败，请稍后重试');
         }
     });
-    
+
     // /recharge - 今日充值数据
     bot.command('recharge', async (ctx) => {
         try {
             await ctx.reply('正在查询充值数据，请稍候...');
-            
+
             // 调用服务层获取数据
             const details = await TelegramService.getTodayRechargeDetails();
-            
+
             // 成功率（仅基于现金订单）
-            const successRate = details.todayCashTotalCount > 0 
+            const successRate = details.todayCashTotalCount > 0
                 ? ((details.todaySuccessCount / details.todayCashTotalCount) * 100).toFixed(1)
                 : '0.0';
-            
+
             let message = `【今日充值数据】${details.dateStr}\n\n`;
-            
+
             // 总体统计（与后台卡片一致）
             message += `【总体统计】\n`;
             message += `成功金额：${formatAmount(Number(details.todaySuccessAmount))}\n`;
@@ -204,21 +204,21 @@ export const initBot = () => {
             message += `现金订单：${formatNumber(details.todayCashTotalCount)} 笔\n`;
             message += `平台币订单：${formatNumber(details.todayPtbTotalCount)} 笔\n`;
             message += `成功率：${successRate}%\n\n`;
-            
+
             // 按支付方式
             if (details.byPaymentWay.length > 0) {
                 message += '【按支付方式】\n';
                 for (const row of details.byPaymentWay) {
-                    const paymentWayName = row.payment_way === 'zfb' ? '支付宝' 
-                        : row.payment_way === 'wx' ? '微信' 
-                        : row.payment_way === 'kf' ? '客服'
-                        : row.payment_way || '未知';
-                    
+                    const paymentWayName = row.payment_way === 'zfb' ? '支付宝'
+                        : row.payment_way === 'wx' ? '微信'
+                            : row.payment_way === 'kf' ? '客服'
+                                : row.payment_way || '未知';
+
                     message += `${paymentWayName}：${formatAmount(row.success_amount || 0)} (${row.success_count || 0}笔)\n`;
                 }
                 message += '\n';
             }
-            
+
             // 按渠道 TOP5
             if (details.byChannel.length > 0) {
                 message += '【TOP5 渠道】\n';
@@ -227,17 +227,17 @@ export const initBot = () => {
                 }
                 message += '\n';
             }
-            
+
             message += `更新时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
-            
+
             await ctx.reply(message);
-            
+
         } catch (error) {
             console.error('查询充值数据失败:', error);
             await ctx.reply('查询失败，请稍后重试');
         }
     });
-    
+
     // /online - 在线人数
     bot.command('online', async (ctx) => {
         try {
@@ -278,27 +278,27 @@ export const initBot = () => {
         }
     });
 
-    
+
     // /order - 查询订单
     bot.command('order', async (ctx) => {
         const orderId = ctx.match?.toString().trim();
-        
+
         if (!orderId) {
             await ctx.reply('请提供订单号，例如：/order zfb_1234567890');
             return;
         }
-        
+
         try {
             await ctx.reply('正在查询订单...');
-            
+
             // 调用服务层获取数据（使用 PaymentModel）
             const order = await TelegramService.getOrderDetail(orderId);
-            
+
             if (!order) {
                 await ctx.reply(`未找到订单：${orderId}`);
                 return;
             }
-            
+
             const statusMap: { [key: number]: string } = {
                 0: '未支付',
                 1: '处理中',
@@ -309,14 +309,14 @@ export const initBot = () => {
                 6: '退款中',
                 7: '已退款'
             };
-            
+
             const paymentWayMap: { [key: string]: string } = {
                 'zfb': '支付宝',
                 'wx': '微信',
                 'ptb': '平台币',
                 'kf': '客服'
             };
-            
+
             const message = `【订单详情】
 
 订单号：${order.transaction_id}
@@ -332,58 +332,58 @@ ${order.msg ? `备注：${order.msg}\n` : ''}
 创建时间：${order.created_at}
 ${order.notify_at ? `通知时间：${order.notify_at}\n` : ''}
 ${order.callback_at ? `回调时间：${order.callback_at}\n` : ''}`;
-            
+
             await ctx.reply(message);
-            
+
         } catch (error) {
             console.error('查询订单失败:', error);
             await ctx.reply('查询失败，请稍后重试');
         }
     });
-    
+
     // /myid - 查看当前用户ID和群组ID（用于配置白名单）
     bot.command('myid', async (ctx) => {
         const userId = ctx.from?.id;
         const chatId = ctx.chat?.id;
         const chatType = ctx.chat?.type; // 'private', 'group', 'supergroup', 'channel'
-        
+
         // 读取当前的权限配置
         const accessConfig = await getTelegramAccessConfig();
-        
+
         let message = '【当前会话信息】\n\n';
-        
+
         // 用户信息
         if (userId) {
-            const isUserAllowed = accessConfig.allowedUserIds.length === 0 || 
-                                  accessConfig.allowedUserIds.includes(userId);
+            const isUserAllowed = accessConfig.allowedUserIds.length === 0 ||
+                accessConfig.allowedUserIds.includes(userId);
             message += `用户ID: ${userId}\n`;
             message += `用户状态: ${isUserAllowed ? '已授权 ✓' : '未授权 ✗'}\n\n`;
         }
-        
+
         // 群组信息
         if (chatId) {
             if (chatType === 'private') {
                 message += `会话类型: 私聊\n`;
             } else {
-                const isGroupAllowed = accessConfig.allowedGroupIds.length === 0 || 
-                                       accessConfig.allowedGroupIds.includes(chatId);
+                const isGroupAllowed = accessConfig.allowedGroupIds.length === 0 ||
+                    accessConfig.allowedGroupIds.includes(chatId);
                 message += `会话类型: ${chatType === 'group' ? '群组' : chatType === 'supergroup' ? '超级群组' : '频道'}\n`;
                 message += `群组ID: ${chatId}\n`;
                 message += `群组状态: ${isGroupAllowed ? '已授权 ✓' : '未授权 ✗'}\n\n`;
             }
         }
-        
 
-        
+
+
         await ctx.reply(message);
     });
-    
+
     // ==================== 回调查询处理器 ====================
-    
+
     // 处理快捷菜单按钮回调
     bot.on('callback_query:data', async (ctx) => {
         const data = ctx.callbackQuery.data;
-        
+
         // 尝试回答回调查询，忽略过期错误
         try {
             await ctx.answerCallbackQuery();
@@ -393,7 +393,7 @@ ${order.callback_at ? `回调时间：${order.callback_at}\n` : ''}`;
                 console.error('answerCallbackQuery 失败:', error.message);
             }
         }
-        
+
         switch (data) {
             case 'action_stats':
                 // 触发 /stats 命令
@@ -407,7 +407,7 @@ ${order.callback_at ? `回调时间：${order.callback_at}\n` : ''}`;
                     }
                 } as any);
                 break;
-                
+
             case 'action_recharge':
                 await bot!.handleUpdate({
                     ...ctx.update,
@@ -418,7 +418,7 @@ ${order.callback_at ? `回调时间：${order.callback_at}\n` : ''}`;
                     }
                 } as any);
                 break;
-                
+
             case 'action_online':
                 await bot!.handleUpdate({
                     ...ctx.update,
@@ -429,28 +429,28 @@ ${order.callback_at ? `回调时间：${order.callback_at}\n` : ''}`;
                     }
                 } as any);
                 break;
-                
+
             case 'action_order_prompt':
                 await ctx.reply('请输入订单号，格式：/order <订单号>');
                 break;
         }
     });
-    
+
     // ==================== 错误处理 ====================
-    
+
     bot.catch((err) => {
         const ctx = err.ctx;
         const e = err.error;
-        
+
         // 忽略一些常见的、不重要的错误
         const errorMessage = e instanceof Error ? e.message : String(e);
         if (errorMessage.includes('too old') || errorMessage.includes('query ID is invalid')) {
             return; // 静默忽略过期的回调查询
         }
-        
+
         console.error(`Bot 错误 [update ${ctx.update.update_id}]:`, errorMessage);
     });
-    
+
     return bot;
 };
 
@@ -472,13 +472,13 @@ export const startBot = async () => {
     try {
         bot = initBot();
         if (!bot) return;
-        
+
         console.log('Telegram Bot 正在启动...');
-        
+
         // 获取机器人信息
         const me = await bot.api.getMe();
         console.log(`Bot 已连接: @${me.username}`);
-        
+
         // 设置命令列表
         await bot.api.setMyCommands([
             { command: 'start', description: '开始使用' },
@@ -490,7 +490,7 @@ export const startBot = async () => {
             { command: 'order', description: '查询订单' },
             { command: 'myid', description: '查看当前ID（配置白名单）' }
         ]);
-        
+
         // 启动机器人（使用 long polling）
         bot.start({
             drop_pending_updates: true,
@@ -498,7 +498,7 @@ export const startBot = async () => {
                 console.log('Telegram Bot 运行中，等待消息...');
             }
         });
-        
+
     } catch (error) {
         console.error('Bot 启动失败:', error);
     }

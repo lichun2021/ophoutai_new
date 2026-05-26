@@ -35,7 +35,7 @@ export const getTodayStats = async () => {
             COUNT(DISTINCT user_id) as unique_users,
             SUM(CASE WHEN payment_status = 3 THEN amount ELSE 0 END) as success_amount,
             SUM(CASE WHEN payment_status = 3 THEN 1 ELSE 0 END) as success_orders
-        FROM PaymentRecords
+        FROM paymentrecords
         WHERE DATE(created_at) = ?
         AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')
     `;
@@ -51,7 +51,7 @@ export const getTodayStats = async () => {
         SELECT 
             COUNT(*) as total_logins,
             COUNT(DISTINCT username) as unique_users
-        FROM UserLoginLogs
+        FROM userloginlogs
         WHERE login_time >= ? AND login_time <= ?
     `;
 
@@ -63,7 +63,7 @@ export const getTodayStats = async () => {
     // 查询在线人数（最近15分钟有登录记录的）
     const onlineQuery = `
         SELECT COUNT(DISTINCT username) as online_users
-        FROM UserLoginLogs
+        FROM userloginlogs
         WHERE login_time >= DATE_SUB(NOW(), INTERVAL 15 MINUTE)
     `;
 
@@ -92,8 +92,8 @@ export const getTodayRechargeDetails = async () => {
         SELECT 
             COUNT(*) as count,
             COALESCE(SUM(pr.amount), 0) as amount 
-        FROM PaymentRecords pr 
-        LEFT JOIN Users u ON pr.user_id = u.id 
+        FROM paymentrecords pr 
+        LEFT JOIN users u ON pr.user_id = u.id 
         WHERE DATE(pr.created_at) = ? AND pr.payment_status = 3
         AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
     `;
@@ -102,7 +102,7 @@ export const getTodayRechargeDetails = async () => {
     const todayCashTotalQuery = `
         SELECT 
             COUNT(*) as count
-        FROM PaymentRecords pr 
+        FROM paymentrecords pr 
         WHERE DATE(pr.created_at) = ?
         AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
     `;
@@ -111,7 +111,7 @@ export const getTodayRechargeDetails = async () => {
     const todayPtbTotalQuery = `
         SELECT 
             COUNT(*) as count
-        FROM PaymentRecords pr 
+        FROM paymentrecords pr 
         WHERE DATE(pr.created_at) = ?
         AND pr.payment_way LIKE '%平台币%'
     `;
@@ -129,7 +129,7 @@ export const getTodayRechargeDetails = async () => {
             COUNT(*) as order_count,
             SUM(CASE WHEN payment_status = 3 THEN amount ELSE 0 END) as success_amount,
             SUM(CASE WHEN payment_status = 3 THEN 1 ELSE 0 END) as success_count
-        FROM PaymentRecords
+        FROM paymentrecords
         WHERE DATE(created_at) = ?
         AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')
         GROUP BY payment_way
@@ -148,7 +148,7 @@ export const getTodayRechargeDetails = async () => {
             COUNT(*) as order_count,
             SUM(CASE WHEN pr.payment_status = 3 THEN pr.amount ELSE 0 END) as success_amount,
             SUM(CASE WHEN pr.payment_status = 3 THEN 1 ELSE 0 END) as success_count
-        FROM PaymentRecords pr
+        FROM paymentrecords pr
         WHERE DATE(pr.created_at) = ?
         AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
         GROUP BY pr.channel_code
