@@ -24,6 +24,7 @@
     "pinia": "^2.2.1",
     "qrcode": "^1.5.4",
     "v-calendar": "^3.1.2",
+    "grammy": "^1.43.0",
     "vue": "latest",
     "xlsx": "^0.18.5"
   },
