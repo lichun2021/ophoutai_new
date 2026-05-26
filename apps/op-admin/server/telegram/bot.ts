@@ -241,40 +241,25 @@ export const initBot = () => {
     // /online - 在线人数
     bot.command('online', async (ctx) => {
         try {
-            await ctx.reply('正在查询游戏服在线数据...');
-            
-            // 调用服务层获取数据
+            await ctx.reply('正在查询在线数据...');
+
             const stats = await TelegramService.getOnlineStats();
-            
-            if (stats.error) {
-                await ctx.reply(`警告: ${stats.error}`);
+
+            if ((stats as any).error) {
+                await ctx.reply(`查询失败: ${(stats as any).error}`);
                 return;
             }
-            
-            let message = `【游戏服在线统计】\n\n`;
-            message += `总在线人数：${formatNumber(stats.totalOnline)} 人\n`;
-            message += `总注册人数：${formatNumber(stats.totalRegister)} 人\n\n`;
-            
-            // 显示每个服务器的在线数据
-            if (stats.servers && stats.servers.length > 0) {
-                message += `【各服务器详情】\n`;
-                stats.servers.forEach((server: any) => {
-                    if (server.error) {
-                        message += `${server.name}: 查询失败\n`;
-                    } else {
-                        message += `${server.name}: ${formatNumber(server.online)} 人`;
-                        if (server.onlineAndroid || server.onlineIOS) {
-                            message += ` (安卓: ${server.onlineAndroid}, iOS: ${server.onlineIOS})`;
-                        }
-                        message += `\n`;
-                    }
-                });
-            }
-            
-            message += `\n更新时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
-            
+
+            const message = `【在线人数统计】
+
+近 15 分钟在线：${formatNumber(stats.online15m)} 人
+近 1 小时在线：${formatNumber(stats.online1h)} 人
+今日登录：${formatNumber(stats.loginToday)} 人
+
+更新时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
+
             await ctx.reply(message);
-            
+
         } catch (error) {
             console.error('查询在线人数失败:', error);
             await ctx.reply('查询失败，请稍后重试');
@@ -304,11 +289,12 @@ export const initBot = () => {
             const statusMap: { [key: number]: string } = {
                 0: '未支付',
                 1: '处理中',
-                2: '已完成',
-                3: '已取消',
-                4: '失败',
-                5: '退款中',
-                6: '已退款'
+                2: '已封锁',
+                3: '已成功',
+                4: '已取消',
+                5: '失败',
+                6: '退款中',
+                7: '已退款'
             };
             
             const paymentWayMap: { [key: string]: string } = {
