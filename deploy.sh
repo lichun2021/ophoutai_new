@@ -7,6 +7,7 @@
 #   ./deploy.sh agent        # 只部署 agent-admin
 #   ./deploy.sh op           # 只部署 op-admin
 #   ./deploy.sh user agent   # 部署 user-center 和 agent-admin
+#   ./deploy.sh op --install # 部署 op-admin 并在服务器上执行 npm install
 # =====================================================
 
 # ============ 服务器配置（按需修改）============
@@ -81,6 +82,7 @@ START_TIME=$(date +%s)
 DEPLOY_USER=false
 DEPLOY_AGENT=false
 DEPLOY_OP=false
+INSTALL_DEPS=false   # 默认不执行服务器端 npm install
 
 if [ $# -eq 0 ]; then
   # 无参数 → 部署全部
@@ -90,13 +92,15 @@ if [ $# -eq 0 ]; then
 else
   for arg in "$@"; do
     case "$arg" in
-      user)   DEPLOY_USER=true ;;
-      agent)  DEPLOY_AGENT=true ;;
-      op)     DEPLOY_OP=true ;;
+      user)      DEPLOY_USER=true ;;
+      agent)     DEPLOY_AGENT=true ;;
+      op)        DEPLOY_OP=true ;;
+      --install) INSTALL_DEPS=true ;;
       *)
         log_error "未知参数: $arg"
-        echo "用法: $0 [user] [agent] [op]"
+        echo "用法: $0 [user] [agent] [op] [--install]"
         echo "  不传参数 = 部署全部三个"
+        echo "  --install = 解压后在服务器执行 npm install（首次加了新包时用）"
         exit 1
         ;;
     esac
@@ -210,8 +214,8 @@ deploy_app() {
   fi
   log_success "解压完成"
 
-  # 安装运行时依赖（处理 grammy 等未内联到 .output 的包）
-  if ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/package.json ]"; then
+  # 安装运行时依赖（仅当传入 --install 时执行，处理 grammy 等未内联到 .output 的包）
+  if [ "$INSTALL_DEPS" = true ] && ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/package.json ]"; then
     log_info "[4.5/6] 服务器安装运行时依赖 (npm install --omit=dev)..."
     ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
       cd $REMOTE_PATH &&
