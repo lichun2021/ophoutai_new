@@ -208,14 +208,17 @@ const getParam = (row: any, key: string) => {
   return p[key] ?? '';
 };
 
-const getItems = (row: any): Array<{ ItemId: number; ItemNum: number }> => {
+const getItems = (row: any): Array<{ itemId?: number; itemCount?: number; ItemId?: number; ItemNum?: number }> => {
   const p = row.request_params_parsed || {};
   return Array.isArray(p.items) ? p.items : (Array.isArray(p.SendItemList) ? p.SendItemList : []);
 };
 
-const formatItem = (i: { ItemId: number; ItemNum: number }) => {
-  const name = itemNameMap.value[String(i.ItemId)] || `物品${i.ItemId}`;
-  return `${name}×${i.ItemNum}`;
+const formatItem = (i: { itemId?: number; itemCount?: number; ItemId?: number; ItemNum?: number }) => {
+  // 兼容 IDIP 小写格式（itemId/itemCount）和大驼峰格式（ItemId/ItemNum）
+  const id = i.itemId ?? i.ItemId;
+  const num = i.itemCount ?? i.ItemNum;
+  const name = id != null ? (itemNameMap.value[String(id)] || `物品${id}`) : '未知';
+  return `${name}×${num ?? 0}`;
 };
 </script>
 

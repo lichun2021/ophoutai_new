@@ -1,6 +1,6 @@
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
-import { H3Event, setResponseStatus, getQuery } from 'h3';
+import { H3Event, setResponseStatus, getQuery, getRequestURL, readBody } from 'h3';
 import * as crypto from 'crypto';
 import { Payment } from '../model/payment';
 import { PaymentSetting } from '../model/paymentSettings';
@@ -1917,257 +1917,97 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
  */
 export const handleCashierPaymentNotify = async (evt: H3Event) => {
     const startTime = Date.now();
-    const requestId = `cashier_notify_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
+    const requestId = `cashier_proxy_notify_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
 
     try {
-        console.log(`[${requestId}] === 开始处理收银台支付回调 ===`);
+        console.log(`[${requestId}] === 开始处理收银台支付回调原样转发 ===`);
         console.log(`[${requestId}] 时间: ${new Date().toISOString()}`);
         console.log(`[${requestId}] 请求方法: ${evt.node.req.method}`);
         console.log(`[${requestId}] 请求URL: ${evt.node.req.url}`);
-        console.log(`[${requestId}] 请求头:`, evt.node.req.headers);
 
-        // 获取请求参数 - 支持GET和POST方式
-        const query = getQuery(evt);
-        const requestMethod = evt.node.req.method?.toUpperCase();
-        console.log(`[${requestId}] GET查询参数:`, query);
+        const method = evt.node.req.method?.toUpperCase() || 'GET';
+        
+        // 1. 获取原始的 url，包括 query 参数
+        const requestUrl = getRequestURL(evt);
+        const targetUrl = `http://127.0.0.1:3003/api/payment/cashier-notify${requestUrl.search}`;
+        console.log(`[${requestId}] 转发目标URL: ${targetUrl}`);
 
-        let body: any = {};
-
-        // 根据请求方法选择参数来源，避免在GET请求上调用readBody产生错误日志
-        if (requestMethod === 'POST') {
-            try {
-                body = await readBody(evt);
-                console.log(`[${requestId}] POST请求体读取成功:`, body);
-            } catch (e) {
-                console.log(`[${requestId}] POST body读取失败，回退到GET参数`);
-                body = query;
+        // 2. 过滤 hop-by-hop headers，保留客户端真实信息
+        const HOP_BY_HOP = new Set([
+            'host', 
+            'connection', 
+            'upgrade', 
+            'content-length', 
+            'transfer-encoding', 
+            'keep-alive', 
+            'proxy-authorization', 
+            'te', 
+            'trailers'
+        ]);
+        
+        const proxyHeaders: any = {};
+        for (const key of Object.keys(evt.node.req.headers)) {
+            if (!HOP_BY_HOP.has(key.toLowerCase())) {
+                proxyHeaders[key] = evt.node.req.headers[key];
             }
-        } else {
-            // GET请求直接使用query参数
-            console.log(`[${requestId}] 检测到GET请求，使用query参数`);
-            body = query;
         }
 
-        console.log(`[${requestId}] 最终使用的通知参数:`, body);
-        console.log(`[${requestId}] 参数类型:`, typeof body);
-        console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
+        // 3. 准备请求参数
+        const fetchOptions: any = {
+            method: method,
+            headers: proxyHeaders,
+        };
 
-        // 检查订单状态（先检查，避免查询不必要的订单）
-        console.log(`[${requestId}] 订单状态:`, body.trade_status);
-        if (body.trade_status !== 'TRADE_SUCCESS') {
-            console.log(`[${requestId}] 订单状态不是成功:`, body.trade_status);
-            setResponseStatus(evt, 200);
-            return 'success'; // 即使不是成功状态也返回success避免重复通知
-        }
-
-        console.log(`[${requestId}] 订单状态验证成功!`);
-
-        // 查找本地订单 - 使用 trade_no 匹配 mch_order_id
-        console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
-
-        const result = await sql({
-            query: 'SELECT * FROM paymentrecords WHERE mch_order_id = ? LIMIT 1',
-            values: [body.trade_no]
-        }) as any[];
-
-        const localOrder = result.length > 0 ? result[0] : null;
-
-        if (!localOrder) {
-            console.error(`[${requestId}] 订单不存在, trade_no:`, body.trade_no);
-            setResponseStatus(evt, 200);
-            return 'fail';
-        }
-
-        console.log(`[${requestId}] 订单查找成功!`, { transaction_id: localOrder.transaction_id, mch_order_id: localOrder.mch_order_id });
-
-        // 验签：根据订单 the payment_id（渠道ID）选择对应的网关
-        const dbChannelId = localOrder.payment_id;
-        const channelId = String(dbChannelId || '1');
-        console.log(`[${requestId}] [回调追踪] 订单号:${localOrder.transaction_id}, 数据库存的渠道ID:${dbChannelId}, 最终采用ID:${channelId}`);
-
-        const { getProviderByChannelId } = await import('../utils/paymentGateways');
-        let provider, credentials;
-        try {
-            const result = getProviderByChannelId(channelId);
-            provider = result.provider;
-            credentials = result.credentials;
-            console.log(`[${requestId}] 使用渠道 ${channelId} 的配置进行验签`);
-        } catch (error) {
-            console.error(`[${requestId}] 获取支付渠道配置失败:`, error);
-            // 降级到系统默认配置
-            const { selectProviderBySystemParam } = await import('../utils/paymentGateways');
-            const result = await selectProviderBySystemParam();
-            provider = result.provider;
-            credentials = result.credentials;
-            console.log(`[${requestId}] 降级使用系统默认配置进行验签`);
-        }
-
-        const verified = provider.verify ? provider.verify(body, credentials) : true;
-        if (!verified) {
-            console.error(`[${requestId}] 签名验证失败! 渠道ID: ${channelId}`);
-            setResponseStatus(evt, 200);
-            return 'fail';
-        }
-
-        console.log(`[${requestId}] 签名验证成功!`);
-
-        // 检查订单是否已经处理过
-        console.log(`[${requestId}] 检查订单处理状态:`, localOrder.payment_status);
-        if (localOrder.payment_status === 3) {
-            console.log(`[${requestId}] 订单已处理过:`, body.out_trade_no);
-            setResponseStatus(evt, 200);
-            return 'success';
-        }
-
-        // 验证金额
-        console.log(`[${requestId}] 开始验证金额...`);
-        const notifyAmount = parseFloat(body.money);
-        const orderAmount = parseFloat(String(localOrder.amount || 0));
-        console.log(`[${requestId}] 通知金额:`, notifyAmount, '订单金额:', orderAmount);
-
-        if (Math.abs(notifyAmount - orderAmount) > 0.01) {
-            console.error(`[${requestId}] 金额不匹配:`, { notify: notifyAmount, order: orderAmount });
-            setResponseStatus(evt, 200);
-            return 'fail';
-        }
-
-        console.log(`[${requestId}] 金额验证成功!`);
-
-        // 更新订单状态
-        console.log(`[${requestId}] 开始更新订单状态为成功...`);
-        console.log(`🔍 [第三方回调] 当前订单支付方式状态:`, {
-            transactionId: localOrder.transaction_id,
-            currentPaymentWay: localOrder.payment_way,
-            isPaymentWayEmpty: !localOrder.payment_way,
-            isPaymentWayUnknown: localOrder.payment_way === '未知',
-            callbackType: body.type || 'unknown',
-            callbackParams: body
-        });
-
-        // 修复支付方式字段
-        await fixPaymentWay(localOrder, body, requestId);
-
-        const currentTime = getCurrentFormattedTime();
-        console.log(`[${requestId}] 更新参数:`, {
-            transaction_id: localOrder.transaction_id,
-            status: 3,
-            currentTime,
-            trade_no: body.trade_no
-        });
-
-        await PaymentModel.updateOrderStatus(localOrder.transaction_id || '', 3, currentTime, currentTime, body.trade_no);
-        console.log(`[${requestId}] 订单状态更新完成!`);
-
-        // --- 支付路由 Redis 额度累加 ---
-        try {
-            const { getSystemParam } = await import('../utils/systemConfig');
-            const isRoutingEnabled = await getSystemParam('payment_routing_enabled', 'false');
-            if (isRoutingEnabled === 'true') {
-                const { getOrderRuleMapping, incrementRedisUsedQuota } = await import('../model/paymentRouting');
-                const ruleId = await getOrderRuleMapping(localOrder.transaction_id || '');
-                if (ruleId) {
-                    await incrementRedisUsedQuota(ruleId, orderAmount);
-                    console.log(`[${requestId}] 支付路由 Redis 额度已累加: 规则ID=${ruleId}, 金额=${orderAmount}`);
+        // 4. 处理请求 Body 转发
+        if (method !== 'GET' && method !== 'HEAD') {
+            try {
+                const contentType = proxyHeaders['content-type'] || '';
+                const body = await readBody(evt);
+                
+                if (body) {
+                    if (contentType.includes('application/json')) {
+                        fetchOptions.body = JSON.stringify(body);
+                    } else if (contentType.includes('application/x-www-form-urlencoded')) {
+                        if (body && typeof body === 'object') {
+                            const params = new URLSearchParams();
+                            for (const [k, v] of Object.entries(body)) {
+                                params.append(k, String(v));
+                            }
+                            fetchOptions.body = params.toString();
+                        } else {
+                            fetchOptions.body = String(body);
+                        }
+                    } else {
+                        fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+                    }
                 }
-            }
-        } catch (redisErr) {
-            console.error(`[${requestId}] 支付路由 Redis 额度累加失败:`, redisErr);
-        }
-        // --- End ---
-
-        // ========== 收银台支付特殊处理：平台币到账逻辑 ==========
-        console.log(`[${requestId}] 开始处理平台币到账...`);
-
-        try {
-            // 计算应该到账的平台币数量（按SystemParams系数，默认1:10）
-            const rateStr = await getSystemParam('ptb_exchange_rate', '10');
-            const rate = Math.max(1, parseFloat(rateStr) || 10);
-            const platformCoinsToAdd = orderAmount * rate;
-            console.log(`[${requestId}] 计算平台币到账数量: ${orderAmount}元 = ${platformCoinsToAdd}平台币`);
-
-            // 获取用户当前平台币余额
-            const user = await sql({
-                query: 'SELECT id, platform_coins FROM users WHERE id = ?',
-                values: [localOrder.user_id],
-            }) as any[];
-
-            if (user.length === 0) {
-                console.error(`[${requestId}] 用户不存在:`, localOrder.user_id);
-                setResponseStatus(evt, 200);
-                return 'fail';
-            }
-
-            const currentPlatformCoins = parseFloat(user[0].platform_coins) || 0;
-
-            console.log(`[${requestId}] 平台币余额更新: ${currentPlatformCoins} + ${platformCoinsToAdd}`);
-
-            // 更新用户平台币余额（使用统一方法）
-            const updateResult = await UserModel.updatePlatformCoinsUnified(localOrder.user_id, platformCoinsToAdd, 3);
-            if (!updateResult.success) {
-                console.error(`[${requestId}] 平台币余额更新失败:`, updateResult.message);
-                setResponseStatus(evt, 200);
-                return 'fail';
-            }
-
-            const newPlatformCoins = updateResult.newBalance!;
-            console.log(`[${requestId}] 平台币余额更新成功!`);
-
-            // 同步记录到 PaymentRecords（平台币充值的余额变化）
-            try {
-                await PaymentModel.updateByTransactionId(localOrder.transaction_id || '', {
-                    ptb_before: currentPlatformCoins,
-                    ptb_change: platformCoinsToAdd,
-                    ptb_after: newPlatformCoins
-                } as any);
-                console.log(`[${requestId}] PaymentRecords 平台币变化已记录`, {
-                    before: currentPlatformCoins,
-                    change: platformCoinsToAdd,
-                    after: newPlatformCoins
-                });
             } catch (e: any) {
-                console.warn(`[${requestId}] PaymentRecords 平台币变化记录失败(不影响到账):`, e?.message || e);
+                console.warn(`[${requestId}] 读取/转发请求体失败:`, e.message);
             }
-
-            // 记录平台币充值日志
-            await sql({
-                query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
-                values: [
-                    'platform_coin_recharge',
-                    `用户ID: ${localOrder.user_id}, 用户名: ${localOrder.wuid}, 充值金额: ${orderAmount}元, 到账平台币: ${platformCoinsToAdd}, 交易ID: ${localOrder.transaction_id}`
-                ],
-            });
-
-            console.log(`[${requestId}] 平台币充值日志记录成功!`);
-
-
-        } catch (platformCoinError: any) {
-            console.error(`[${requestId}] 平台币到账处理失败:`, platformCoinError);
-            // 平台币到账失败不影响支付回调的成功响应，但需要记录错误
-            await sql({
-                query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
-                values: [
-                    'platform_coin_recharge_error',
-                    `用户ID: ${localOrder.user_id}, 交易ID: ${localOrder.transaction_id}, 错误: ${platformCoinError.message}`
-                ],
-            });
         }
 
+        // 5. 发起转发请求
+        const resp = await fetch(targetUrl, fetchOptions);
+        
+        // 6. 获取响应内容
+        const text = await resp.text();
+        console.log(`[${requestId}] 收到 3003 端口响应状态: ${resp.status}, 长度: ${text.length}`);
 
-        const endTime = Date.now();
-        const processingTime = endTime - startTime;
-        console.log(`[${requestId}] === 收银台支付回调处理完成，返回success ===`);
-        console.log(`[${requestId}] 总处理时间: ${processingTime}ms`);
-        setResponseStatus(evt, 200);
-        return 'success';
+        // 7. 设置响应状态及部分 Header
+        setResponseStatus(evt, resp.status);
+        const respContentType = resp.headers.get('content-type');
+        if (respContentType) {
+            evt.node.res.setHeader('content-type', respContentType);
+        }
 
-    } catch (error: any) {
-        const endTime = Date.now();
-        const processingTime = endTime - startTime;
-        console.error(`[${requestId}] 处理收银台支付通知失败:`, error);
-        console.error(`[${requestId}] 错误堆栈:`, error.stack);
-        console.error(`[${requestId}] 处理时间: ${processingTime}ms`);
-        setResponseStatus(evt, 200);
-        return 'fail';
+        return text;
+    } catch (err: any) {
+        console.error(`[${requestId}] 转发失败:`, err?.message || err);
+        setResponseStatus(evt, 500);
+        return {
+            success: false,
+            message: `转发服务异常: ${err.message}`
+        };
     }
 };
 
