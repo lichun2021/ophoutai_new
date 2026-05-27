@@ -383,14 +383,14 @@ class StatsCollector {
 
         try {
             const channels = await this.getChannels();
-            const games = await this.getGames();
-            
-            // Only collect specific channel + game combinations
+
+            // 1. 各渠道单独统计（game_code 传 '' 表示不过滤）
             for (const channel of channels) {
-                for (const game of games) {
-                    await this.collectChannelGameDailyStats(dateStr, channel, game.code);
-                }
+                await this.collectChannelGameDailyStats(dateStr, channel, '');
             }
+
+            // 2. 全渠道汇总（channel_code = 'all'）
+            await this.collectChannelGameDailyStats(dateStr, 'all', '');
 
             logInfo(`Daily stats collection completed: ${dateStr}`);
         } catch (error) {
@@ -405,14 +405,14 @@ class StatsCollector {
 
         try {
             const channels = await this.getChannels();
-            const games = await this.getGames();
-            
-            // Only collect specific channel + game combinations  
+
+            // 各渠道单独统计
             for (const channel of channels) {
-                for (const game of games) {
-                    await this.collectChannelGameLtvStats(dateStr, channel, game.code);
-                }
+                await this.collectChannelGameLtvStats(dateStr, channel, '');
             }
+
+            // 全渠道汇总
+            await this.collectChannelGameLtvStats(dateStr, 'all', '');
 
             logInfo(`LTV stats collection completed: ${dateStr}`);
         } catch (error) {
