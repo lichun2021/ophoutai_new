@@ -827,7 +827,7 @@ async function deductPlatformCoinsForPayment(
                             // 确定使用的 goodsId：iOS 使用 id，非 iOS 使用 andid
                             let finalGoodsId = config.andid;
                             try {
-                                
+
                                 const character = await GameCharactersModel.findByUuid(playerRoleId);
                                 if (character && character.ext) {
                                     let extObj: any = {};
@@ -836,7 +836,7 @@ async function deductPlatformCoinsForPayment(
                                     } catch (e) {
                                         extObj = { value: character.ext };
                                     }
-                                    
+
                                     if (extObj && extObj.value === 'ios') {
                                         finalGoodsId = config.id;
                                         console.log(`API到账--平台判定: iOS, 使用 id=${finalGoodsId}, 角色UUID=${playerRoleId}`);
@@ -1787,12 +1787,12 @@ export const doPayment = async (evt: H3Event) => {
 
             if (lockKey) {
                 // @ts-ignore ioredis 支持 NX + EX 语义
-                const lockOk = await redis.set(lockKey, '1', 'EX', 15, 'NX');
+                const lockOk = await redis.set(lockKey, '1', 'EX', 5, 'NX');
                 if (lockOk !== 'OK') {
                     setResponseStatus(evt, 200);
                     return {
                         code: -10,
-                        msg: '下单过于频繁,请15秒后再试',
+                        msg: '下单过于频繁,请5秒后再试',
                         data: null
                     };
                 }
@@ -1819,7 +1819,7 @@ export const doPayment = async (evt: H3Event) => {
                 dbHost = connCfg.host || 'unknown';
                 dbName = connCfg.database || 'unknown';
             }
-        } catch {}
+        } catch { }
 
         console.log(`[doPayment] 开始校验用户是否存在...`);
         console.log(`[doPayment] 数据库环境 -> Host: ${dbHost}, Database: ${dbName}`);
@@ -3178,7 +3178,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
 
         // --- 支付路由 Redis 额度累加 ---
         try {
-            
+
             const isRoutingEnabled = await getSystemParam('payment_routing_enabled', 'false');
             if (isRoutingEnabled === 'true') {
                 const { getOrderRuleMapping, incrementRedisUsedQuota } = await import('../model/paymentRouting');

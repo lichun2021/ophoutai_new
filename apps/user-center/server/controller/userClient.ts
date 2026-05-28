@@ -1,10 +1,10 @@
-﻿import * as UserModel from '../model/user';
+import * as UserModel from '../model/user';
 import * as PlatformCoinRechargeModel from '../model/platformCoinRecharge';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import * as PaymentModel from '../model/payment';
 import * as AdminModel from '../model/admin';
-import {H3Event} from 'h3';
-import {sql} from '../db';
+import { H3Event } from 'h3';
+import { sql } from '../db';
 import { getSystemConfig } from '../utils/systemConfig';
 import { executePaymentBySystemParam } from '../utils/paymentGateways';
 
@@ -45,30 +45,30 @@ const checkPermission = async (event: H3Event, userChannelCode: string): Promise
     try {
         const authorizationHeader = getHeader(event, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         if (!token) {
             return { hasPermission: false };
         }
-        
+
         // 获取管理员信息和权限
         const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
         if (!adminWithPermissions) {
             return { hasPermission: false };
         }
-        
+
         // 超级管理员(level 0)可以访问所有数据
         if (adminWithPermissions.level === 0) {
             return { hasPermission: true, adminInfo: adminWithPermissions };
         }
-        
+
         // 其他级别需要检查权限范围
         const allowedChannelCodes = adminWithPermissions.allowed_channel_codes || [];
-        
+
         // 如果没有设置权限或用户的channel_code在允许范围内
         if (allowedChannelCodes.length === 0 || allowedChannelCodes.includes(userChannelCode)) {
             return { hasPermission: true, adminInfo: adminWithPermissions };
         }
-        
+
         return { hasPermission: false };
     } catch (error) {
         console.error('权限验证失败:', error);
@@ -82,14 +82,14 @@ const checkPermission = async (event: H3Event, userChannelCode: string): Promise
 export const getUserProfile = defineEventHandler(async (event) => {
     try {
         const id = parseInt(event.context.params?.id ?? '');
-        
+
         if (!id || isNaN(id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 获取用户基本信息
         const user = await UserModel.findById(id);
         if (!user) {
@@ -98,7 +98,7 @@ export const getUserProfile = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         // 权限验证：检查管理员是否有权限访问该用户数据
         const permissionCheck = await checkPermission(event, user.channel_code || '');
         if (!permissionCheck.hasPermission) {
@@ -107,17 +107,17 @@ export const getUserProfile = defineEventHandler(async (event) => {
                 message: '没有权限访问该用户信息'
             };
         }
-        
+
         // 获取平台币余额
         const platformCoins = await UserModel.getPlatformCoins(id);
-        
+
         // 获取充值统计
         const totalRechargeAmount = await PlatformCoinRechargeModel.getTotalRechargeAmountByUserId(id);
         const rechargeStats = await PlatformCoinRechargeModel.getRechargeStatsByTypeByUserId(id);
-        
+
         // 获取购买统计
         const totalPurchases = await ExternalGiftPackageModel.getUserPurchaseRecordsCountByUserId(id);
-        
+
         return {
             code: 200,
             data: {
@@ -148,14 +148,14 @@ export const getAvailableGiftPackages = defineEventHandler(async (event) => {
         // 基本身份验证
         const authorizationHeader = getHeader(event, 'authorization');
         const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         if (!token) {
             return {
                 code: 401,
                 message: '需要登录'
             };
         }
-        
+
         // 验证管理员是否存在
         const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
         if (!adminWithPermissions) {
@@ -164,17 +164,17 @@ export const getAvailableGiftPackages = defineEventHandler(async (event) => {
                 message: '管理员不存在'
             };
         }
-        
+
         const query = getQuery(event);
         const category = query.category as string;
-        
+
         let packages;
         if (category && category !== 'all') {
             packages = await ExternalGiftPackageModel.getGiftPackagesByCategory(category);
         } else {
             packages = await ExternalGiftPackageModel.getAllActiveGiftPackages();
         }
-        
+
         return {
             code: 200,
             data: packages,
@@ -197,14 +197,14 @@ export const getPublicGiftPackages = defineEventHandler(async (event) => {
     try {
         const query = getQuery(event);
         const category = query.category as string;
-        
+
         let packages;
         if (category && category !== 'all') {
             packages = await ExternalGiftPackageModel.getGiftPackagesByCategory(category);
         } else {
             packages = await ExternalGiftPackageModel.getAllActiveGiftPackages();
         }
-        
+
         return {
             code: 200,
             data: packages,
@@ -231,9 +231,9 @@ export const getGiftPackageCategories = defineEventHandler(async (event) => {
                     AND (end_time IS NULL OR end_time >= NOW())
                     ORDER BY category`,
         }) as any[];
-        
+
         const categories = result.map((row: any) => row.category);
-        
+
         return {
             code: 200,
             data: categories,
@@ -254,17 +254,17 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         const body = await readBody(event);
         const { user_id, package_id, character_uuid } = body;
         console.log(body);
-        
+
         // 🔒 安全限制：强制购买数量为1，防止刷单
         const quantity = 1;
-        
+
         if (!user_id || !package_id) {
             return {
                 code: 400,
                 message: '缺少必要参数'
             };
         }
-        
+
         // 验证角色参数
         if (!character_uuid) {
             return {
@@ -272,7 +272,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: '请选择要发放的角色'
             };
         }
-        
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -281,7 +281,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         // 验证角色是否属于该用户（通过子账号关联）
         const character = await sql({
             query: `SELECT gc.* FROM gamecharacters gc 
@@ -289,21 +289,21 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                    WHERE su.parent_user_id = ? AND gc.uuid = ?`,
             values: [user_id, character_uuid],
         }) as any[];
-        
+
         if (character.length === 0) {
             return {
                 code: 400,
                 message: '角色不存在或不属于该用户'
             };
         }
-        
+
         const selectedCharacter = character[0];
-        
+
         console.log(`========== 用户购买礼包开始 ==========`);
         console.log(`用户ID: ${user_id}, 角色UUID: ${selectedCharacter.uuid}, 角色名: ${selectedCharacter.character_name}`);
         console.log(`礼包ID: ${package_id}, 数量: ${quantity}`);
         console.log(`========================================`);
-        
+
         // 检查用户是否可以购买该礼包（使用角色UUID进行限购检查）
         const checkResult = await ExternalGiftPackageModel.checkUserCanPurchase(selectedCharacter.uuid, package_id, quantity);
         if (!checkResult.canPurchase) {
@@ -315,7 +315,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         }
         console.log(`✅ 限购检查通过，继续购买流程`);
 
-        
+
         // 获取礼包信息
         const giftPackage = await ExternalGiftPackageModel.getGiftPackageById(package_id);
         if (!giftPackage) {
@@ -324,10 +324,10 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: '礼包不存在'
             };
         }
-        
+
         // 计算总价
         const totalAmount = giftPackage.price_platform_coins * quantity;
-        
+
         // 检查用户平台币余额
         const currentBalance = await UserModel.getPlatformCoins(user_id);
         if (currentBalance < totalAmount) {
@@ -336,7 +336,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: '平台币余额不足'
             };
         }
-        
+
         // 扣除平台币并创建购买记录（使用统一方法，标志位1表示游戏内购扣款，这里用于礼包购买）
         const deductResult = await UserModel.updatePlatformCoinsUnified(user_id, -totalAmount, 1);
         if (!deductResult.success) {
@@ -345,11 +345,11 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: deductResult.message || '扣除平台币失败'
             };
         }
-        
+
         // 生成订单号（用于 PaymentRecords 和礼包购买记录）
         const mchOrderId = `${Date.now()}`;
-        
-           // 同时创建PaymentRecords记录（平台币消费记录）
+
+        // 同时创建PaymentRecords记录（平台币消费记录）
         // 使用选择的角色信息填充 wuid 和 sub_user_id
         const transactionId = `PC${Date.now()}${user.id}`;
         const paymentData = {
@@ -376,18 +376,18 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             ptb_change: -totalAmount,
             ptb_after: deductResult.newBalance
         };
-        
+
         // 使用 PaymentModel.insert 方法插入完整的支付记录
         const PaymentModel = await import('../model/payment');
         await PaymentModel.insert(paymentData);
-        
+
         // 更新礼包销售数量
         if (giftPackage.is_limited) {
             await ExternalGiftPackageModel.updatePackageSoldQuantity(package_id, quantity);
         }
-        
 
-        
+
+
         // 创建购买记录
         const purchaseRecord = {
             user_id: user.id!,
@@ -405,26 +405,49 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             status: 'paid' as const,
             remark: `平台币购买 - 服务器${selectedCharacter.server_id || 1}`
         };
-        
+
         console.log(`[userPurchaseGiftPackage] 创建购买记录, 用户ID: ${user_id}, 礼包ID: ${package_id}, 角色: ${selectedCharacter.uuid}`);
         const createResult = await ExternalGiftPackageModel.createPurchaseRecord(purchaseRecord);
-        
+
         // 获取购买记录ID用于发放
         const purchaseRecordId = (createResult as any).insertId;
         console.log(`[userPurchaseGiftPackage] 购买记录创建成功, 记录ID: ${purchaseRecordId}`);
-        
-        // 自动发放礼包到游戏内（使用 IDIP 方式）
+
+        // 自动发放礼包到游戏内（调用 op-admin 内部接口，不走 IDIP）
         console.log(`[userPurchaseGiftPackage] 开始自动发放礼包到游戏内...`);
         try {
-            const deliveryResult = await ExternalGiftPackageModel.deliverPackageToGameViaIDIP(
+            const opAdminUrl = process.env.OP_ADMIN_INTERNAL_URL || 'http://127.0.0.1:3003';
+            const sharedKey = process.env.API_SIGN_KEY || 'q12eiedu24fi3rf434g34g';
+            const deliverUrl = `${opAdminUrl}/api/internal/gift-package/deliver`;
+            const deliverBody = {
                 purchaseRecordId,
-                selectedCharacter.server_id?.toString() || '1',
-                selectedCharacter.uuid
-            );
-            
+                serverId: selectedCharacter.server_id?.toString() || '1',
+                roleId: selectedCharacter.uuid,
+            };
+            console.log(`[userPurchaseGiftPackage] 调用 op-admin: POST ${deliverUrl}`, JSON.stringify(deliverBody));
+            const resp = await fetch(deliverUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-internal-secret': sharedKey,
+                },
+                body: JSON.stringify(deliverBody),
+                signal: AbortSignal.timeout(15000),
+            });
+            const respText = await resp.text();
+            console.log(`[userPurchaseGiftPackage] op-admin 响应 HTTP ${resp.status}: ${respText}`);
+
+            let deliveryResult: any;
+            try {
+                deliveryResult = JSON.parse(respText);
+            } catch {
+                deliveryResult = { success: false, message: `HTTP ${resp.status}: ${respText || 'empty response'}` };
+            }
+
+
             if (deliveryResult.success) {
                 console.log(`[userPurchaseGiftPackage] ✅ 礼包自动发放成功! 购买记录ID: ${purchaseRecordId}`);
-                
+
                 // 更新支付记录为成功，并记录到账时间
                 const currentTime = getCurrentFormattedTime();
                 await PaymentModel.updateByTransactionId(transactionId, {
@@ -432,7 +455,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                     notify_at: currentTime,
                     msg: '礼包发放成功'
                 });
-                
+
                 return {
                     code: 200,
                     data: {
@@ -443,7 +466,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 };
             } else if ((deliveryResult as any).timeout) {
                 console.warn(`[userPurchaseGiftPackage] ⏳ 礼包发放超时，等待确认. 购买记录ID: ${purchaseRecordId}`);
-                
+
                 // 超时不退款，保持支付处理中
                 await PaymentModel.updateByTransactionId(transactionId, {
                     payment_status: 1,
@@ -476,7 +499,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                     }
                     const refundBalance = refundResult.newBalance || deductResult.newBalance!;
                     console.log(`[userPurchaseGiftPackage] 💰 已退还平台币: ${totalAmount}, 新余额: ${refundBalance}`);
-                    
+
                     // 更新支付记录为失败
                     await PaymentModel.updateByTransactionId(transactionId, {
                         payment_status: 2,
@@ -484,7 +507,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                         ptb_after: refundBalance,
                         ptb_change: 0
                     });
-                    
+
                     // 更新礼包购买记录
                     await ExternalGiftPackageModel.updatePurchaseRecordStatus(
                         purchaseRecordId,
@@ -492,7 +515,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                         'failed',
                         `已退款: ${deliveryResult.message || '未知错误'}`
                     );
-                    
+
                     return {
                         code: 500,
                         message: `礼包发放失败: ${deliveryResult.message || '未知错误'}，平台币已退还`
@@ -532,7 +555,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 }
                 const refundBalance = refundResult.newBalance || deductResult.newBalance!;
                 console.log(`[userPurchaseGiftPackage] 💰 已退还平台币: ${totalAmount}, 新余额: ${refundBalance}`);
-                
+
                 // 更新支付记录为失败
                 await PaymentModel.updateByTransactionId(transactionId, {
                     payment_status: 2,
@@ -540,7 +563,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                     ptb_after: refundBalance,
                     ptb_change: 0
                 });
-                
+
                 // 更新礼包购买记录
                 await ExternalGiftPackageModel.updatePurchaseRecordStatus(
                     purchaseRecordId,
@@ -548,7 +571,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                     'failed',
                     `已退款: ${errorMsg}`
                 );
-                
+
                 return {
                     code: 500,
                     message: `礼包发放异常: ${errorMsg}，平台币已退还`
@@ -587,14 +610,14 @@ export const getUserPurchaseHistory = defineEventHandler(async (event) => {
         const user_id = parseInt(query.user_id as string);
         const page = parseInt(query.page as string) || 1;
         const pageSize = parseInt(query.pageSize as string) || 10;
-        
+
         if (!user_id || isNaN(user_id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -603,11 +626,11 @@ export const getUserPurchaseHistory = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         // 获取购买记录
         const records = await ExternalGiftPackageModel.getUserPurchaseRecords(user.thirdparty_uid!, page, pageSize);
         const total = await ExternalGiftPackageModel.getUserPurchaseRecordsCount(user.thirdparty_uid!);
-        
+
         return {
             code: 200,
             data: {
@@ -637,14 +660,14 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
         const user_id = parseInt(query.user_id as string);
         const page = parseInt(query.page as string) || 1;
         const pageSize = parseInt(query.pageSize as string) || 10;
-        
+
         if (!user_id || isNaN(user_id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -653,9 +676,9 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         const offset = (page - 1) * pageSize;
-        
+
         // 从PaymentRecords表获取真实充值记录（排除平台币消费，关联 GameCharacters 表获取角色名字）
         const records = await sql({
             query: `SELECT pr.*, gc.character_name as role_name
@@ -667,7 +690,7 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
                    LIMIT ?, ?`,
             values: [user_id, offset, pageSize],
         });
-        
+
         // 获取总数
         const countResult = await sql({
             query: `SELECT COUNT(*) as total FROM paymentrecords 
@@ -675,9 +698,9 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
             values: [user_id],
         }) as any[];
-        
+
         const total = countResult[0]?.total || 0;
-        
+
         return {
             code: 200,
             data: {
@@ -707,14 +730,14 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
         const user_id = parseInt(query.user_id as string);
         const page = parseInt(query.page as string) || 1;
         const pageSize = parseInt(query.pageSize as string) || 10;
-        
+
         if (!user_id || isNaN(user_id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -723,9 +746,9 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                 message: '用户不存在'
             };
         }
-        
+
         const offset = (page - 1) * pageSize;
-        
+
         const statusFilter = (query.status as string || 'all').toLowerCase();
         const baseWhereClauses = [
             'pr.user_id = ?',
@@ -734,15 +757,15 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
             "TRIM(pr.role_id) <> ''"
         ];
         const whereValues: any[] = [user_id];
-        
+
         if (statusFilter === 'success') {
             baseWhereClauses.push('pr.payment_status = 3');
         } else if (statusFilter === 'failed') {
             baseWhereClauses.push('(pr.payment_status IS NULL OR pr.payment_status <> 3)');
         }
-        
+
         const whereClauseSql = baseWhereClauses.join(' AND ');
-        
+
         const records = await sql({
             query: `SELECT pr.*, gc.character_name as role_name
                    FROM paymentrecords pr
@@ -752,7 +775,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                    LIMIT ?, ?`,
             values: [...whereValues, offset, pageSize],
         });
-        
+
         // 获取总数（按当前状态过滤）
         const countResult = await sql({
             query: `SELECT COUNT(*) as total 
@@ -760,7 +783,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                    WHERE ${whereClauseSql}`,
             values: whereValues,
         }) as any[];
-        
+
         // 获取已完成订单数量
         const completedCountResult = await sql({
             query: `SELECT COUNT(*) as completed 
@@ -772,7 +795,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                      AND TRIM(role_id) <> ''`,
             values: [user_id],
         }) as any[];
-        
+
         const totalSpentResult = await sql({
             query: `SELECT COALESCE(SUM(amount), 0) AS total_spent
                    FROM paymentrecords
@@ -783,12 +806,12 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                      AND TRIM(role_id) <> ''`,
             values: [user_id],
         }) as any[];
-        
+
         const totalSpent = Number(totalSpentResult[0]?.total_spent || 0);
         const completedCount = Number(completedCountResult[0]?.completed || 0);
-        
+
         const total = countResult[0]?.total || 0;
-        
+
         return {
             code: 200,
             data: {
@@ -818,14 +841,14 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
     try {
         const query = getQuery(event);
         const user_id = parseInt(query.user_id as string);
-        
+
         if (!user_id || isNaN(user_id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -834,7 +857,7 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         // 获取累计充值金额（真实充值：排除平台币支付，只统计支付宝、微信等现金充值）
         const totalRechargeResult = await sql({
             query: `SELECT SUM(amount) as total FROM paymentrecords 
@@ -842,18 +865,18 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
             values: [user_id],
         }) as any[];
-        
+
         const totalRecharge = totalRechargeResult[0]?.total || 0;
-        
+
         // 获取购买次数（payment_way是"平台币"且已完成的记录）
         const purchaseCountResult = await sql({
             query: `SELECT COUNT(*) as count FROM paymentrecords 
                    WHERE user_id = ? AND payment_way = '平台币' AND payment_status = 3`,
             values: [user_id],
         }) as any[];
-        
+
         const purchaseCount = purchaseCountResult[0]?.count || 0;
-        
+
         // 获取最近3次购买记录（payment_way是"平台币"的记录）
         const recentOrdersResult = await sql({
             query: `SELECT * FROM paymentrecords 
@@ -862,7 +885,7 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
                    LIMIT 3`,
             values: [user_id],
         });
-        
+
         return {
             code: 200,
             data: {
@@ -885,14 +908,14 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
 export const getUserStats = defineEventHandler(async (event) => {
     try {
         const user_id = parseInt(event.context.params?.id ?? '');
-        
+
         if (!user_id || isNaN(user_id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -901,7 +924,7 @@ export const getUserStats = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         // 获取累计充值金额（真实充值：排除平台币支付）
         const totalRechargeResult = await sql({
             query: `SELECT SUM(amount) as total FROM paymentrecords 
@@ -909,18 +932,18 @@ export const getUserStats = defineEventHandler(async (event) => {
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
             values: [user_id],
         }) as any[];
-        
+
         const totalRecharge = totalRechargeResult[0]?.total || 0;
-        
+
         // 获取购买次数（使用平台币的消费次数）
         const purchaseCountResult = await sql({
             query: `SELECT COUNT(*) as count FROM paymentrecords 
                    WHERE user_id = ? AND payment_way = '平台币' AND payment_status = 3`,
             values: [user_id],
         }) as any[];
-        
+
         const purchaseCount = purchaseCountResult[0]?.count || 0;
-        
+
         return {
             code: 200,
             data: {
@@ -943,14 +966,14 @@ export const getUserBalance = defineEventHandler(async (event) => {
     try {
         const authorizationHeader = getHeader(event, 'authorization');
         const userId = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
+
         if (!userId || isNaN(userId)) {
             return {
                 code: 401,
                 message: '未授权，请先登录'
             };
         }
-        
+
         // 验证用户是否存在
         const user = await UserModel.findById(userId);
         if (!user) {
@@ -959,10 +982,10 @@ export const getUserBalance = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         // 实时从数据库获取余额
         const platformCoins = await UserModel.getPlatformCoins(userId);
-        
+
         return {
             code: 200,
             data: {
@@ -984,14 +1007,14 @@ export const getUserCharacters = defineEventHandler(async (event) => {
     try {
         const query = getQuery(event);
         const user_id = parseInt(query.user_id as string);
-        
+
         if (!user_id || isNaN(user_id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -1000,11 +1023,11 @@ export const getUserCharacters = defineEventHandler(async (event) => {
                 message: '用户不存在'
             };
         }
-        
+
         // 获取用户的所有角色（不分子账号）
         const GameCharactersModel = await import('../model/gameCharacters');
         const characters = await GameCharactersModel.findByUserId(user_id);
-        
+
         return {
             code: 200,
             data: {
@@ -1042,32 +1065,32 @@ export const getPlayerGiftPackageRecords = defineEventHandler(async (event) => {
         const startDate = query.startDate as string;
         const endDate = query.endDate as string;
         const packageType = query.packageType as string || 'all'; // all, purchased, daily, cumulative
-        
+
         if (!user_id || isNaN(user_id)) {
             return {
                 code: 400,
                 message: '缺少用户ID参数'
             };
         }
-        
+
         // 获取礼包购买记录
         const records = await ExternalGiftPackageModel.getPlayerGiftPackageRecords(
-            user_id, 
-            page, 
-            pageSize, 
-            startDate, 
-            endDate, 
+            user_id,
+            page,
+            pageSize,
+            startDate,
+            endDate,
             packageType
         );
-        
+
         // 获取总数
         const total = await ExternalGiftPackageModel.getPlayerGiftPackageRecordsCount(
-            user_id, 
-            startDate, 
-            endDate, 
+            user_id,
+            startDate,
+            endDate,
             packageType
         );
-        
+
         return {
             code: 200,
             data: {

@@ -264,6 +264,9 @@ export class GameServerClient {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
+      if (!responseText.trim()) {
+        throw new Error(`[GameServer] ${key} 响应体为空 (HTTP ${response.status})`);
+      }
       const data = JSON.parse(responseText);
       return this.normalizeResponse<T>(key, data);
 

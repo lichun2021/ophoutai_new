@@ -487,7 +487,6 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
 
     try {
         // 获取购买记录
-        console.log(`[deliverPackageToGame] 查询购买记录...`);
         const purchaseRecord = await sql({
             query: 'SELECT * FROM giftpackagepurchaserecords WHERE id = ?',
             values: [purchaseRecordId],
@@ -499,130 +498,102 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
         }
 
         const record = purchaseRecord[0];
-        console.log(`[deliverPackageToGame] 获取到购买记录:`, JSON.stringify(record, null, 2));
 
         // 获取礼包配置
-        console.log(`[deliverPackageToGame] 查询礼包配置, 礼包ID: ${record.package_id}`);
         const giftPackage = await getGiftPackageById(record.package_id);
         if (!giftPackage || !giftPackage.gift_items) {
-            console.error(`[deliverPackageToGame] 礼包配置不存在或未配置游戏服务器, 礼包ID: ${record.package_id}`);
+            console.error(`[deliverPackageToGame] 礼包配置不存在, 礼包ID: ${record.package_id}`);
             return { success: false, message: '礼包配置不存在或未配置游戏服务器' };
         }
 
-        console.log(`[deliverPackageToGame] 获取到礼包配置:`, JSON.stringify(giftPackage, null, 2));
-
-
-        // 组装邮件数据
-        const mailPayload = {
-            serverId: server_id,
-            userId: role_id,
-            items: giftPackage.gift_items,
-            title: giftPackage.package_name,
-            content: `您购买的${giftPackage.package_name}已到账，请查收！`
-        };
-
-        console.log('[deliverPackageToGame] 发放邮件数据:', JSON.stringify(mailPayload, null, 2));
-
-        // 更新发放状态为正在发送
-        console.log(`[deliverPackageToGame] 更新状态为正在发送...`);
-        await updatePurchaseRecordStatus(purchaseRecordId, 'paid', 'sent', '正在发放到游戏内');
-
-        console.log(`[deliverPackageToGame] 解析服务器地址...`);
-        let targetGameServerUrl = '';
+        // 解析礼包物品，统一转换为 { itemId, itemCount } 格式
+        let giftItems: any[] = [];
         try {
-            const worldId = Number(server_id);
-            if (!isNaN(worldId) && worldId > 0) {
-                const serverCfg = await getByWorldId(worldId);
-                if (serverCfg && serverCfg.webhost) {
-                    const base = serverCfg.webhost.replace(/\/$/, '');
-                    targetGameServerUrl = `${base}/send_mail`;
-                }
-            }
-        } catch { }
-        if (!targetGameServerUrl) {
-            const systemConfig = await getSystemConfig();
-            targetGameServerUrl = systemConfig.gift_url || 'http://160.202.240.19:8888/send_mail';
+            giftItems = typeof giftPackage.gift_items === 'string'
+                ? JSON.parse(giftPackage.gift_items)
+                : giftPackage.gift_items;
+        } catch { giftItems = []; }
+
+        const toNum = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : NaN; };
+        const sendItemList = Array.isArray(giftItems) ? giftItems.map((it: any) => ({
+            itemId:    toNum(it?.ItemId ?? it?.itemId ?? it?.id ?? it?.ItemID ?? it?.item_id ?? it?.i),
+            itemCount: toNum(it?.ItemNum ?? it?.itemNum ?? it?.num ?? it?.quantity ?? it?.count ?? it?.a),
+        })).filter(x => Number.isFinite(x.itemId) && x.itemId > 0 && Number.isFinite(x.itemCount) && x.itemCount > 0) : [];
+
+        if (sendItemList.length === 0) {
+            await sql({
+                query: "UPDATE giftpackagepurchaserecords SET game_delivery_status = 'failed', remark = CONCAT(remark, ' | 发放失败: 物资列表为空') WHERE id = ?",
+                values: [purchaseRecordId],
+            });
+            return { success: false, message: '物资列表为空或无效' };
         }
 
-        console.log(`[deliverPackageToGame] 目标游戏服务器URL: ${targetGameServerUrl}`);
+        // 查 openId（subuser_id）和服务器信息
+        const actualRoleId = (record as any).thirdparty_uid || role_id;
+        const gcRows = await sql({
+            query: 'SELECT subuser_id, server_id FROM gamecharacters WHERE uuid = ? LIMIT 1',
+            values: [actualRoleId],
+        }) as any[];
 
-        // 向游戏服务器发送请求
-        console.log(`[deliverPackageToGame] 发送请求到游戏服务器...`);
-        console.log(`[deliverPackageToGame] send_mail接口参数:`, {
-            url: targetGameServerUrl,
-            serverId: server_id,
-            userId: role_id,
-            items: mailPayload.items,
-            title: mailPayload.title
-        });
-        const response = await fetch(targetGameServerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(mailPayload)
-        });
-
-        console.log(`[deliverPackageToGame] 游戏服务器响应状态: ${response.status}`);
-
-        const respData = await response.json();
-        console.log('[deliverPackageToGame] 游戏服务器返回:', JSON.stringify(respData, null, 2));
-
-        // 增加发放尝试次数
-        console.log(`[deliverPackageToGame] 更新发放尝试次数和响应数据...`);
-        await sql({
-            query: 'UPDATE giftpackagepurchaserecords SET delivery_attempts = delivery_attempts + 1, game_delivery_data = ? WHERE id = ?',
-            values: [JSON.stringify(respData), purchaseRecordId],
-        });
-
-        if (respData && respData.code == 0) {
-            // 发放成功
-            console.log(`[deliverPackageToGame] 发放成功! 购买记录ID: ${purchaseRecordId}`);
-
-            // 从 game_delivery_data 中提取 success_list 里的 "u" 值，更新 thirdparty_uid
-            try {
-                if (respData.result && respData.result.success_list && respData.result.success_list.length > 0) {
-                    const successItem = respData.result.success_list[0]; // 取第一个成功项
-                    if (successItem.u) {
-                        console.log(`[deliverPackageToGame] 提取到用户ID: ${successItem.u}, 更新thirdparty_uid字段`);
-
-                        // 同时更新状态和 thirdparty_uid
-                        await sql({
-                            query: 'UPDATE giftpackagepurchaserecords SET status = ?, game_delivery_status = ?, remark = ?, thirdparty_uid = ?, delivered_at = NOW() WHERE id = ?',
-                            values: ['delivered', 'success', '发放成功', successItem.u, purchaseRecordId],
-                        });
-
-                        console.log(`[deliverPackageToGame] thirdparty_uid 已更新为: ${successItem.u}`);
-                    } else {
-                        // 没有找到 u 值，只更新状态
-                        await updatePurchaseRecordStatus(purchaseRecordId, 'delivered', 'success', '发放成功');
-                        console.log(`[deliverPackageToGame] 未找到用户ID，仅更新状态`);
-                    }
-                } else {
-                    // success_list 为空或不存在，只更新状态
-                    await updatePurchaseRecordStatus(purchaseRecordId, 'delivered', 'success', '发放成功');
-                    console.log(`[deliverPackageToGame] success_list为空，仅更新状态`);
-                }
-            } catch (extractError) {
-                console.error(`[deliverPackageToGame] 提取用户ID失败:`, extractError);
-                // 提取失败时仍然更新状态为成功
-                await updatePurchaseRecordStatus(purchaseRecordId, 'delivered', 'success', '发放成功');
-            }
-
-            return { success: true, message: '礼包发放成功' };
+        let openId: string;
+        let worldId: number;
+        if (gcRows && gcRows.length > 0) {
+            openId  = String(gcRows[0].subuser_id || (record as any).user_id);
+            worldId = Number(gcRows[0].server_id  || server_id);
         } else {
-            // 发放失败
-            console.error(`[deliverPackageToGame] 发放失败! 购买记录ID: ${purchaseRecordId}, 错误: ${respData?.msg || '未知错误'}`);
-            await updatePurchaseRecordStatus(purchaseRecordId, 'paid', 'failed', respData?.msg || '发放失败');
-            return { success: false, message: respData?.msg || '礼包发放失败' };
+            console.warn(`[deliverPackageToGame] 未找到角色信息，使用传入参数, uuid=${actualRoleId}`);
+            openId  = String((record as any).user_id);
+            worldId = Number(server_id);
         }
-    } catch (error) {
+
+        // 获取服务器 webhost
+        const serverCfg = await getByWorldId(worldId);
+        if (!serverCfg || !serverCfg.webhost) {
+            const errMsg = `未找到服务器配置: world_id=${worldId}`;
+            console.error(`[deliverPackageToGame] ${errMsg}`);
+            await sql({
+                query: "UPDATE giftpackagepurchaserecords SET game_delivery_status = 'failed', remark = CONCAT(remark, ' | ', ?) WHERE id = ?",
+                values: [errMsg, purchaseRecordId],
+            });
+            return { success: false, message: errMsg };
+        }
+
+        const webhost = String(serverCfg.webhost).replace(/\/+$/, '');
+        const { createGameServerClient } = await import('../controller/gameServerClient');
+        const client = createGameServerClient(webhost, 'rest', 15000);
+
+        console.log(`[deliverPackageToGame] sendItemMail 参数: openId=${openId}, serverId=${worldId}, roleId=${actualRoleId}, items=${JSON.stringify(sendItemList)}`);
+
+        // 更新状态为正在发送
+        await sql({
+            query: "UPDATE giftpackagepurchaserecords SET game_delivery_status = 'sent', delivery_attempts = delivery_attempts + 1 WHERE id = ?",
+            values: [purchaseRecordId],
+        });
+
+        const resp = await client.sendItemMail({
+            openId,
+            serverId: String(worldId),
+            platform: 'android',
+            roleId:   actualRoleId,
+            mailTitle:   giftPackage.package_name || '系统发放',
+            mailContent: `您购买的${giftPackage.package_name}已到账，请查收！`,
+            items: sendItemList,
+        });
+
+        console.log(`[deliverPackageToGame] 发放成功! 购买记录ID: ${purchaseRecordId}`, JSON.stringify(resp));
+        await sql({
+            query: "UPDATE giftpackagepurchaserecords SET status = 'delivered', game_delivery_status = 'success', game_delivery_data = ?, delivered_at = NOW() WHERE id = ?",
+            values: [JSON.stringify(resp), purchaseRecordId],
+        });
+        return { success: true, message: '礼包发放成功' };
+
+    } catch (error: any) {
         console.error(`[deliverPackageToGame] 发放礼包异常, 购买记录ID: ${purchaseRecordId}:`, error);
-
-        // 更新状态为失败
-        await updatePurchaseRecordStatus(purchaseRecordId, 'paid', 'failed', '发放异常: ' + (error as Error).message);
-
-        return { success: false, message: '发放异常: ' + (error as Error).message };
+        await updatePurchaseRecordStatus(purchaseRecordId, 'paid', 'failed', '发放异常: ' + error.message);
+        return { success: false, message: '发放异常: ' + error.message };
     }
 };
+
 
 // 基于 IDIP 的礼包发放方法（参照 auto-gift-delivery.js）
 export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serverId: string, roleId: string) => {

@@ -548,6 +548,36 @@ router.post('/internal/admin/create-promoter', defineEventHandler(async (event: 
 }));
 
 /**
+ * 内部API：发放礼包到游戏（供 user-center 调用，不走 IDIP）
+ * @route POST /api/internal/gift-package/deliver
+ * @body { purchaseRecordId: number, serverId: string, roleId: string }
+ */
+router.post('/internal/gift-package/deliver', defineEventHandler(async (event: H3Event) => {
+  const sharedKey = process.env.API_SIGN_KEY || 'q12eiedu24fi3rf434g34g';
+  const secret = getHeader(event, 'x-internal-secret');
+  if (!secret || secret !== sharedKey) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized: invalid internal secret' });
+  }
+  const body = await readBody(event);
+  const { purchaseRecordId, serverId, roleId } = body || {};
+  if (!purchaseRecordId) {
+    throw createError({ statusCode: 400, statusMessage: 'purchaseRecordId is required' });
+  }
+  // serverId 兼容：< 10000 时 +10000（对齐游戏服 world_id 规范）
+  const rawServerId = Number(serverId || 1);
+  const normalizedServerId = rawServerId < 10000 ? rawServerId + 10000 : rawServerId;
+  const ExternalGiftPackageModel = await import('../model/externalGiftPackage');
+  const result = await ExternalGiftPackageModel.deliverPackageToGame(
+    Number(purchaseRecordId),
+    String(normalizedServerId),
+    roleId || ''
+  );
+  return result;
+}));
+
+
+
+/**
  * 支付渠道管理
  */
 // 获取所有支付渠道配置

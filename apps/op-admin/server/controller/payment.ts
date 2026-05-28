@@ -1758,13 +1758,13 @@ export const doPayment = async (evt: H3Event) => {
 
             if (lockKey) {
                 // @ts-ignore ioredis 支持 NX + EX 语义
-                const lockOk = await redis.set(lockKey, '1', 'EX', 15, 'NX');
+                const lockOk = await redis.set(lockKey, '1', 'EX', 5, 'NX');
                 if (lockOk !== 'OK') {
                     setResponseStatus(evt, 200);
                     console.error('[支付拦截] 下单过于频繁', wuid, subUserId, username);
                     return {
                         code: -10,
-                        msg: '下单过于频繁,请15秒后再试',
+                        msg: '下单过于频繁,请5秒后再试',
                         data: null
                     };
                 }
@@ -1791,7 +1791,7 @@ export const doPayment = async (evt: H3Event) => {
                 dbHost = connCfg.host || 'unknown';
                 dbName = connCfg.database || 'unknown';
             }
-        } catch {}
+        } catch { }
 
         console.log(`[doPayment] 开始校验用户是否存在...`);
         console.log(`[doPayment] 数据库环境 -> Host: ${dbHost}, Database: ${dbName}`);
