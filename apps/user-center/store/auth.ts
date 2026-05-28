@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', {
     // 用户相关状态
     isUser: false, // 是否为普通用户
     userInfo: null as any, // 用户详细信息
+    platformCoins: 0,   // 独立顶层字段，保证响应式追踪
   }),
   // setup() {
   //   const store = useAuthStore();
@@ -27,6 +28,7 @@ export const useAuthStore = defineStore('auth', {
       this.loginTime = Number(localStorage.getItem('auth_loginTime')) || 0;
       this.isUser = localStorage.getItem('auth_isUser') === 'true';
       this.userInfo = JSON.parse(localStorage.getItem('auth_userInfo') || 'null');
+      this.platformCoins = this.userInfo?.platform_coins || 0;
       
       // 检查登录有效期
       if (this.isLoggedIn && this.loginTime) {
@@ -82,6 +84,7 @@ export const useAuthStore = defineStore('auth', {
           this.id = response.data.user.id;
           this.name = response.data.user.username;
           this.userInfo = response.data.user;
+          this.platformCoins = response.data.user.platform_coins || 0;
           this.loginTime = Date.now();
           this.permissions = null; // 用户没有管理权限
 
@@ -233,18 +236,18 @@ export const useAuthStore = defineStore('auth', {
           }
         }) as any;
         
+        console.log('💰 balance API 原始响应:', JSON.stringify(response));
         if (response && response.code === 200 && response.data) {
           const newBalance = response.data.platform_coins;
-          console.log(`✅ 余额更新: ${this.userInfo?.platform_coins} -> ${newBalance}`);
-          
-          // 更新 userInfo 中的余额
+          console.log(`✅ 余额更新: ${this.platformCoins} -> ${newBalance}`);
+          this.platformCoins = newBalance;
           if (this.userInfo) {
-            this.userInfo.platform_coins = newBalance;
+            this.userInfo = { ...this.userInfo, platform_coins: newBalance };
             localStorage.setItem('auth_userInfo', JSON.stringify(this.userInfo));
           }
-          
           return true;
         }
+        console.warn('⚠️ balance API 响应异常，不更新余额:', response?.code, response?.message);
         return false;
       } catch (error) {
         console.error('刷新余额失败:', error);

@@ -591,8 +591,15 @@ const confirmPurchase = async () => {
       tips.success('购买成功！');
       showPurchaseModal.value = false;
       selectedProduct.value = null;
-      // 刷新余额
-      await authStore.refreshBalance();
+      // 直接用服务端返回的新余额更新，无需再调 balance 接口
+      const newBalance = response.data?.new_balance;
+      if (newBalance !== undefined) {
+        authStore.platformCoins = newBalance;
+        if (authStore.userInfo) {
+          authStore.userInfo = { ...authStore.userInfo, platform_coins: newBalance };
+          localStorage.setItem('auth_userInfo', JSON.stringify(authStore.userInfo));
+        }
+      }
     } else {
       // 平台币余额不足的特殊提示
       if (response.code === 400 && response.message && response.message.includes('平台币余额不足')) {

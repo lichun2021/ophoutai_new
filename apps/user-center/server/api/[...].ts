@@ -70,6 +70,7 @@ const withLogging = (handler: Function, apiName: string) => {
           pathname === '/api/client/cdk/servers' ||
           pathname === '/api/client/cdk/redeem' ||
           pathname === '/api/client/servers' ||
+          pathname === '/api/client/balance' ||       // 有自己的 Authorization header 鉴权
           pathname === '/api/payment/cashier-notify' ||
           pathname === '/api/payment/third-party-notify'
         );

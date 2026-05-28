@@ -152,7 +152,7 @@ const mobileMenuOpen = ref(false);
 
 const userDisplayName = computed(() => authStore.userInfo?.username || authStore.name || '用户');
 const userInitial = computed(() => userDisplayName.value.charAt(0).toUpperCase() || 'U');
-const userBalance = computed(() => authStore.userInfo?.platform_coins || 0);
+const userBalance = computed(() => authStore.platformCoins || 0);
 const formatBalance = (v) => Math.floor(Number(v || 0)).toString();
 
 const pageTitles = {
