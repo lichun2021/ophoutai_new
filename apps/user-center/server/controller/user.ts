@@ -1,4 +1,4 @@
-﻿import * as UserModel from '../model/user';
+import * as UserModel from '../model/user';
 import {H3Event, getHeaders, getQuery} from 'h3';
 import { User } from '../model/user';
 import * as AdminModel from '../model/admin';
@@ -1755,8 +1755,32 @@ export const updateSubUserWuid = async(evt: H3Event) => {
 export const register = async(evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("用户注册请求:", body);
         
+        // 🚦 IP 限流：每个 IP 每天最多注册 3 次（Redis 计数 + 次日凌晨过期）
+        try {
+            const headers = getHeaders(evt);
+            const realIp = (headers['ali-cdn-real-ip'] as string)
+                || (headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                || (headers['x-real-ip'] as string)
+                || 'unknown';
+            console.log(`[register] 注册请求来源 IP: ${realIp}, username: ${body?.username}`);
+            
+            const redis = getRedisCluster();
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const ipKey = `reg_ip:${realIp}:${today}`;
+            const count = Number(await redis.get(ipKey) || 0);
+            if (count >= 3) {
+                return { status: 'fail', message: '该IP今日注册次数已达上限，请明日再试' };
+            }
+            // 计数 +1，设置到次日零点过期
+            await redis.incr(ipKey);
+            const expireAt = Math.floor(new Date().setHours(23, 59, 59, 999) / 1000);
+            await redis.expireat(ipKey, expireAt);
+        } catch (redisErr) {
+            console.warn('[register] Redis IP 限流检查失败:', redisErr);
+        }
+        
+
         // 参数验证
         if (!body.username || !body.password) {
             return {

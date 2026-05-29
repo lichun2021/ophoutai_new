@@ -71,6 +71,28 @@
           </div>
         </div>
 
+        <div class="form-field">
+          <label class="field-label">验证码</label>
+          <div class="captcha-row">
+            <div class="input-wrap captcha-input-wrap">
+              <span class="input-icon">🔑</span>
+              <input
+                v-model="formState.captchaInput"
+                class="field-input"
+                placeholder="请输入验证码"
+                maxlength="4"
+                :disabled="loading || !channelValid"
+                style="text-transform: uppercase; letter-spacing: 4px;"
+              />
+            </div>
+            <div class="captcha-img-wrap" @click="fetchCaptcha" title="点击刷新验证码">
+              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" alt="验证码" />
+              <div v-else class="captcha-loading">加载中...</div>
+              <span class="captcha-refresh-hint">🔄 点击刷新</span>
+            </div>
+          </div>
+        </div>
+
         <button type="submit" class="register-btn" :disabled="!isFormValid || loading || channelValidating">
           <span v-if="!loading">注 册</span>
           <span v-else class="loading-dots">
@@ -115,7 +137,8 @@ const router = useRouter();
 const formState = reactive({
   username: '',
   password: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  captchaInput: ''
 });
 
 // URL参数
@@ -135,13 +158,31 @@ const channelValid = ref(true);
 const channelValidating = ref(false);
 const channelError = ref('');
 
+// 验证码状态
+const captchaToken = ref('');
+const captchaImage = ref('');
+
+async function fetchCaptcha() {
+  captchaImage.value = '';
+  formState.captchaInput = '';
+  try {
+    const res = await fetch('/api/user/captcha');
+    const data = await res.json();
+    captchaToken.value = data.token || '';
+    captchaImage.value = data.image || '';
+  } catch {
+    captchaImage.value = '';
+  }
+}
+
 // 表单验证
 const isFormValid = computed(() => {
   return channelValid.value &&
          formState.username.trim() !== '' &&
          formState.password.trim() !== '' &&
          formState.confirmPassword.trim() !== '' &&
-         formState.password === formState.confirmPassword;
+         formState.password === formState.confirmPassword &&
+         formState.captchaInput.trim().length === 4;
 });
 
 // 验证代理账号状态
@@ -208,6 +249,8 @@ onMounted(async () => {
     channelValid.value = false;
     channelError.value = '缺少渠道代码参数';
   }
+  // 初始化验证码
+  fetchCaptcha();
 });
 
 // 处理注册
@@ -240,6 +283,8 @@ const handleRegister = async () => {
       thirdparty_uid: urlParams.thirdparty_uid || `user_${Date.now()}`,
       iphone: '', // 可以从URL参数中获取
       uid: '', // 由后端生成
+      captcha_token: captchaToken.value,
+      captcha_input: formState.captchaInput.trim(),
       ...urlParams.extra_params // 包含其他参数
     };
     
@@ -260,12 +305,9 @@ const handleRegister = async () => {
     if (response.ok && result.status === 'success') {
       showSuccess('注册成功！即将跳转到登录页面...');
     } else {
-      // 处理服务器返回的错误信息
       if (!response.ok) {
-        // HTTP错误状态码，显示服务器返回的错误信息
         showError(result.message || '注册失败，请检查参数是否正确');
       } else if (result.message && result.message.includes('Duplicate')) {
-        // 数据库重复键错误
         if (result.message.includes('username')) {
           showError('用户名已存在，请更换用户名');
         } else if (result.message.includes('thirdparty_uid')) {
@@ -276,6 +318,8 @@ const handleRegister = async () => {
       } else {
         showError(result.message || '注册失败，请稍后重试');
       }
+      // 验证码错误时自动刷新
+      fetchCaptcha();
     }
   } catch (error) {
     console.error('注册错误:', error);
@@ -353,4 +397,33 @@ const handleModalClose = () => {
 .btn-gray { background: var(--surface-container); color: var(--on-surface); }
 .btn-gray:hover { background: var(--surface-container-highest); }
 @media (max-width: 480px) { .register-box { padding: 32px 24px; border-radius: 20px; } }
+
+/* 验证码行 */
+.captcha-row { display: flex; gap: 10px; align-items: stretch; }
+.captcha-input-wrap { flex: 1; }
+.captcha-img-wrap {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  background: var(--surface-container);
+}
+.captcha-img { height: 48px; width: auto; display: block; border-radius: var(--radius-sm); }
+.captcha-loading { height: 48px; width: 110px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--on-surface-variant); }
+.captcha-refresh-hint {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 10px;
+  text-align: center;
+  padding: 2px 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.captcha-img-wrap:hover .captcha-refresh-hint { opacity: 1; }
+
 </style>
