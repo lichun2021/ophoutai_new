@@ -326,7 +326,7 @@ const characterList = ref([]);
 const characterSelectOptions = computed(() =>
   characterList.value.map(char => ({
     value: char.uuid,
-    label: `${char.server_name}-${char.character_name} (Lv.${char.character_level || 1})`,
+    label: `${char.server_name}-${char.uuid}${char.character_name && char.character_name !== char.uuid ? `-${char.character_name}` : ''} (Lv.${char.character_level || 1})`,
     subuser_id: char.subuser_id,
     server_id: char.server_id
   }))

@@ -1028,13 +1028,14 @@ export const getUserCharacters = defineEventHandler(async (event) => {
         const GameCharactersModel = await import('../model/gameCharacters');
         const characters = await GameCharactersModel.findByUserId(user_id);
 
-        // 批量查 gameservers 真实名称（用 server_id 对应，避免 GameCharacters 里存的是旧占位名）
+        // 批量查 gameservers 真实名称（同时尝试 server_id 列和 id 列，兼容两种存储情况）
         const GameServersModel = await import('../model/gameServers');
         const uniqueServerIds = [...new Set(characters.map(c => c.server_id).filter(Boolean))];
         const serverNameMap: Record<number, string> = {};
         await Promise.all(uniqueServerIds.map(async (sid) => {
-            const gs = await GameServersModel.getByServerId(Number(sid));
-            if (gs) serverNameMap[Number(sid)] = gs.name;
+            const n = Number(sid);
+            const gs = (await GameServersModel.getByServerId(n)) || (await GameServersModel.getById(n));
+            if (gs) serverNameMap[n] = gs.name;
         }));
 
         return {
