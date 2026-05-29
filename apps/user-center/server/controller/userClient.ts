@@ -272,6 +272,26 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: '请选择要发放的角色'
             };
         }
+
+        // 🚦 Redis 接口限速：同一用户 5 秒内只能下单一次
+        try {
+            const { getRedisCluster } = await import('../utils/redis-cluster');
+            const redis = getRedisCluster();
+            const rateLimitKey = `purchase_cooldown:${user_id}`;
+            // SET key 1 NX EX 5 —— 只有 key 不存在时才设置成功
+            const acquired = await redis.set(rateLimitKey, '1', 'EX', 5, 'NX');
+            if (!acquired) {
+                const ttl = await redis.ttl(rateLimitKey);
+                return {
+                    code: 429,
+                    message: `操作太频繁，请 ${ttl} 秒后再试`
+                };
+            }
+        } catch (redisErr) {
+            // Redis 异常时不阻断业务，仅记录日志
+            console.warn('[userPurchaseGiftPackage] Redis 限速检查失败:', redisErr);
+        }
+
         
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
