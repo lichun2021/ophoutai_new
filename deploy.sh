@@ -7,6 +7,7 @@
 #   ./deploy.sh agent        # 只部署 agent-admin
 #   ./deploy.sh op           # 只部署 op-admin
 #   ./deploy.sh user agent   # 部署 user-center 和 agent-admin
+#   ./deploy.sh op --install # 部署 op-admin 并在服务器上执行 npm install
 # =====================================================
 
 # ============ 服务器配置（按需修改）============
@@ -52,6 +53,7 @@ START_TIME=$(date +%s)
 DEPLOY_USER=false
 DEPLOY_AGENT=false
 DEPLOY_OP=false
+INSTALL_DEPS=false   # 默认不执行服务器端 npm install
 
 if [ $# -eq 0 ]; then
   # 无参数 → 部署全部
@@ -61,13 +63,15 @@ if [ $# -eq 0 ]; then
 else
   for arg in "$@"; do
     case "$arg" in
-      user)   DEPLOY_USER=true ;;
-      agent)  DEPLOY_AGENT=true ;;
-      op)     DEPLOY_OP=true ;;
+      user)      DEPLOY_USER=true ;;
+      agent)     DEPLOY_AGENT=true ;;
+      op)        DEPLOY_OP=true ;;
+      --install) INSTALL_DEPS=true ;;
       *)
         log_error "未知参数: $arg"
-        echo "用法: $0 [user] [agent] [op]"
+        echo "用法: $0 [user] [agent] [op] [--install]"
         echo "  不传参数 = 部署全部三个"
+        echo "  --install = 解压后在服务器执行 npm install（首次加了新包时用）"
         exit 1
         ;;
     esac
@@ -171,6 +175,35 @@ deploy_app() {
     return 1
   fi
   log_success "解压完成"
+
+  # 安装运行时依赖（Nuxt nitro 打包后 package.json 在 server/ 下）：
+  #   - server/node_modules 不存在时自动安装（首次部署 / 手动清理后）
+  #   - 传入 --install 时强制重装（新增 npm 包时用，如 grammy 这类动态 import 未被打包的）
+  if ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/server/package.json ]"; then
+    NEED_INSTALL=false
+    if [ "$INSTALL_DEPS" = true ]; then
+      NEED_INSTALL=true
+      log_info "[4.5/6] --install 强制重装依赖 (server/)..."
+    elif ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/server/node_modules ]"; then
+      NEED_INSTALL=true
+      log_info "[4.5/6] server/node_modules 不存在，自动安装依赖..."
+    fi
+
+    if [ "$NEED_INSTALL" = true ]; then
+      ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
+        cd $REMOTE_PATH/server &&
+        npm install --omit=dev --ignore-scripts 2>&1 | tail -10 &&
+        npm install grammy --save --ignore-scripts 2>&1 | tail -5
+      "
+      if [ $? -ne 0 ]; then
+        log_warn "npm install 执行异常，请手动检查"
+      else
+        log_success "依赖安装完成"
+      fi
+    fi
+  else
+    log_warn "[4.5/6] 未找到 server/package.json，跳过依赖安装"
+  fi
 
   # --- 步骤6: 重启服务 ---
   log_info "[5/6] 重启 PM2 服务 ($PM2_NAME)..."
