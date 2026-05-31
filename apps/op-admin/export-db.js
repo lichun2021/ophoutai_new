@@ -2,11 +2,12 @@
 /**
  * quantum_db 数据库导出脚本
  * 导出完整结构 + 按规则过滤数据：
- *   - Admins         : 只导出超级管理员 (level = 0)
- *   - Users          : 只导出结构，不导出数据
- *   - 日志类表        : 只导出结构，不导出数据
- *   - 支付记录类表    : 只导出结构，不导出数据
- *   - 其余所有表      : 完整数据
+ *   - Admins               : 完整导出所有管理员
+ *   - Users                : 完整导出所有用户
+ *   - externalgiftpackages : 完整导出礼包设置
+ *   - 日志类表              : 只导出结构，不导出数据
+ *   - 支付记录类表          : 只导出结构，不导出数据
+ *   - 其余所有表            : 完整数据
  *
  * 用法:
  *   node scripts/export-db.js
@@ -39,8 +40,6 @@ const DB_CONFIG = {
  * 表名不区分大小写（统一转小写比较）。
  */
 const NO_DATA_TABLES = new Set([
-    // 用户表
-    'users',
     // 日志类
     'userloginlogs',
     'gmoperationlogs',
@@ -72,7 +71,7 @@ const NO_DATA_TABLES = new Set([
  * value = WHERE 条件字符串
  */
 const PARTIAL_DATA_TABLES = {
-    admins: 'level = 0',   // 只导出超级管理员
+    // 所有表均完整导出，无特殊过滤
 };
 
 // ── 输出文件 ─────────────────────────────────────────────────────────
@@ -129,7 +128,7 @@ async function main() {
     lines.push(`-- 主机: ${DB_CONFIG.host}`);
     lines.push(`-- 过滤规则:`);
     lines.push(`--   不含数据: ${[...NO_DATA_TABLES].join(', ')}`);
-    lines.push(`--   admins 只含超级管理员 (level=0)`);
+    lines.push(`--   admins / users / externalgiftpackages 均完整导出`);
     lines.push(`-- ============================================================`);
     lines.push('');
     lines.push('SET NAMES utf8mb4;');
