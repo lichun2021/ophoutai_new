@@ -658,9 +658,15 @@ export const userLogin = async(evt: H3Event) => {
         const { username, password, ts, sig } = body;
         usernameToLog = username || '';
         
-        // 获取客户端信息
+        // 获取客户端信息（阿里云CDN：Ali-CDN-Real-IP > X-Forwarded-For > X-Real-IP）
         const headers = getHeaders(evt);
-        const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+        const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
+        const xForwardedFor = headers['x-forwarded-for'] as string;
+        const xRealIp = headers['x-real-ip'] as string;
+        const ipAddress = aliCdnRealIp
+            || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
+            || xRealIp
+            || 'unknown';
         const userAgent = (headers['user-agent'] as string) || '';
         
         if (!username) {
@@ -814,7 +820,12 @@ export const userLogin = async(evt: H3Event) => {
         if (!loginSuccess && usernameToLog) {
             try {
                 const headers = getHeaders(evt);
-                const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+                const aliCdnRealIp2 = headers['ali-cdn-real-ip'] as string;
+                const xff2 = headers['x-forwarded-for'] as string;
+                const ipAddress = aliCdnRealIp2
+                    || (xff2 ? xff2.split(',')[0].trim() : '')
+                    || (headers['x-real-ip'] as string)
+                    || 'unknown';
                 const userAgent = (headers['user-agent'] as string) || '';
                 
                 const UserLoginLogsModel = await import('../model/userLoginLogs');

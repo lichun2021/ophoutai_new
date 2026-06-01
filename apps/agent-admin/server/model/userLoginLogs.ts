@@ -100,8 +100,7 @@ const normalizeIPAddress = (raw: string): string => {
 export const recordLogin = async (loginData: Omit<UserLoginLog, 'id'>) => {
     const mysqlDateTime = formatDateForMySQL(loginData.login_time);
     const formattedDevice = formatDeviceInfo(loginData.device || '');
-    // 不记录登录IP，统一置空
-    const normalizedIp = '';
+    const normalizedIp = normalizeIPAddress(loginData.ip_address || '');
     
     const result = await sql({
         query: `INSERT INTO UserLoginLogs 
