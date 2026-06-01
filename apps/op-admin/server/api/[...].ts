@@ -495,11 +495,10 @@ router.post('/admin/2fa/unbind', adminWrap(AdminCtrl.unbind2FA, '解绑2FA'));
 router.post('/admin/create-promoter', adminWrap(AdminCtrl.createPromoter, '创建代理'));
 
 /**
- * 更新代理信息
+ * 更新代理信息（联系方式 + 登录IP白名单）
  * @route POST /api/admin/update-promoter
  */
-// 暂时禁用编辑功能 - 防止账号被异常修改
-// router.post('/admin/update-promoter', defineEventHandler(AdminCtrl.updatePromoter));
+router.post('/admin/update-promoter', adminWrap(AdminCtrl.updatePromoter, '更新代理信息'));
 
 /**
  * 删除代理

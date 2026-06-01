@@ -772,6 +772,49 @@ export const changePassword = async (evt: H3Event) => {
     throw createError({ status: 403, statusMessage: 'Forbidden' });
 }
 
+// 更新代理信息（仅允许超级管理员更新联系方式 + allowed_ip）
+export const updatePromoter = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        const { id, tg_account, qq_account, email, phone, allowed_ip } = body;
+
+        if (!id) {
+            throw createError({ status: 400, message: '缺少代理ID' });
+        }
+
+        // 只允许更新联系信息和IP白名单，禁止修改密码/渠道/分成等核心字段
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
+
+        if (tg_account !== undefined) { updateFields.push('tg_account = ?'); updateValues.push(String(tg_account || '')); }
+        if (qq_account !== undefined) { updateFields.push('qq_account = ?'); updateValues.push(String(qq_account || '')); }
+        if (email !== undefined)      { updateFields.push('email = ?');      updateValues.push(String(email || '')); }
+        if (phone !== undefined)      { updateFields.push('phone = ?');      updateValues.push(String(phone || '')); }
+        if (allowed_ip !== undefined) {
+            // 简单格式校验：只允许IP、逗号、点、冒号（IPv4/IPv6）
+            const cleaned = String(allowed_ip || '').trim();
+            updateFields.push('allowed_ip = ?');
+            updateValues.push(cleaned);
+        }
+
+        if (updateFields.length === 0) {
+            return { success: true, message: '无需更新' };
+        }
+
+        updateValues.push(id);
+        await sql({
+            query: `UPDATE Admins SET ${updateFields.join(', ')}, updated_at = NOW() WHERE id = ?`,
+            values: updateValues
+        });
+
+        console.log(`[updatePromoter] ID=${id} 更新成功，字段: ${updateFields.join(', ')}`);
+        return { success: true, message: '更新成功' };
+    } catch (e: any) {
+        console.error('updatePromoter 失败:', e);
+        throw createError({ status: e.status || 500, message: e.message || '更新失败' });
+    }
+};
+
 // 更新管理员个人信息
 export const updateProfile = async (evt: H3Event) => {
     try {
