@@ -79,7 +79,7 @@ CREATE TABLE `admins` (
   `email` varchar(100) DEFAULT '' COMMENT '邮箱地址,默认空字符串',
   `phone` varchar(100) DEFAULT '' COMMENT '电话号码,默认空字符串',
   `is_active` tinyint(1) DEFAULT '1' COMMENT '是否启用：1=启用,0=禁用,默认1',
-  `google_2fa_secret` VARCHAR(32) DEFAULT NULL COMMENT 'Google 2FA 密钥';"
+  `google_2fa_secret` VARCHAR(32) DEFAULT NULL COMMENT 'Google 2FA 密钥',
   `allowed_channel_codes` json DEFAULT NULL COMMENT '允许访问的渠道代码列表(JSON格式)，空数组表示超级管理员可访问所有数据',
   `allowed_game_ids` json DEFAULT NULL COMMENT '允许访问的游戏ID列表(JSON格式)，空数组表示超级管理员可访问所有游戏',
   PRIMARY KEY (`id`),
@@ -603,6 +603,7 @@ CREATE TABLE `paymentrecords` (
   KEY `idx_role_id` (`role_id`),
   KEY `idx_payment_status` (`payment_status`),
   KEY `idx_created_at` (`created_at`),
+  KEY `idx_status_amount` (`payment_status`,`amount`),
   CONSTRAINT `fk_payment_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='支付记录表，用于存储用户支付相关信息';
 /*!40101 SET character_set_client = @saved_cs_client */;

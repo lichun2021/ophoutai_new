@@ -338,18 +338,6 @@ export const allAmount = async (permissions:any,tranId?:any,start_time?:any,end_
             _sql.values.push(end_time);
         }
         
-        if(payment_status){
-            if(!where){
-                _sql.query += " where ";
-                where = true;
-            }
-            else{
-                _sql.query += " and ";
-            }
-            _sql.query += "pr.payment_status = ?"
-            _sql.values.push(payment_status);
-        }
-
         if(state&&state>0){
             if(!where){
                 _sql.query += " where ";
