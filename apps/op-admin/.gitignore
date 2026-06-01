@@ -22,6 +22,5 @@ node_modules
 .env.*
 !.env.example
 /nuxt
-/部署
 /zips
 nuxt.config.zip

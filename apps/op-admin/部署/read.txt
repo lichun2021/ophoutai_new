@@ -1,0 +1,9 @@
+# 安装日志轮转（推荐）
+
+chmod 755 ecosystem.config.js start-nuxt.sh
+
+chmod 755 -R logs
+
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 100M
+pm2 set pm2-logrotate:retain 10
