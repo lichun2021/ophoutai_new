@@ -902,8 +902,8 @@ ON DUPLICATE KEY UPDATE
 -- 迁移语句（已有生产库执行，新建库忽略）
 -- ==================================================
 -- 给 Admins 表增加 allowed_ip 字段（登录IP白名单）
-ALTER TABLE `Admins`
-  ADD COLUMN IF NOT EXISTS `allowed_ip` varchar(255) DEFAULT '' COMMENT '登录IP白名单，支持逗号分隔多个IP，空则不限制';
+-- 注意：如果字段已存在会报错，忽略即可
+-- ALTER TABLE `admins` ADD COLUMN `allowed_ip` varchar(255) DEFAULT '' COMMENT '登录IP白名单，支持逗号分隔多个IP，空则不限制';
 
 -- 创建管理员登录日志表（如不存在）
 CREATE TABLE IF NOT EXISTS `AdminLoginLogs` (
