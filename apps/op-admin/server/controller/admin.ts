@@ -2362,94 +2362,42 @@ const getUsersCount = async (filters: any, allowedChannelCodes: string[] = []) =
     let whereConditions = [];
     let values: any[] = [];
     
-    // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         whereConditions.push(`channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`);
         values.push(...allowedChannelCodes);
     }
+    if (filters.user_id) { whereConditions.push('id = ?'); values.push(filters.user_id); }
+    if (filters.username) { whereConditions.push('username LIKE ?'); values.push(`%${filters.username}%`); }
+    if (filters.iphone) { whereConditions.push('iphone LIKE ?'); values.push(`%${filters.iphone}%`); }
+    if (filters.thirdparty_uid) { whereConditions.push('thirdparty_uid LIKE ?'); values.push(`%${filters.thirdparty_uid}%`); }
+    if (filters.channel_code) { whereConditions.push('channel_code = ?'); values.push(filters.channel_code); }
+    if (filters.startDate) { whereConditions.push('DATE(created_at) >= ?'); values.push(filters.startDate); }
+    if (filters.endDate) { whereConditions.push('DATE(created_at) <= ?'); values.push(filters.endDate); }
     
-    if (filters.user_id) {
-        whereConditions.push('id = ?');
-        values.push(filters.user_id);
-    }
-    
-    if (filters.username) {
-        whereConditions.push('username LIKE ?');
-        values.push(`%${filters.username}%`);
-    }
-    
-    if (filters.iphone) {
-        whereConditions.push('iphone LIKE ?');
-        values.push(`%${filters.iphone}%`);
-    }
-    
-    if (filters.thirdparty_uid) {
-        whereConditions.push('thirdparty_uid LIKE ?');
-        values.push(`%${filters.thirdparty_uid}%`);
-    }
-    
-    if (filters.channel_code) {
-        whereConditions.push('channel_code = ?');
-        values.push(filters.channel_code);
-    }
-    
-    if (filters.startDate) {
-        whereConditions.push('DATE(created_at) >= ?');
-        values.push(filters.startDate);
-    }
-    
-    if (filters.endDate) {
-        whereConditions.push('DATE(created_at) <= ?');
-        values.push(filters.endDate);
-    }
-    
-    let query = 'SELECT COUNT(*) as total FROM Users';
-    if (whereConditions.length > 0) {
-        query += ' WHERE ' + whereConditions.join(' AND ');
-    }
-    
-    const result = await sql({
-        query: query,
-        values: values,
-    }) as any;
-    
-    return result[0].total;
+    let countQuery = 'SELECT COUNT(*) as total FROM Users';
+    if (whereConditions.length > 0) { countQuery += ' WHERE ' + whereConditions.join(' AND '); }
+    const countResult = await sql({ query: countQuery, values }) as any;
+    return countResult[0].total;
 };
 
 // 获取指定日期范围的用户统计
 const getUserStatsForDateRange = async (startDate?: string, endDate?: string, allowedChannelCodes: string[] = []) => {
     const today = getChinaDateString();
-    
-    // 今日注册统计
     let todayQuery = `SELECT COUNT(*) as today_register_count FROM Users WHERE DATE(created_at) = ?`;
-    let todayValues = [today];
-    
-    // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
+    let todayValues: any[] = [today];
     if (allowedChannelCodes.length > 0) {
         todayQuery += ` AND channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`;
         todayValues.push(...allowedChannelCodes);
     }
+    const todayResult = await sql({ query: todayQuery, values: todayValues }) as any;
     
-    const todayResult = await sql({
-        query: todayQuery,
-        values: todayValues,
-    }) as any;
-    
-    // 总用户数
     let totalQuery = 'SELECT COUNT(*) as total_users FROM Users';
     let totalValues: any[] = [];
-    
-    // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
     if (allowedChannelCodes.length > 0) {
         totalQuery += ` WHERE channel_code IN (${allowedChannelCodes.map(() => '?').join(',')})`;
         totalValues.push(...allowedChannelCodes);
     }
-    
-    const totalResult = await sql({
-        query: totalQuery,
-        values: totalValues,
-    }) as any;
-    
+    const totalResult = await sql({ query: totalQuery, values: totalValues }) as any;
     return {
         today_register_count: todayResult[0].today_register_count,
         total_users: totalResult[0].total_users
@@ -2461,12 +2409,8 @@ const getUserStatsForDateRange = async (startDate?: string, endDate?: string, al
 export const getChannelPaymentStats = async (evt: H3Event) => {
     try {
         const { gatewayParamSets } = await import('../utils/paymentGateways');
-        
-        // 计算最近7天的日期范围
         const endDate = getChinaDateString();
-        const startDate = getChinaDateStringDaysAgo(6); // 包含今天在内的最近7天
-
-        // 查询 SQL：按日期和渠道 ID 分组统计成功订单金额
+        const startDate = getChinaDateStringDaysAgo(6);
         const query = `
             SELECT 
                 DATE(created_at) as stat_date,
@@ -2480,80 +2424,33 @@ export const getChannelPaymentStats = async (evt: H3Event) => {
             GROUP BY stat_date, payment_id
             ORDER BY stat_date DESC, payment_id ASC
         `;
-
-        const statsRows = await sql({
-            query,
-            values: [startDate, endDate]
-        }) as any[];
-
-        // 整理数据格式
+        const statsRows = await sql({ query, values: [startDate, endDate] }) as any[];
         const result: Record<string, any> = {};
-        
-        // 生成最近7天的日期列表作为索引
         const dateList: string[] = [];
-        for (let i = 0; i < 7; i++) {
-            dateList.push(getChinaDateStringDaysAgo(i));
-        }
-
-        // 初始化结果
+        for (let i = 0; i < 7; i++) { dateList.push(getChinaDateStringDaysAgo(i)); }
         statsRows.forEach(row => {
-            const date = row.stat_date instanceof Date
-                ? convertToChinaDateString(row.stat_date)
-                : formatDateToString(row.stat_date);
+            const date = row.stat_date instanceof Date ? convertToChinaDateString(row.stat_date) : formatDateToString(row.stat_date);
             const channelId = String(row.payment_id);
             const channelInfo = gatewayParamSets[channelId] || { name: `渠道${channelId}` };
             const channelName = channelInfo.remark || channelInfo.name || `渠道${channelId}`;
-
-            if (!result[channelId]) {
-                result[channelId] = {
-                    id: channelId,
-                    name: channelName,
-                    totalAmount: 0,
-                    totalCount: 0,
-                    daily: {}
-                };
-            }
-
-            result[channelId].daily[date] = {
-                amount: parseFloat(row.amount || 0).toFixed(2),
-                count: row.count || 0
-            };
+            if (!result[channelId]) { result[channelId] = { id: channelId, name: channelName, totalAmount: 0, totalCount: 0, daily: {} }; }
+            result[channelId].daily[date] = { amount: parseFloat(row.amount || 0).toFixed(2), count: row.count || 0 };
             result[channelId].totalAmount += parseFloat(row.amount || 0);
             result[channelId].totalCount += row.count || 0;
         });
-
-        // 转换为数组并补充缺失日期
         const finalData = Object.values(result).map((channel: any) => {
-            const dailyStats = dateList.map(date => ({
-                date,
-                amount: channel.daily[date]?.amount || '0.00',
-                count: channel.daily[date]?.count || 0
-            }));
-            
-            return {
-                ...channel,
-                totalAmount: channel.totalAmount.toFixed(2),
-                daily: dailyStats
-            };
+            const dailyStats = dateList.map(date => ({ date, amount: channel.daily[date]?.amount || '0.00', count: channel.daily[date]?.count || 0 }));
+            return { ...channel, totalAmount: channel.totalAmount.toFixed(2), daily: dailyStats };
         });
-
-        return {
-            success: true,
-            data: {
-                dates: dateList,
-                channels: finalData
-            }
-        };
+        return { success: true, data: { dates: dateList, channels: finalData } };
     } catch (error: any) {
         console.error('获取渠道统计失败:', error);
-        throw createError({
-            status: 500,
-            message: error.message || '获取统计失败'
-        });
+        throw createError({ status: 500, message: error.message || '获取统计失败' });
     }
 };
 
 export const getPaymentRecords = async(evt:H3Event) => {
+    const _t0 = Date.now();
     try{
         const query = getQuery(evt);
         const page = Number(query.page) || 1;
@@ -2569,7 +2466,9 @@ export const getPaymentRecords = async(evt:H3Event) => {
         
         if (token) {
             try {
+                const _ta = Date.now();
                 const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
+                console.log(`⏱ [payment] getAdminWithPermissions: ${Date.now()-_ta}ms`);
                 
                 if (!adminWithPermissions) {
                     throw createError({
@@ -2617,10 +2516,12 @@ export const getPaymentRecords = async(evt:H3Event) => {
         
         // 如果只需要统计数据
         if (statsOnly) {
+            const _ts = Date.now();
             const [todayStats, queryStats] = await Promise.all([
-                getPaymentStatsForDateRange(filters.startDate, filters.endDate, true, null, allowedChannelCodes), // 今日统计
-                getPaymentStatsForDateRange(filters.startDate, filters.endDate, false, filters, allowedChannelCodes) // 查询统计
+                getPaymentStatsForDateRange(filters.startDate, filters.endDate, true, null, allowedChannelCodes),
+                getPaymentStatsForDateRange(filters.startDate, filters.endDate, false, filters, allowedChannelCodes)
             ]);
+            console.log(`⏱ [payment] statsOnly 并发统计: ${Date.now()-_ts}ms`);
             return {
                 success: true,
                 data: {
@@ -2630,12 +2531,15 @@ export const getPaymentRecords = async(evt:H3Event) => {
             };
         }
         
-        // 获取完整的充值记录数据
+        // 获取完整的充値记录数据
+        const _tq = Date.now();
         const [payments, total, currentQueryStats] = await Promise.all([
             getPaymentRecordsWithFilters(page, pageSize, filters, allowedChannelCodes),
             getPaymentRecordsCount(filters, allowedChannelCodes),
             getCurrentQueryStats(filters, allowedChannelCodes)
         ]);
+        console.log(`⏱ [payment] Promise.all并发总耗时: ${Date.now()-_tq}ms`);
+        console.log(`⏱ [payment] 全请求总耗时: ${Date.now()-_t0}ms  page=${page} filters=${JSON.stringify(filters)}`);
         
         return {
             success: true,
@@ -2651,13 +2555,15 @@ export const getPaymentRecords = async(evt:H3Event) => {
             }
         };
     }catch(e: any){
-        console.error('获取充值记录失败:', e);
+        console.error(`❌ [payment] 失败 总耗时: ${Date.now()-_t0}ms`, e);
         throw createError({
             status: 500,
             message: e.message,
         });
     }
 }
+
+
 
 // 支付方式筛选统一处理（兼容中文名称和代码）
 const applyPaymentMethodFilter = (filters: any, whereConditions: string[], values: any[]) => {
@@ -2925,7 +2831,7 @@ const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[
 
 // 获取当前查询条件下的所有订单统计
 const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] = []) => {
-    console.log('getCurrentQueryStats 参数:', { filters, allowedChannelCodes });
+    const _t = Date.now();
     
     let whereConditions = [];
     let values: any[] = [];
@@ -2944,7 +2850,6 @@ const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] 
     if (filters.user_id) {
         // 清理user_id参数，移除可能的空格和特殊字符
         const cleanUserId = filters.user_id.toString().trim().replace(/^\+/, '');
-        console.log('getCurrentQueryStats 清理后的user_id:', cleanUserId, '原始值:', filters.user_id);
         
         whereConditions.push(`(
             pr.user_id = ? OR 
@@ -3002,14 +2907,12 @@ const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] 
         query += ' WHERE ' + whereConditions.join(' AND ');
     }
     
-    console.log('当前查询统计 SQL:', query);
-    console.log('当前查询统计参数:', values);
-    
     const result = await sql({
         query: query,
         values: values,
     }) as any[];
     
+    console.log(`⏱ [payment] getCurrentQueryStats: ${Date.now()-_t}ms  count=${result[0].count}`);
     return {
         count: result[0].count,
         amount: parseFloat(result[0].amount).toFixed(2)
