@@ -316,6 +316,29 @@ router.post('/admin/login', defineEventHandler(async (event) => {
   }
 
   const result: any = await AdminCtrl.login(event);
+
+  // ===== 记录管理员登录日志（含IP）=====
+  try {
+    const body2 = await readBody(event).catch(() => ({})) as any;
+    const adminName = String(body2?.name || '').trim() || 'unknown';
+    const success = !!(result && result.data);
+    const adminId = success ? (result.data?.id || null) : null;
+    const failReason = success ? '' :
+      (result?.code === 403 ? '未绑定2FA' :
+       result?.code === 401 ? '2FA验证码错误' :
+       result?.code === 202 ? '需要2FA（前端处理）' : '密码错误');
+    const ua = String((headers as any)['user-agent'] || '').substring(0, 255);
+    const { sql: dbSql } = await import('../db');
+    await dbSql({
+      query: `INSERT INTO AdminLoginLogs (admin_name, admin_id, ip_address, user_agent, success, fail_reason, login_time)
+              VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      values: [adminName, adminId, clientIp, ua, success ? 1 : 0, failReason]
+    });
+  } catch (logErr) {
+    console.error('[Admin Login] 写入登录日志失败:', logErr);
+  }
+  // ===== 登录日志结束 =====
+
   try {
     // 登录成功则设置短期会话 Cookie（占位实现，可后续改为真正签名会话）
     const ok = !!(result && result.data);

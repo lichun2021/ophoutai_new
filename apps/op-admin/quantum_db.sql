@@ -896,4 +896,21 @@ ON DUPLICATE KEY UPDATE
   `param_description` = VALUES(`param_description`);
 
 
+-- ==================================================
+-- AdminLoginLogs：管理员/代理登录日志（含IP）
+-- ==================================================
+CREATE TABLE IF NOT EXISTS `AdminLoginLogs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_name` varchar(100) NOT NULL COMMENT '登录账号',
+  `admin_id` int DEFAULT NULL COMMENT '管理员ID（登录失败时可能为NULL）',
+  `ip_address` varchar(45) NOT NULL DEFAULT '' COMMENT '客户端IP',
+  `user_agent` varchar(255) NOT NULL DEFAULT '' COMMENT '浏览器UA',
+  `success` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否登录成功：1=成功，0=失败',
+  `fail_reason` varchar(100) NOT NULL DEFAULT '' COMMENT '失败原因（密码错误/2FA错误/IP拦截等）',
+  `login_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '登录时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_admin_name` (`admin_name`),
+  KEY `idx_login_time` (`login_time`),
+  KEY `idx_ip` (`ip_address`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='管理员登录日志';
 
