@@ -494,9 +494,9 @@ async function notifyGameServer(
  */
 export async function generateUserLoginUrl(userId: number, redirectPath: string = '/user/home'): Promise<string | null> {
     try {
-        // 获取用户信息
+        // 仅校验用户存在；不再从库里取 username/password
         const userResult = await sql({
-            query: 'SELECT username, password FROM Users WHERE id = ?',
+            query: 'SELECT id FROM Users WHERE id = ?',
             values: [userId],
         }) as any[];
 
@@ -505,33 +505,28 @@ export async function generateUserLoginUrl(userId: number, redirectPath: string 
             return null;
         }
 
-        const { username, password } = userResult[0];
+        // 一次性 token 自动登录：
+        //   32 字节随机 token → Redis 存 user_id，TTL 60 秒，NX 保证不冲突
+        //   验证端用 GETDEL 原子取值并立即销毁，做到「用过即焚 + 短时效」
+        const token = crypto.randomBytes(32).toString('hex');
+        try {
+            const redis = getRedisCluster();
+            const ok = await redis.set(`autologin:${token}`, String(userId), 'EX', 60, 'NX');
+            if (!ok) {
+                console.error('autologin token 写 Redis 失败：NX 冲突', { userId });
+                return null;
+            }
+        } catch (redisErr) {
+            console.error('autologin token 写 Redis 异常:', redisErr);
+            return null;
+        }
 
         // 获取系统配置中的登录URL
         const systemConfig = await getSystemConfig();
         const baseLoginUrl = systemConfig.user_login_url;
 
-        // 构建带参数的登录链接
-        // 优先采用签名免密方式，避免明文密码
-        const ts = Math.floor(Date.now() / 1000).toString();
-        const secret = await getSystemParam('user_auto_login_secret', '12w12rdf43r43t564y7');
-        const sig = crypto.createHash('md5').update(`${username}${ts}${secret}`).digest('hex');
-
-        // console.log('生成签名详情:', {
-        //     username,
-        //     ts,
-        //     secret,
-        //     signString: `${username}${ts}${secret}`,
-        //     generatedSig: sig
-        // });
-
-        const loginParams = new URLSearchParams({ username, ts, sig, auto_login: 'true', redirect: redirectPath } as any);
-
-        const fullLoginUrl = `${baseLoginUrl}?${loginParams.toString()}`;
-
-
-
-        return fullLoginUrl;
+        const loginParams = new URLSearchParams({ t: token, auto_login: 'true', redirect: redirectPath } as any);
+        return `${baseLoginUrl}?${loginParams.toString()}`;
     } catch (error) {
         console.error('生成用户登录链接失败:', error);
         return null;

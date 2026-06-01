@@ -46,24 +46,25 @@ export const useAuthStore = defineStore('auth', {
         }
       }
     },
-    async logInUser(username: string, password: string, ts?: string | number, sig?: string) {
+    async logInUser(username: string, password: string, t?: string) {
       try {
         console.log('🚀 开始用户登录请求...');
-        
-        if (!username) {
+
+        // token 自动登录不需要 username/password
+        if (!t && !username) {
           console.log('❌ 用户名为空');
           return false;
         }
-        
-        const body: any = { username };
-        if (sig && ts) {
-          body.ts = ts;
-          body.sig = sig;
+
+        const body: any = {};
+        if (t) {
+          body.t = t;
         } else {
           if (!password) {
-            console.log('❌ 缺少密码或签名');
+            console.log('❌ 缺少密码');
             return false;
           }
+          body.username = username;
           body.password = password;
         }
         const response = await $fetch('/api/user/login', { method: 'POST', body }) as any;

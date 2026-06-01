@@ -71,33 +71,45 @@ const authStore = useAuthStore();
 const tips = useTips();
 
 const isFormValid = computed(() => {
+  // 带一次性 token 时不需要用户名密码
+  const hasToken = typeof route.query.t === 'string' && !!route.query.t;
+  if (hasToken) return true;
   const hasUsername = !!state.username?.trim();
   const hasPwd = !!state.password?.trim();
-  const hasSig = typeof route.query.ts === 'string' && typeof route.query.sig === 'string';
-  return hasUsername && (hasPwd || hasSig);
+  return hasUsername && hasPwd;
 });
 
-const login = async () => {
+const login = async (isAutoLogin = false) => {
   if (loading.value) return;
-  const tsParam = typeof route.query.ts === 'string' ? route.query.ts : undefined;
-  const sigParam = typeof route.query.sig === 'string' ? route.query.sig : undefined;
-  if (!state.username || (!state.password && !(tsParam && sigParam))) {
+  const tParam = typeof route.query.t === 'string' ? route.query.t : undefined;
+  if (!tParam && (!state.username || !state.password)) {
     tips.error('缺少登录凭据');
     return;
   }
   loading.value = true;
   try {
-    const isResult = await authStore.logInUser(state.username, state.password, tsParam, sigParam);
+    const isResult = await authStore.logInUser(state.username, state.password, tParam);
     if (isResult) {
       tips.success('登录成功');
       await new Promise(r => setTimeout(r, 500));
       const redirect = typeof route.query.redirect === 'string' && route.query.redirect ? route.query.redirect : '/user/home';
       await router.push(redirect);
+      return;
+    }
+    // 失败：自动登录场景下不抛错，让玩家在表单里手动输入
+    if (isAutoLogin) {
+      tips.error('登录链接已失效，请手动输入账号密码');
+      await router.replace({ path: route.path });
     } else {
       tips.error('登录失败，用户名或密码错误');
     }
   } catch {
-    tips.error('登录失败，无法连接到服务器');
+    if (isAutoLogin) {
+      tips.error('登录链接已失效，请手动输入账号密码');
+      await router.replace({ path: route.path });
+    } else {
+      tips.error('登录失败，无法连接到服务器');
+    }
   } finally {
     loading.value = false;
   }
@@ -107,9 +119,11 @@ const checkUrlParams = () => {
   const q = route.query;
   if (q.username) state.username = q.username;
   if (q.password) state.password = q.password;
-  if (q.auto_login === 'true' && state.username && (state.password || (q.ts && q.sig))) {
+  // 自动登录触发：要么走 token（推荐），要么用户名+密码全在 URL 里（老兼容路径）
+  const hasToken = typeof q.t === 'string' && !!q.t;
+  if (q.auto_login === 'true' && (hasToken || (state.username && state.password))) {
     tips.success('正在自动登录...');
-    setTimeout(() => { login(); }, 1000);
+    setTimeout(() => { login(true); }, 1000);
   }
 };
 

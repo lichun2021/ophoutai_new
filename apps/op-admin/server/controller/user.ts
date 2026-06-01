@@ -655,7 +655,7 @@ export const userLogin = async (evt: H3Event) => {
         const body = await readBody(evt);
         console.log("用户登录请求:", body);
 
-        const { username, password, ts, sig } = body;
+        const { username, password, t } = body;
         usernameToLog = username || '';
 
         // 获取客户端信息
@@ -663,12 +663,13 @@ export const userLogin = async (evt: H3Event) => {
         const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
         const userAgent = (headers['user-agent'] as string) || '';
 
-        if (!username) {
+        // token 自动登录不需要 username（用 token 反查 user_id）
+        if (!username && !t) {
             console.log("用户登录失败: 用户名为空");
             throw createError({ status: 400, message: '用户名不能为空' });
         }
 
-        console.log("正在查询用户:", username);
+        console.log("正在查询用户:", username || `[autologin token]`);
 
         let user: any[] = [];
         if (password) {
@@ -677,34 +678,29 @@ export const userLogin = async (evt: H3Event) => {
                 query: 'SELECT * FROM Users WHERE username = ? AND password = ?',
                 values: [username, password],
             }) as any[];
-        } else if (sig && ts) {
-            // 签名免密登录：md5(username + ts + secret)
-            const now = Math.floor(Date.now() / 1000);
-            const tsNum = parseInt(String(ts));
-            if (isNaN(tsNum) || Math.abs(now - tsNum) > 300) {
-                throw createError({ status: 401, message: '签名已过期' });
+        } else if (t) {
+            // 一次性 token 免密登录：Redis 原子 GETDEL，token 用过即焚
+            let userIdStr: string | null = null;
+            try {
+                const redis = getRedisCluster();
+                userIdStr = await (redis as any).call('GETDEL', `autologin:${t}`);
+            } catch (redisErr) {
+                console.error('autologin token 校验失败 Redis 异常:', redisErr);
+                throw createError({ status: 500, message: '登录服务暂不可用' });
             }
-            const secret = await getSystemParam('user_auto_login_secret', '12w12rdf43r43t564y7');
-            const expect = crypto.createHash('md5').update(`${username}${tsNum}${secret}`).digest('hex');
-
-            console.log('签名验证详情:', {
-                username,
-                tsNum,
-                secret,
-                expectSig: expect,
-                receivedSig: sig,
-                matched: expect === String(sig)
-            });
-
-            if (expect !== String(sig)) {
-                throw createError({ status: 401, message: '签名无效' });
+            if (!userIdStr) {
+                throw createError({ status: 401, message: '登录链接已失效或已被使用' });
+            }
+            const userIdNum = parseInt(String(userIdStr), 10);
+            if (!Number.isFinite(userIdNum) || userIdNum <= 0) {
+                throw createError({ status: 401, message: '登录链接无效' });
             }
             user = await sql({
-                query: 'SELECT * FROM Users WHERE username = ? LIMIT 1',
-                values: [username],
+                query: 'SELECT * FROM Users WHERE id = ? LIMIT 1',
+                values: [userIdNum],
             }) as any[];
         } else {
-            throw createError({ status: 400, message: '缺少密码或签名' });
+            throw createError({ status: 400, message: '缺少密码或登录 token' });
         }
 
         console.log("数据库查询结果:", user.length > 0 ? "找到用户" : "未找到用户");
