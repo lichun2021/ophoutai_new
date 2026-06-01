@@ -300,6 +300,20 @@
             <UFormGroup label="邮箱">
               <UInput v-model="formState.email" placeholder="请输入邮箱地址" />
             </UFormGroup>
+
+            <!-- 登录IP白名单：仅编辑时显示 -->
+            <UFormGroup v-if="editingPromoter" label="登录IP白名单" class="col-span-2">
+              <UInput
+                v-model="formState.allowed_ip"
+                placeholder="留空=不限制；多个IP用逗号分隔，如：1.2.3.4,5.6.7.8"
+              />
+              <template #help>
+                <div class="text-xs text-gray-500">
+                  • 设置后，该代理只能从指定IP登录后台<br />
+                  • 支持多个IP，逗号分隔。留空则不限制。
+                </div>
+              </template>
+            </UFormGroup>
           </div>
 
           <div class="flex justify-end gap-2 pt-4">
@@ -424,6 +438,7 @@ const formState = ref({
   tg_account: '',
   qq_account: '',
   email: '',
+  allowed_ip: '',
   parent_admin_id: null, // 上级管理员ID
   parent_channel_code: '' // 上级渠道代码
 });
@@ -734,17 +749,25 @@ const viewPromoter = (promoter) => {
   showDetailModal.value = true;
 };
 
-// 编辑代理 - 暂时禁用
+// 编辑代理
 const editPromoter = (promoter) => {
-  alert('编辑功能暂时禁用，请联系系统管理员');
-  return;
-  // editingPromoter.value = promoter;
-  // formState.value = { ...promoter };
-  // // 编辑时，如果需要上级代理，设置为当前代理的上级
-  // if (promoter.level >= 2 && !formState.value.parent_admin_id) {
-  //   formState.value.parent_admin_id = authStore.id;
-  // }
-  // showAddModal.value = true;
+  editingPromoter.value = promoter;
+  formState.value = {
+    ...formState.value,
+    name: promoter.name || '',
+    channel_code: promoter.channel_code || '',
+    level: promoter.level,
+    settlement_type: promoter.settlement_type ?? 0,
+    divide_rate: promoter.divide_rate ?? 0,
+    tg_account: promoter.tg_account || '',
+    qq_account: promoter.qq_account || '',
+    email: promoter.email || '',
+    phone: promoter.phone || '',
+    allowed_ip: promoter.allowed_ip || '',
+    parent_admin_id: promoter.parent_admin_id || null,
+    parent_channel_code: promoter.parent_channel_code || ''
+  };
+  showAddModal.value = true;
 };
 
 // 切换状态
@@ -864,25 +887,24 @@ const savePromoter = async (event) => {
     }
     
     if (editingPromoter.value) {
-      // 编辑现有代理 - 暂时禁用
-      alert('编辑功能暂时禁用，请联系系统管理员');
-      return;
-      // console.log('发送更新代理请求，数据:', formState.value);
-      // const response = await $fetch('/api/admin/update-promoter', {
-      //   method: 'POST',
-      //   body: {
-      //     id: editingPromoter.value.id,
-      //     ...formState.value,
-      //     current_admin_id: authStore.id // 传递当前用户ID用于权限验证
-      //   }
-      // });
-      // 
-      // if (response.success) {
-      //   alert('代理信息更新成功！');
-      // } else {
-      //   alert('更新失败：' + (response.message || '未知错误'));
-      //   return;
-      // }
+      // 编辑现有代理：只允许更新联系方式 + IP白名单
+      const response = await $fetch('/api/admin/update-promoter', {
+        method: 'POST',
+        body: {
+          id: editingPromoter.value.id,
+          tg_account: formState.value.tg_account,
+          qq_account: formState.value.qq_account,
+          email: formState.value.email,
+          phone: formState.value.phone,
+          allowed_ip: formState.value.allowed_ip
+        }
+      });
+      if (response && response.success) {
+        alert('代理信息更新成功！');
+      } else {
+        alert('更新失败：' + (response?.message || '未知错误'));
+        return;
+      }
     } else {
       // 创建新代理
       console.log('发送创建代理请求，数据:', formState.value);
@@ -953,6 +975,7 @@ const closeModal = () => {
     tg_account: '',
     qq_account: '',
     email: '',
+    allowed_ip: '',
     parent_admin_id: null,
     parent_channel_code: ''
   };
