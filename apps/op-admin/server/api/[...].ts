@@ -324,7 +324,8 @@ router.post('/admin/login', defineEventHandler(async (event) => {
     const success = !!(result && result.data);
     const adminId = success ? (result.data?.id || null) : null;
     const failReason = success ? '' :
-      (result?.code === 403 ? '未绑定2FA' :
+      (result?.code === 403 && result?.message?.includes('IP') ? 'IP不在白名单' :
+       result?.code === 403 ? '未绑定2FA' :
        result?.code === 401 ? '2FA验证码错误' :
        result?.code === 202 ? '需要2FA（前端处理）' : '密码错误');
     const ua = String((headers as any)['user-agent'] || '').substring(0, 255);
