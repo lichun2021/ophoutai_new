@@ -186,6 +186,30 @@ export const login = async(evt:H3Event) => {
         console.log("login:", admin ? { id: admin.id, level: admin.level, name: admin.name } : null, name);
 
         if (admin) {
+            // ===== IP 白名单校验 =====
+            // 获取客户端真实IP（阶梯：ali-cdn-real-ip > x-forwarded-for > x-real-ip）
+            const aliCdnIp = getHeader(evt, 'ali-cdn-real-ip') || '';
+            const xffRaw = getHeader(evt, 'x-forwarded-for') || '';
+            const xRealIp = getHeader(evt, 'x-real-ip') || '';
+            let loginIp = aliCdnIp || (xffRaw ? xffRaw.split(',')[0].trim() : '') || xRealIp || 'unknown';
+            if (loginIp.startsWith('::ffff:')) loginIp = loginIp.substring(7);
+
+            const allowedIp = String((admin as any).allowed_ip || '').trim();
+            if (allowedIp) {
+                // 支持逗号分隔多个IP："1.2.3.4,5.6.7.8"
+                const allowedList = allowedIp.split(',').map((s: string) => s.trim()).filter(Boolean);
+                const ipOk = allowedList.some((ip: string) => ip === loginIp);
+                if (!ipOk) {
+                    console.warn(`[Login][IP拦截] 管理员 ${name} 登录IP ${loginIp} 不在白名单 [${allowedList.join(',')}]`);
+                    return {
+                        code: 403,
+                        message: `登录IP不允许，您的IP为 ${loginIp}，请联系超级管理员`,
+                        data: null
+                    };
+                }
+            }
+            // ===== IP 校验结束 =====
+
             // 统一密码规则：md5(md5(password) + salt)
             const SALT = '1a!@#33er4r';
             const inner = crypto.createHash('md5').update(pwd).digest('hex');
