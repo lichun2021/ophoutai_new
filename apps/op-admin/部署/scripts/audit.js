@@ -855,7 +855,98 @@ async function paymentSlowCheck() {
 }
 
 // =================================================================
-// 命令 8: db-status  数据库全局状态查看
+// 命令 8: login-ip-check  登录IP分析（检查是否异常）
+// =================================================================
+async function loginIpCheck() {
+    const targetUsername = args.username;
+    if (!targetUsername) {
+        logError('请指定 --username=NAME，例如: --username=ao1shib123');
+        return;
+    }
+    const days = DAYS;
+    logInfo(`分析用户 [${targetUsername}] 最近 ${days} 天的登录IP`);
+
+    // 1. 查用户基本信息
+    const userRows = await q('SELECT id, username, channel_code, status, created_at FROM Users WHERE username = ? LIMIT 1', [targetUsername]);
+    if (userRows.length === 0) {
+        logError(`用户 ${targetUsername} 不存在`);
+        return;
+    }
+    const u = userRows[0];
+    console.log('');
+    console.log('===== 用户基本信息 =====');
+    console.table([{ id: u.id, username: u.username, channel: u.channel_code, status: u.status === 1 ? '封号' : '正常', created_at: u.created_at }]);
+
+    // 2. 拉登录日志
+    const logs = await q(`
+        SELECT login_time, ip_address, device, imei, game_code, channel_code
+        FROM UserLoginLogs
+        WHERE username = ? AND login_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+        ORDER BY login_time DESC
+        LIMIT 500
+    `, [targetUsername, days]);
+
+    if (logs.length === 0) {
+        console.log('  （该用户在此时间范围内无登录记录）');
+        return;
+    }
+
+    // 3. 按IP汇总
+    const ipMap = new Map();
+    for (const row of logs) {
+        const ip = row.ip_address || '(空)';
+        if (!ipMap.has(ip)) {
+            ipMap.set(ip, { ip, count: 0, first: row.login_time, last: row.login_time, devices: new Set() });
+        }
+        const entry = ipMap.get(ip);
+        entry.count++;
+        if (row.login_time < entry.first) entry.first = row.login_time;
+        if (row.login_time > entry.last) entry.last = row.login_time;
+        if (row.device) entry.devices.add(row.device);
+    }
+
+    const ipSummary = Array.from(ipMap.values()).sort((a, b) => b.count - a.count).map(e => ({
+        ip: e.ip,
+        次数: e.count,
+        设备数: e.devices.size,
+        首次: e.first,
+        最近: e.last,
+        异常: e.count > 50 ? '🔴 高频' : (ipMap.size > 10 && e.count < 3) ? '🟡 低频/异地' : '✅ 正常',
+    }));
+
+    console.log('');
+    console.log(`===== IP 汇总（共 ${ipMap.size} 个独立IP，${logs.length} 次登录） =====`);
+    console.table(ipSummary);
+
+    // 4. 异常提示
+    const highFreqIps = ipSummary.filter(e => e.次数 > 50);
+    const suspiciousIps = ipSummary.filter(e => ipMap.size > 10 && e.次数 < 3);
+    if (highFreqIps.length > 0) {
+        console.log(`\n  🔴 高频IP（>50次）: ${highFreqIps.map(e => e.ip).join(', ')}`);
+        console.log('     可能是脚本/机器人 或 长期固定IP（正常用户）');
+    }
+    if (ipMap.size > 10) {
+        console.log(`\n  🟡 该账号使用了 ${ipMap.size} 个不同IP，IP数量偏多，建议排查是否被共享/盗号`);
+    }
+    if (ipMap.size === 1) {
+        console.log(`\n  ✅ 该账号始终使用同一IP，非常正常`);
+    }
+    if (ipMap.size <= 3) {
+        console.log(`\n  ✅ IP数量少（${ipMap.size}个），属正常范围`);
+    }
+
+    // 5. 原始明细（最近50条）
+    const detail = logs.slice(0, 50).map(r => ({
+        time: r.login_time,
+        ip: r.ip_address || '(空)',
+        device: (r.device || '').substring(0, 30),
+        imei: r.imei || '',
+    }));
+    output('最近 50 条登录明细', detail);
+}
+
+// =================================================================
+// 命令 9: db-status  数据库全局状态查看
 // =================================================================
 async function dbStatus() {
     logInfo('查询数据库运行状态');
@@ -989,6 +1080,7 @@ clean-failed-orders 参数:
   node scripts/audit.js balance-check --user=12345
   node scripts/audit.js balance-check --threshold=1
   node scripts/audit.js user-trace --username=alice --days=30
+  node scripts/audit.js login-ip-check --username=ao1shib123 --days=90
   node scripts/audit.js item-mail-check --item=10001 --days=90
   node scripts/audit.js clean-failed-orders
   node scripts/audit.js clean-failed-orders --confirm
@@ -1012,6 +1104,9 @@ async function main() {
                 break;
             case 'user-trace':
                 await userTrace();
+                break;
+            case 'login-ip-check':
+                await loginIpCheck();
                 break;
             case 'item-mail-check':
                 await itemMailCheck();
