@@ -369,6 +369,54 @@ export const paymentNewReps = async (evt: H3Event) => {
 
         console.log('📝 [支付方式判断] 最终确定的支付方式:', paymentWay);
 
+        // ============================================================
+        // 🛡️ 服务端金额安全校验（不能只靠前端输入框验证）
+        // ============================================================
+        const requestedAmount = parseFloat(String(body.price || 0));
+
+        // 1. 基础合法性：必须是正数、不得超过绝对上限
+        const ABSOLUTE_MAX = 100000; // 任何渠道都不允许超过 10 万
+        if (isNaN(requestedAmount) || requestedAmount <= 0) {
+            throw createError({ status: 400, message: '金额无效' });
+        }
+        if (requestedAmount > ABSOLUTE_MAX) {
+            console.error(`🚨 [金额异常] 请求金额 ${requestedAmount} 超过绝对上限 ${ABSOLUTE_MAX}`, { uid: body.uid, ip: body.ip });
+            throw createError({ status: 400, message: `充值金额不得超过 ${ABSOLUTE_MAX}` });
+        }
+
+        // 2. 根据支付方式读取 PaymentSettings 配置，校验 MinPrice / MaxPrice
+        if (body.payment_method && body.payment_method !== 'kf') {
+            try {
+                const settingsList = await paymentsetting.read() as any[];
+                // 匹配对应支付方式（payment_method 字段）
+                const setting = settingsList.find((s: any) =>
+                    s.payment_method === body.payment_method ||
+                    s.payment_channel === body.payment_method
+                );
+                if (setting) {
+                    const minPrice = Number(setting.MinPrice ?? 0);
+                    const maxPrice = Number(setting.MaxPrice ?? ABSOLUTE_MAX);
+                    if (requestedAmount < minPrice) {
+                        console.warn(`⚠️ [金额过小] amount=${requestedAmount} < MinPrice=${minPrice}`, { method: body.payment_method });
+                        throw createError({ status: 400, message: `最小充值金额为 ${minPrice}` });
+                    }
+                    if (maxPrice > 0 && requestedAmount > maxPrice) {
+                        console.error(`🚨 [金额超限] amount=${requestedAmount} > MaxPrice=${maxPrice}  uid=${body.uid} ip=${body.ip}`, { method: body.payment_method });
+                        throw createError({ status: 400, message: `最大充值金额为 ${maxPrice}` });
+                    }
+                    console.log(`✅ [金额校验通过] amount=${requestedAmount} 在 [${minPrice}, ${maxPrice}] 范围内`);
+                } else {
+                    console.warn(`⚠️ [金额校验] 未找到支付方式 ${body.payment_method} 的配置，跳过 MinPrice/MaxPrice 校验`);
+                }
+            } catch (e: any) {
+                // 若是我们主动抛出的 400 错误，继续往上抛
+                if (e.statusCode === 400) throw e;
+                // 查配置失败不阻断支付，仅记录日志
+                console.error('⚠️ [金额校验] 读取 PaymentSettings 失败，跳过校验:', e.message);
+            }
+        }
+        // ============================================================
+
         // 预先获取渠道ID
         const { channelId: sdkChannelId } = await selectProviderBySystemParam(body.price || 0, body.payment_method, newTransactionId);
 
@@ -384,7 +432,7 @@ export const paymentNewReps = async (evt: H3Event) => {
             product_name: body.descname || '',
             product_des: '',
             ip: body.ip || '',
-            amount: body.price || 0,
+            amount: requestedAmount,   // 使用校验后的金额，不直接用 body.price
             mch_order_id: newTransactionId,//不能为空 数据库会报错
             msg: '',
             server_url: body.server_url || '',
@@ -396,6 +444,7 @@ export const paymentNewReps = async (evt: H3Event) => {
 
         await PaymentModel.insert(insertRecord);
         console.log(`支付记录已插入: ${newTransactionId}, 渠道ID: ${sdkChannelId}`);
+
 
         return {
             code: 200,
@@ -514,9 +563,9 @@ async function notifyGameServer(
  */
 export async function generateUserLoginUrl(userId: number, redirectPath: string = '/user/home'): Promise<string | null> {
     try {
-        // 获取用户信息
+        // 仅校验用户存在；不再从库里取 username/password
         const userResult = await sql({
-            query: 'SELECT username, password FROM Users WHERE id = ?',
+            query: 'SELECT id FROM Users WHERE id = ?',
             values: [userId],
         }) as any[];
 
@@ -525,33 +574,28 @@ export async function generateUserLoginUrl(userId: number, redirectPath: string 
             return null;
         }
 
-        const { username, password } = userResult[0];
+        // 一次性 token 自动登录：
+        //   32 字节随机 token → Redis 存 user_id，TTL 60 秒，NX 保证不冲突
+        //   验证端用 GETDEL 原子取值并立即销毁，做到「用过即焚 + 短时效」
+        const token = crypto.randomBytes(32).toString('hex');
+        try {
+            const redis = getRedisCluster();
+            const ok = await redis.set(`autologin:${token}`, String(userId), 'EX', 60, 'NX');
+            if (!ok) {
+                console.error('autologin token 写 Redis 失败：NX 冲突', { userId });
+                return null;
+            }
+        } catch (redisErr) {
+            console.error('autologin token 写 Redis 异常:', redisErr);
+            return null;
+        }
 
         // 获取系统配置中的登录URL
         const systemConfig = await getSystemConfig();
         const baseLoginUrl = systemConfig.user_login_url;
 
-        // 构建带参数的登录链接
-        // 优先采用签名免密方式，避免明文密码
-        const ts = Math.floor(Date.now() / 1000).toString();
-        const secret = await getSystemParam('user_auto_login_secret', '12w12rdf43r43t564y7');
-        const sig = crypto.createHash('md5').update(`${username}${ts}${secret}`).digest('hex');
-
-        // console.log('生成签名详情:', {
-        //     username,
-        //     ts,
-        //     secret,
-        //     signString: `${username}${ts}${secret}`,
-        //     generatedSig: sig
-        // });
-
-        const loginParams = new URLSearchParams({ username, ts, sig, auto_login: 'true', redirect: redirectPath } as any);
-
-        const fullLoginUrl = `${baseLoginUrl}?${loginParams.toString()}`;
-
-
-
-        return fullLoginUrl;
+        const loginParams = new URLSearchParams({ t: token, auto_login: 'true', redirect: redirectPath } as any);
+        return `${baseLoginUrl}?${loginParams.toString()}`;
     } catch (error) {
         console.error('生成用户登录链接失败:', error);
         return null;
