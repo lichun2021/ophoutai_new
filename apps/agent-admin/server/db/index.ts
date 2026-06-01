@@ -28,7 +28,12 @@ const pool = mysql.createPool({
   
   waitForConnections: true,
   connectionLimit: dbConfig.connectionLimit,
-  queueLimit: dbConfig.queueLimit
+  queueLimit: dbConfig.queueLimit,
+
+  // READ COMMITTED: 消除 next-key lock（间隙锁），减少锁等待
+  sessionVariables: {
+    transaction_isolation: 'READ-COMMITTED',
+  },
 });
 
 pool.on('enqueue', () => {

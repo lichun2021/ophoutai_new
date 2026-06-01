@@ -28,7 +28,14 @@ const pool = mysql.createPool({
 
   waitForConnections: true,
   connectionLimit: dbConfig.connectionLimit,
-  queueLimit: dbConfig.queueLimit
+  queueLimit: dbConfig.queueLimit,
+
+  // READ COMMITTED: 消除 next-key lock（间隙锁），避免 SELECT 与 UPDATE 互相等待
+  // 默认 REPEATABLE READ 会对 ORDER BY / LIMIT 查询加 gap lock，与支付回调 UPDATE 冲突
+  // 导致 Innodb_row_lock_waits 堆积（当前已达 68943 次，平均等待 5.5s）
+  sessionVariables: {
+    transaction_isolation: 'READ-COMMITTED',
+  },
 });
 
 pool.on('enqueue', () => {
