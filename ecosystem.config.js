@@ -28,8 +28,9 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3001,
         DB_CONNECTION_LIMIT: '200',
+        DB_PASSWORD: 'Tz9#mQ!kR8@vX2$pN5&jL',
         BASE_URL: 'https://user.yourdomain.com',
-        API_SIGN_KEY: 'user_sign_key_change_me'
+        API_SIGN_KEY: 'fasdjhkfh2348!@#$!617'
       }
     },
     {
@@ -43,8 +44,9 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3002,
         DB_CONNECTION_LIMIT: '200',
+        DB_PASSWORD: 'Tz9#mQ!kR8@vX2$pN5&jL',
         BASE_URL: 'https://agent.yourdomain.com',
-        API_SIGN_KEY: 'agent_sign_key_change_me',
+        API_SIGN_KEY: 'fasdjhkfh2348!@#$!617',
         ADMIN_LOGIN_IP_WHITELIST: '*'
       }
     },
@@ -59,8 +61,9 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3003,
         DB_CONNECTION_LIMIT: '200',
+        DB_PASSWORD: 'Tz9#mQ!kR8@vX2$pN5&jL',
         BASE_URL: 'https://op.yourdomain.com',
-        API_SIGN_KEY: 'op_sign_key_change_me',
+        API_SIGN_KEY: 'fasdjhkfh2348!@#$!617',
         ADMIN_LOGIN_IP_WHITELIST: '*'
       }
     }
