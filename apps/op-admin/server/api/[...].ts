@@ -169,6 +169,51 @@ const adminWrap = (handler: Function, apiName: string) => {
         }
       } catch { }
     }
+    // 🔐 IP 白名单二次校验（登录态下同样受限，防止 Cookie 被盗后从任意 IP 操作）
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const cfgPaths = [
+        path.join(process.cwd(), 'server/config/security.json'),
+        '/data/config/security.json',
+        path.join(process.cwd(), 'config/security.json'),
+        process.env.SECURITY_CONFIG_PATH || ''
+      ];
+      let whitelist = '*';
+      for (const p of cfgPaths) {
+        if (p && fs.existsSync(p)) {
+          const cfg = JSON.parse(fs.readFileSync(p, 'utf-8'));
+          whitelist = String(cfg.adminLoginIpWhitelist || '*').trim();
+          break;
+        }
+      }
+      if (whitelist !== '*') {
+        const hdrs = getHeaders(event);
+        let clientIp = (
+          (hdrs['x-forwarded-for'] as string || '').split(',')[0].trim() ||
+          (hdrs['cf-connecting-ip'] as string || '').trim() ||
+          (hdrs['x-real-ip'] as string || '').trim() ||
+          event.node.req.socket?.remoteAddress || 'unknown'
+        ).replace(/^::ffff:/, '');
+        const allowed = whitelist.split(',').map((s: string) => s.trim()).filter(Boolean);
+        const ok = allowed.some((ip: string) => {
+          if (ip.includes('/')) {
+            const [net, bits] = ip.split('/');
+            const prefix = net.split('.').slice(0, Math.ceil(parseInt(bits) / 8)).join('.');
+            return clientIp.startsWith(prefix);
+          }
+          return clientIp === ip;
+        });
+        if (!ok) {
+          console.warn(`[AdminWrap] IP 白名单拦截: ${clientIp}, 路由: ${getRequestURL(event).pathname}`);
+          throw createError({ statusCode: 403, statusMessage: 'IP not allowed' });
+        }
+      }
+    } catch (ipErr: any) {
+      if (ipErr?.statusCode === 403) throw ipErr;
+      // 读取配置失败不阻断请求（保持可用性优先）
+    }
+
     try {
       // 🔐 身份加固：强制清理可能存在的伪造 Header，确保 authorization 仅来自经过验证的 Session
       delete event.node.req.headers['authorization'];
