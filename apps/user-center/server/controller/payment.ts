@@ -301,7 +301,8 @@ export const paymentNewReps = async (evt: H3Event) => {
         }
 
         // 记录不存在或没有 transactionId，执行插入
-        const newTransactionId = body.transactionId || `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // ⭐ 使用 crypto.randomUUID() 保证全局唯一，彻底避免 Math.random 的理论重复风险
+        const newTransactionId = body.transactionId || `tx_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
         // 通过 body.uid 查找 SubUsers 表获取真正的 user_id 和 sub_user_id
         let realUserId = null;

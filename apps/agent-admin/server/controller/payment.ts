@@ -2159,7 +2159,7 @@ export const doPayment = async (evt: H3Event) => {
         } else if (paymentMethod === 'ptb') {
             // 平台币支付 - 检查订单是否存在，存在则更新并扣款，不存在则插入并扣款
             const amountNum = parseFloat(String(resolvedPrice));
-            const transactionId = `ptb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const transactionId = `ptb_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
             const resolvedWorldIdSource = giftOrderContext?.serverId ?? serverId;
             const parsedWorldId = resolvedWorldIdSource ? parseInt(String(resolvedWorldIdSource), 10) : 1;
             const safeWorldId = Number.isNaN(parsedWorldId) ? 1 : parsedWorldId;

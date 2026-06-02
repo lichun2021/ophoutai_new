@@ -301,7 +301,8 @@ export const paymentNewReps = async (evt: H3Event) => {
         }
 
         // 记录不存在或没有 transactionId，执行插入
-        const newTransactionId = body.transactionId || `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // ⭐ 使用 crypto.randomUUID() 保证全局唯一，彻底避免 Math.random 的理论重复风险
+        const newTransactionId = body.transactionId || `tx_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
         // 通过 body.uid 查找 SubUsers 表获取真正的 user_id 和 sub_user_id
         let realUserId = null;
@@ -2131,7 +2132,7 @@ export const doPayment = async (evt: H3Event) => {
         } else if (paymentMethod === 'ptb') {
             // 平台币支付 - 检查订单是否存在，存在则更新并扣款，不存在则插入并扣款
             const amountNum = parseFloat(String(resolvedPrice));
-            const transactionId = `ptb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const transactionId = `ptb_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
             const resolvedWorldIdSource = giftOrderContext?.serverId ?? serverId;
             const parsedWorldId = resolvedWorldIdSource ? parseInt(String(resolvedWorldIdSource), 10) : 1;
             const safeWorldId = Number.isNaN(parsedWorldId) ? 1 : parsedWorldId;
@@ -2259,7 +2260,7 @@ export const doPayment = async (evt: H3Event) => {
         } else if (paymentMethod === 'zfb') {
             // 支付宝支付
             const amountNum = parseFloat(String(resolvedPrice));
-            const transactionId = `zfb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const transactionId = `zfb_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
             // // 如果有 attachInfo，先检查订单是否存在
             // if (safeAttach) {
@@ -2382,7 +2383,7 @@ export const doPayment = async (evt: H3Event) => {
 
             // 记录不存在，执行插入
             // 生成商户订单号
-            const mchOrderId = orderId || `zfb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const mchOrderId = orderId || `zfb_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
             // 预先获取渠道ID
             const { channelId: zfbChannelId } = await selectProviderBySystemParam(amountNum, 'zfb', transactionId);
@@ -2508,7 +2509,7 @@ export const doPayment = async (evt: H3Event) => {
         } else if (paymentMethod === 'wx') {
             // 微信支付
             const amountNum = parseFloat(price);
-            const transactionId = `wx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const transactionId = `wx_${Date.now()}_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
             // 如果有 attachInfo，先检查订单是否存在
             // if (safeAttach) {
