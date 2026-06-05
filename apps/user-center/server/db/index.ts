@@ -31,6 +31,13 @@ const pool = mysql.createPool({
   queueLimit: dbConfig.queueLimit
 });
 
+// READ COMMITTED: 消除 next-key lock（间隙锁），避免 SELECT 与 UPDATE 互相等待
+pool.on('connection', (connection) => {
+  connection.query("SET SESSION transaction_isolation='READ-COMMITTED'", (err) => {
+    if (err) console.error('[DB] 设置 READ-COMMITTED 失败:', err);
+  });
+});
+
 pool.on('enqueue', () => {
   console.error('Database connection error:');
 });
