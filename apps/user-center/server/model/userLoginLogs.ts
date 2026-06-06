@@ -167,9 +167,12 @@ export const getLoginLogs = async (page: number = 1, pageSize: number = 20, filt
         values.push(`%${filters.channel_code}%`);
     }
     
+    // 默认只展示最近 3 天，未指定 startDate 时自动补充下界
     if (filters?.startDate) {
         whereConditions.push('login_time >= ?');
         values.push(filters.startDate);
+    } else {
+        whereConditions.push('login_time >= DATE_SUB(NOW(), INTERVAL 3 DAY)');
     }
     
     if (filters?.endDate) {
@@ -237,9 +240,12 @@ export const getLoginLogsCount = async (filters?: {
         values.push(`%${filters.channel_code}%`);
     }
     
+    // 默认只展示最近 3 天，未指定 startDate 时自动补充下界
     if (filters?.startDate) {
         whereConditions.push('login_time >= ?');
         values.push(filters.startDate);
+    } else {
+        whereConditions.push('login_time >= DATE_SUB(NOW(), INTERVAL 3 DAY)');
     }
     
     if (filters?.endDate) {
