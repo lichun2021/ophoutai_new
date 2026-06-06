@@ -291,13 +291,14 @@ export const createPurchaseRecord = async (record: Omit<GiftPackagePurchaseRecor
     return result;
 };
 
-// 获取用户购买记录
+// 获取用户购买记录（只显示最近3天）
 export const getUserPurchaseRecords = async (thirdparty_uid: string, page = 1, pageSize = 10) => {
     const offset = (page - 1) * pageSize;
 
     const records = await sql({
         query: `SELECT * FROM giftpackagepurchaserecords 
                 WHERE thirdparty_uid = ? 
+                AND created_at >= DATE_SUB(NOW(), INTERVAL 3 DAY)
                 ORDER BY created_at DESC 
                 LIMIT ?, ?`,
         values: [thirdparty_uid, offset, pageSize],
@@ -306,10 +307,10 @@ export const getUserPurchaseRecords = async (thirdparty_uid: string, page = 1, p
     return records;
 };
 
-// 获取用户购买记录总数
+// 获取用户购买记录总数（只统计最近3天）
 export const getUserPurchaseRecordsCount = async (thirdparty_uid: string) => {
     const result = await sql({
-        query: 'SELECT COUNT(*) as total FROM giftpackagepurchaserecords WHERE thirdparty_uid = ?',
+        query: 'SELECT COUNT(*) as total FROM giftpackagepurchaserecords WHERE thirdparty_uid = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 3 DAY)',
         values: [thirdparty_uid],
     }) as any[];
 

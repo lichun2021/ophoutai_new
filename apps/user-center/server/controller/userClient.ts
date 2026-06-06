@@ -680,22 +680,25 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
         const offset = (page - 1) * pageSize;
 
         // 从PaymentRecords表获取真实充值记录（排除平台币消费，关联 GameCharacters 表获取角色名字）
+        // 只展示最近 3 天的记录
         const records = await sql({
             query: `SELECT pr.*, gc.character_name as role_name
                    FROM paymentrecords pr
                    LEFT JOIN gamecharacters gc ON pr.role_id = gc.uuid
                    WHERE pr.user_id = ? AND pr.payment_status = 3
                    AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
+                   AND pr.created_at >= DATE_SUB(NOW(), INTERVAL 3 DAY)
                    ORDER BY pr.created_at DESC 
                    LIMIT ?, ?`,
             values: [user_id, offset, pageSize],
         });
 
-        // 获取总数
+        // 获取总数（只统计最近 3 天）
         const countResult = await sql({
             query: `SELECT COUNT(*) as total FROM paymentrecords 
                    WHERE user_id = ? AND payment_status = 3
-                   AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
+                   AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')
+                   AND created_at >= DATE_SUB(NOW(), INTERVAL 3 DAY)`,
             values: [user_id],
         }) as any[];
 
@@ -1084,12 +1087,17 @@ export const getPlayerGiftPackageRecords = defineEventHandler(async (event) => {
             };
         }
 
-        // 获取礼包购买记录
+        // 获取礼包购买记录（用户端强制限制最近 3 天，忽略前端传入的 startDate 早于3天前的情况）
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        const minStartDate = threeDaysAgo.toISOString().split('T')[0];
+        const effectiveStartDate = startDate && startDate > minStartDate ? startDate : minStartDate;
+
         const records = await ExternalGiftPackageModel.getPlayerGiftPackageRecords(
             user_id,
             page,
             pageSize,
-            startDate,
+            effectiveStartDate,
             endDate,
             packageType
         );
@@ -1097,7 +1105,7 @@ export const getPlayerGiftPackageRecords = defineEventHandler(async (event) => {
         // 获取总数
         const total = await ExternalGiftPackageModel.getPlayerGiftPackageRecordsCount(
             user_id,
-            startDate,
+            effectiveStartDate,
             endDate,
             packageType
         );

@@ -1,4 +1,4 @@
-﻿import {sql} from '../db';
+import {sql} from '../db';
 
 export type Payment = {
     id?: number;
@@ -49,7 +49,7 @@ export const detailByMchOrderId = async (mch_order_id: string) => {
 
 export const detailByUserId = async (user_id: any) => {
     const paymentdata = await sql({
-        query: 'SELECT * FROM paymentrecords WHERE user_id = ?',
+        query: 'SELECT * FROM paymentrecords WHERE user_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) ORDER BY created_at DESC',
         values: [user_id],
     }) as any;
     return  paymentdata as Payment[];
