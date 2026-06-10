@@ -4,6 +4,45 @@ import * as CDKModel from '../model/cdk';
 import { getChinaTime } from '../utils/timezone';
 import { IdipClient } from './gmport';
 import { getByIdentifier as getGameServerByIdentifier } from '../model/gameServers';
+import { getRedisCluster } from '../utils/redis-cluster';
+
+// ===== Redis 分布式锁 =====
+// 防止同一玩家并发重复提交同一个 CDK 码
+// TTL: 30 秒（足够一次发奖流程完成）
+const CDK_LOCK_TTL = 30;
+
+/**
+ * 尝试获取 CDK 兑换分布式锁
+ * 使用 SET NX EX 原子命令：
+ *   - 成功（key 不存在）→ 返回 lockValue
+ *   - 失败（key 已存在）→ 返回 null（并发重复请求）
+ * Redis 不可用时降级，返回 'fallback'，依赖 DB 唯一索引兜底
+ */
+const acquireCdkLock = async (lockKey: string): Promise<string | null> => {
+  try {
+    const redis = getRedisCluster();
+    const lockValue = `${Date.now()}_${Math.random()}`;
+    const result = await (redis as any).set(lockKey, lockValue, 'EX', CDK_LOCK_TTL, 'NX');
+    return result === 'OK' ? lockValue : null;
+  } catch (e) {
+    console.warn('[CDK][lock] Redis 不可用，降级到 DB 唯一索引兜底:', e);
+    return 'fallback';
+  }
+};
+
+/**
+ * 释放锁（Lua 原子比较并删除，防止误删其他请求的锁）
+ */
+const releaseCdkLock = async (lockKey: string, lockValue: string): Promise<void> => {
+  if (lockValue === 'fallback') return;
+  try {
+    const redis = getRedisCluster();
+    const script = `if redis.call("get",KEYS[1]) == ARGV[1] then return redis.call("del",KEYS[1]) else return 0 end`;
+    await (redis as any).eval(script, 1, lockKey, lockValue);
+  } catch (e) {
+    console.warn('[CDK][lock] 释放锁失败（可等待自然过期）:', e);
+  }
+};
 
 // 按区服动态创建 IdipClient（优先使用 GameServers.webhost）
 const createIdipClientForServer = async (identifier: string): Promise<IdipClient> => {
@@ -159,22 +198,32 @@ export const redeem = async (evt: H3Event) => {
         return { code: 400, message: '未配置 data 类型' };
       }
 
-      // 幂等（按码）：仅当同一玩家在同一日期码已领取时拦截
       const typeId = (cdkType as any).id as number;
-      const alreadyToday = await CDKModel.hasRedeemedByTypeAndCode(playerId, typeId, String(todayCode));
-      if (alreadyToday) {
+
+      // ===== 【防并发】Redis 分布式锁 =====
+      // lockKey = playerId + 实际提交的 code（今日日期码）
+      const lockKey = `cdk:lock:${playerId}:code:${todayCode}`;
+      const lockValue = await acquireCdkLock(lockKey);
+      if (lockValue === null) {
+        console.warn(`[CDK][redeem][data] 并发拦截 playerId=${playerId} todayCode=${todayCode}`);
         return { code: 400, message: '今日已领取，无法重复领取' };
       }
 
-      // 查询玩家信息
-      const player = await getPlayerInfo(serverCfg.bname, playerId);
-      if (!player) {
-        return { code: 404, message: '未找到玩家信息' };
-      }
-      const platform = player.platform;
-
-      // 发放物资
       try {
+        // 锁内二次 DB 检查（幂等）
+        const alreadyToday = await CDKModel.hasRedeemedByTypeAndCode(playerId, typeId, String(todayCode));
+        if (alreadyToday) {
+          return { code: 400, message: '今日已领取，无法重复领取' };
+        }
+
+        // 查询玩家信息
+        const player = await getPlayerInfo(serverCfg.bname, playerId);
+        if (!player) {
+          return { code: 404, message: '未找到玩家信息' };
+        }
+        const platform = player.platform;
+
+        // 发放物资
         const idipClient = await createIdipClientForServer(String(server));
         const partition = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
         let platId: 1 | 2 = 1;
@@ -183,31 +232,35 @@ export const redeem = async (evt: H3Event) => {
         } else {
           platId = Number(platform) === 2 ? 2 : 1;
         }
-        await idipClient.sendItems({
-          partition,
-          platId,
-          openId: player.openid,
-          roleId: playerId,
-          title: cdkType.title,
-          content: cdkType.content,
-          items: cdkType.items,
+        try {
+          await idipClient.sendItems({
+            partition,
+            platId,
+            openId: player.openid,
+            roleId: playerId,
+            title: cdkType.title,
+            content: cdkType.content,
+            items: cdkType.items,
+          });
+        } catch (e: any) {
+          console.error(`[CDK][redeem][data] 发放失败`, { server, playerId, code: String(code) }, e);
+          throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
+        }
+
+        // 记录领取（不涉及唯一码占用）
+        await CDKModel.insertRedemption({
+          player_id: playerId,
+          server: serverCfg.bname,
+          code: String(code),
+          cdk_type_id: typeId,
+          open_id: player.openid,
+          platform,
         });
-      } catch (e: any) {
-        console.error(`[CDK][redeem][data] 发放失败`, { server, playerId, code: String(code) }, e);
-        throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
+
+        return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
+      } finally {
+        await releaseCdkLock(lockKey, lockValue);
       }
-
-      // 记录领取（不涉及唯一码占用）
-      await CDKModel.insertRedemption({
-        player_id: playerId,
-        server: serverCfg.bname,
-        code: String(code),
-        cdk_type_id: typeId,
-        open_id: player.openid,
-        platform,
-      });
-
-      return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
     }
   }
 
@@ -223,64 +276,75 @@ export const redeem = async (evt: H3Event) => {
     return { code: 400, message: 'CDK类型不存在' };
   }
 
-  // 3) 幂等校验：同一类型每个角色只能领一次
-  const already = await CDKModel.hasRedeemed(playerId, codeRow.cdk_type_id);
-  if (already) {
-    return { code: 400, message: '该类型已领取，无法重复领取' };
+  // ===== 【防并发】Redis 分布式锁 =====
+  // lockKey = playerId + 实际提交的 CDK 码
+  // 同一玩家并发提交同一个 code 只有第一个请求能进入发奖流程
+  const lockKey = `cdk:lock:${playerId}:code:${code}`;
+  const lockValue = await acquireCdkLock(lockKey);
+  if (lockValue === null) {
+    console.warn(`[CDK][redeem] 并发拦截 playerId=${playerId} code=${code}`);
+    return { code: 400, message: '请勿重复提交，稍后再试' };
   }
 
-  // 4) 对于唯一码，校验是否已使用
-  if (cdkType.type === 'unique' && codeRow.is_used) {
-    return { code: 400, message: '该CDK已被使用' };
-  }
-
-  // 5) 查询玩家 openid/platform
-  const player = await getPlayerInfo(serverCfg.bname, playerId);
-  if (!player) {
-    return { code: 404, message: '未找到玩家信息' };
-  }
-
-  // 平台: iOS=2, Android=1（gm.ts 同步逻辑，这里原样透传数字/字符串都可）
-  const platform = player.platform;
-
-  // 6) 调用 GM 发放物资
   try {
-    const idipClient = await createIdipClientForServer(String(server));
-    const partition = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
-    let platId: 1 | 2 = 1;
-    if (typeof platform === 'string') {
-      platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-    } else {
-      platId = Number(platform) === 2 ? 2 : 1;
+    // 3) 锁内幂等校验：同一类型每个角色只能领一次
+    const already = await CDKModel.hasRedeemed(playerId, codeRow.cdk_type_id);
+    if (already) {
+      return { code: 400, message: '该类型已领取，无法重复领取' };
     }
-    await idipClient.sendItems({
-      partition,
-      platId,
-      openId: player.openid,
-      roleId: playerId,
-      title: cdkType.title,
-      content: cdkType.content,
-      items: cdkType.items,
+
+    // 4) 对于唯一码，校验是否已使用
+    if (cdkType.type === 'unique' && codeRow.is_used) {
+      return { code: 400, message: '该CDK已被使用' };
+    }
+
+    // 5) 查询玩家 openid/platform
+    const player = await getPlayerInfo(serverCfg.bname, playerId);
+    if (!player) {
+      return { code: 404, message: '未找到玩家信息' };
+    }
+
+    const platform = player.platform;
+
+    // 6) 调用 GM 发放物资
+    try {
+      const idipClient = await createIdipClientForServer(String(server));
+      const partition = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
+      let platId: 1 | 2 = 1;
+      if (typeof platform === 'string') {
+        platId = platform.toLowerCase() === 'ios' ? 2 : 1;
+      } else {
+        platId = Number(platform) === 2 ? 2 : 1;
+      }
+      await idipClient.sendItems({
+        partition,
+        platId,
+        openId: player.openid,
+        roleId: playerId,
+        title: cdkType.title,
+        content: cdkType.content,
+        items: cdkType.items,
+      });
+    } catch (e: any) {
+      throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
+    }
+
+    // 7) 记录 & 标记
+    await CDKModel.insertRedemption({
+      player_id: playerId,
+      server: serverCfg.bname,
+      code,
+      cdk_type_id: codeRow.cdk_type_id,
+      open_id: player.openid,
+      platform: platform,
     });
-  } catch (e: any) {
-    throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
+
+    if (cdkType.type === 'unique') {
+      await CDKModel.markCodeUsed(code, playerId);
+    }
+
+    return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
+  } finally {
+    await releaseCdkLock(lockKey, lockValue);
   }
-
-  // 7) 记录 & 标记
-  await CDKModel.insertRedemption({
-    player_id: playerId,
-    server: serverCfg.bname,
-    code,
-    cdk_type_id: codeRow.cdk_type_id,
-    open_id: player.openid,
-    platform: platform,
-  });
-
-  if (cdkType.type === 'unique') {
-    await CDKModel.markCodeUsed(code, playerId);
-  }
-
-  return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
 };
-
-
