@@ -44,7 +44,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3002,
         DB_CONNECTION_LIMIT: '200',
-        DB_PASSWORD: 'Tz9#mQ!kR8@vX2$pN5&jL',
+        DB_PASSWORD: 'Tz9#mQ!kR8@vX2$pN5jL',
         BASE_URL: 'https://agent.yourdomain.com',
         API_SIGN_KEY: 'fasdjhkfh2348!@#$!617',
         ADMIN_LOGIN_IP_WHITELIST: '*'

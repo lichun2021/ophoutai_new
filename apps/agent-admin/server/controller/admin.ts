@@ -3462,6 +3462,9 @@ export const getDataOverview = async (evt: H3Event) => {
         let conditions = ['ds.stat_date BETWEEN ? AND ?'];
         let values = [startDate, endDate];
 
+        // 排除 'all' 汇总行，防止与个别渠道数据双重计算
+        conditions.push("ds.channel_code != 'all'");
+
         // 渠道过滤
         if (allowedChannels.length > 0) {
             conditions.push(`ds.channel_code IN (${allowedChannels.map(() => '?').join(',')})`);
@@ -3513,6 +3516,9 @@ export const getDataOverview = async (evt: H3Event) => {
         // 5. 获取游戏统计数据（也从DailyStats表聚合）
         let gameStatsConditions = ['ds.stat_date BETWEEN ? AND ?'];
         let gameStatsValues = [startDate, endDate];
+
+        // 排除 'all' 汇总行，防止双重计算
+        gameStatsConditions.push("ds.channel_code != 'all'");
 
         // 渠道过滤
         if (allowedChannels.length > 0) {
@@ -3702,6 +3708,9 @@ export const getDailyReportDetails = async (evt: H3Event) => {
         // 构建查询条件
         let conditions = ['ds.stat_date BETWEEN ? AND ?'];
         let values = [startDate, endDate];
+
+        // 排除 'all' 汇总行，防止与个别渠道数据双重计算
+        conditions.push("ds.channel_code != 'all'");
 
         // 渠道过滤
         if (allowedChannels.length > 0) {
@@ -4850,6 +4859,9 @@ export const getChannelData = async (evt: H3Event) => {
             conditions.push('game_code = ?');
             params.push(gameId.toString());
         }
+
+        // 排除 'all' 汇总行，防止与个别渠道数据双重计算
+        conditions.push("channel_code != 'all'");
 
         // 从DailyStats表读取数据并按日期分组汇总
         const dataQuery = `

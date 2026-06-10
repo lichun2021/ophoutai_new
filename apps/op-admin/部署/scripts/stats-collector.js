@@ -148,7 +148,7 @@ class StatsCollector {
 
             // Calculate rates and ARPU
             let payRate = activeUsers > 0 ? (payUsers / activeUsers * 100) : 0.0;
-            
+
             // 限制 payRate 在合理范围内 (0-100%)
             if (payRate > 100) {
                 console.warn(`[${channelCode}] [${gameCode}] ${dateStr} 付费率异常: ${payRate.toFixed(2)}% (付费用户${payUsers}/活跃用户${activeUsers}), 限制为100%`);
@@ -158,7 +158,7 @@ class StatsCollector {
                 console.warn(`[${channelCode}] [${gameCode}] ${dateStr} 付费率为负: ${payRate.toFixed(2)}%, 设置为0%`);
                 payRate = 0.0;
             }
-            
+
             const activeArpu = activeUsers > 0 ? (realRechargeAmount / activeUsers) : 0.0;
             const payArpu = payUsers > 0 ? (realRechargeAmount / payUsers) : 0.0;
 

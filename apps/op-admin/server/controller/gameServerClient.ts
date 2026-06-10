@@ -193,7 +193,7 @@ export class GameServerClient {
   constructor(opts: GameServerClientOptions) {
     this.baseURL = opts.baseURL.replace(/\/+$/, '');
     this.protocol = opts.protocol ?? 'rest';
-    this.timeoutMs = opts.timeoutMs ?? 10000;
+    this.timeoutMs = opts.timeoutMs ?? 20000;
     this.signKey = opts.signKey ?? process.env.API_SIGN_KEY ?? '';
   }
 
@@ -456,7 +456,7 @@ export class GameServerClient {
       console.log(`[GameServer] POST ${url}`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
       try {
         const res = await fetch(url, {
@@ -547,7 +547,7 @@ export class GameServerClient {
       console.log(`[GameServer] POST ${url}`, params);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
       try {
         const res = await fetch(url, {
@@ -649,7 +649,7 @@ export function createGameServerClient(
   return new GameServerClient({
     baseURL: webhost,
     protocol: protocol ?? 'rest',
-    timeoutMs: timeoutMs ?? parseInt(process.env.GM_TIMEOUT_MS || '10000'),
+    timeoutMs: timeoutMs ?? parseInt(process.env.GM_TIMEOUT_MS || '20000'),
     signKey: signKey ?? process.env.API_SIGN_KEY ?? '',
   });
 }
