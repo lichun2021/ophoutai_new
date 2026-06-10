@@ -1296,6 +1296,12 @@ router.post('/gm/recharge', adminWrap(GMCtrl.rechargePlayer, 'GM充值'));
 router.post('/gm/send-mail', adminWrap(GMCtrl.sendMail, 'GM发送邮件'));
 
 /**
+ * 批量发送纯文本邮件（顺序执行，0.5s 间隔，上限 50 人）
+ * @route POST /api/gm/send-mail-batch
+ */
+router.post('/gm/send-mail-batch', adminWrap(GMCtrl.sendMailBatch, 'GM批量发送邮件'));
+
+/**
  * 检查目标puid
  * @route POST /api/gm/check-target-puid
  */

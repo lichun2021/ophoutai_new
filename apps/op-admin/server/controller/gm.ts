@@ -906,6 +906,105 @@ export const sendItemsBatch = async (evt: H3Event) => {
   }
 };
 
+// 批量发送纯文本邮件（顺序执行，0.5 秒间隔，上限 50 人）
+export const sendMailBatch = async (evt: H3Event) => {
+  try {
+    const body = await readBody(evt);
+    const { server, title, content, targets } = body || {};
+    const admin = await requireGMPermission(evt);
+
+    if (!server || !title || !content || !Array.isArray(targets) || targets.length === 0) {
+      return { success: false, message: '参数不完整' };
+    }
+
+    const MAX_PER_BATCH = 50;
+    if (targets.length > MAX_PER_BATCH) {
+      return { success: false, message: `单次最多支持 ${MAX_PER_BATCH} 人` };
+    }
+
+    // 去重
+    const seen = new Set<string>();
+    const deduped = targets.filter((t: any) => {
+      const key = `${t?.openId || ''}::${t?.playerId || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const serverId = String(server).replace('game_', '');
+    const client = await createClientForServer(server);
+
+    const results: Array<{ playerId: string; openId: string; success: boolean; message?: string }> = [];
+
+    for (let i = 0; i < deduped.length; i++) {
+      const t = deduped[i] || {};
+      const playerId = String(t.playerId || '');
+      const openId   = String(t.openId   || '');
+      const roleId   = String(t.roleId   || playerId);
+      const plat     = parsePlatform(t.platform);
+
+      const requestPayload = { openId, serverId, platform: plat, roleId, title, content };
+
+      try {
+        await client.sendTextMail(requestPayload);
+
+        const playerName = await getPlayerName(server, playerId);
+        await insertGmOperationLog({
+          op_type: 'send_mail',
+          server,
+          player_id: String(playerId),
+          player_name: playerName || null,
+          open_id: String(openId),
+          role_id: String(roleId),
+          platform: String(t.platform ?? ''),
+          request_params: requestPayload,
+          response_result: { message: 'ok' },
+          success: 1,
+          error_message: null,
+          admin_id: admin?.id ?? null,
+          admin_name: admin?.name ?? null
+        });
+
+        results.push({ playerId, openId, success: true });
+      } catch (idipError: any) {
+        const playerName = await getPlayerName(server, playerId);
+        await insertGmOperationLog({
+          op_type: 'send_mail',
+          server,
+          player_id: String(playerId),
+          player_name: playerName || null,
+          open_id: String(openId),
+          role_id: String(roleId),
+          platform: String(t.platform ?? ''),
+          request_params: requestPayload,
+          response_result: null,
+          success: 0,
+          error_message: idipError?.message || 'IDIP错误',
+          admin_id: admin?.id ?? null,
+          admin_name: admin?.name ?? null
+        });
+
+        results.push({ playerId, openId, success: false, message: idipError?.message || 'IDIP错误' });
+      }
+
+      if (i < deduped.length - 1) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    const failedCount  = results.length - successCount;
+    return {
+      success: true,
+      summary: { total: results.length, success: successCount, failed: failedCount },
+      results
+    };
+  } catch (error: any) {
+    console.error('[GM] 批量发送邮件失败:', error);
+    return { success: false, message: error?.message || '批量发送邮件失败' };
+  }
+};
+
 // 开罩子
 export const openProtectShield = async (evt: H3Event) => {
   try {
