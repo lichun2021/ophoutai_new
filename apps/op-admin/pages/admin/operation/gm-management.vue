@@ -276,11 +276,11 @@
           <div>
             <div class="flex justify-between items-center mb-2">
               <label class="text-sm font-medium">道具列表（不填则发纯文本邮件）</label>
-              <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="mailModal.items.push({ ItemId:0, ItemNum:1 })">添加道具</UButton>
+              <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="mailModal.items.push({ ItemId:'', ItemNum:1 })">添加道具</UButton>
             </div>
             <div class="space-y-2">
               <div v-for="(item,i) in mailModal.items" :key="i" class="flex gap-2 items-center">
-                <USelectMenu v-model.number="item.ItemId" :options="itemOptions" value-attribute="value" option-attribute="label" :searchable="searchItems" searchable-placeholder="搜索道具" placeholder="选择道具" class="flex-1" />
+                <USelectMenu v-model="item.ItemId" :options="itemOptions" value-attribute="value" option-attribute="label" :searchable="searchItems" searchable-placeholder="搜索道具" placeholder="选择道具" class="flex-1" />
                 <UInput v-model.number="item.ItemNum" type="number" placeholder="数量" class="w-20" min="1" />
                 <UButton color="red" variant="ghost" size="xs" icon="i-heroicons-trash" @click="mailModal.items.splice(i,1)" />
               </div>
@@ -338,11 +338,11 @@
           <div>
             <div class="flex justify-between items-center mb-2">
               <label class="text-sm font-medium">道具列表（不填则发纯文本邮件）</label>
-              <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="batchMailModal.items.push({ ItemId:0, ItemNum:1 })">添加道具</UButton>
+              <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="batchMailModal.items.push({ ItemId:'', ItemNum:1 })">添加道具</UButton>
             </div>
             <div class="space-y-2">
               <div v-for="(item,i) in batchMailModal.items" :key="i" class="flex gap-2 items-center">
-                <USelectMenu v-model.number="item.ItemId" :options="itemOptions" value-attribute="value" option-attribute="label" :searchable="searchItems" searchable-placeholder="搜索道具" placeholder="选择道具" class="flex-1" />
+                <USelectMenu v-model="item.ItemId" :options="itemOptions" value-attribute="value" option-attribute="label" :searchable="searchItems" searchable-placeholder="搜索道具" placeholder="选择道具" class="flex-1" />
                 <UInput v-model.number="item.ItemNum" type="number" placeholder="数量" class="w-20" min="1" />
                 <UButton color="red" variant="ghost" size="xs" icon="i-heroicons-trash" @click="batchMailModal.items.splice(i,1)" />
               </div>
@@ -505,7 +505,8 @@ const copyText = async (t) => {
 
 // ===== 道具 =====
 const allItems   = ref([]);
-const itemOptions = computed(() => allItems.value.map(it => ({ value:Number(it.id), label:`${it.id} - ${it.name}` })));
+// value 保留原始字符串，兼容纯数字 ID 和 gid+level 格式（如 "67240092_1"）
+const itemOptions = computed(() => allItems.value.map(it => ({ value: it.id, label:`${it.id} - ${it.name}` })));
 const searchItems = (q) => {
   const lq = (q||'').toLowerCase();
   return lq ? itemOptions.value.filter(o=>o.label.toLowerCase().includes(lq)).slice(0,200) : itemOptions.value.slice(0,20);
@@ -537,7 +538,8 @@ const loadPkgs = async () => {
 const parsePkgItems = (items) => {
   try {
     const arr = typeof items==='string' ? JSON.parse(items) : items;
-    return Array.isArray(arr) ? arr.map(i=>({ ItemId:Number(i.i), ItemNum:Number(i.a) })) : [];
+    // 保留原始 ID 字符串，兼容纯数字 ID 和 gid+level 格式
+    return Array.isArray(arr) ? arr.map(i=>({ ItemId: i.i, ItemNum:Number(i.a) })) : [];
   } catch { return []; }
 };
 const applyPkg = (modal) => {
@@ -601,7 +603,8 @@ const openMail  = (row) => {
 const confirmSendMail = async () => {
   const { row, title, content, platform, items } = mailModal.value;
   if (!row || !title.trim() || !content.trim()) return;
-  const validItems = items.filter(it=>it.ItemId>0&&it.ItemNum>0).map(it=>({ ItemId:it.ItemId, ItemNum:it.ItemNum }));
+  // ItemId 可能是字符串（gid+level 格式），用 !! 判断非空即可
+  const validItems = items.filter(it=>!!it.ItemId&&it.ItemNum>0).map(it=>({ ItemId:it.ItemId, ItemNum:it.ItemNum }));
   mailModal.value.loading = true;
   try {
     if (validItems.length > 0) {
@@ -627,7 +630,8 @@ const openBatchMail  = () => {
 const confirmBatchMail = async () => {
   const { title, content, platform, items } = batchMailModal.value;
   if (!title.trim() || !content.trim()) return;
-  const validItems = items.filter(it=>it.ItemId>0&&it.ItemNum>0).map(it=>({ ItemId:it.ItemId, ItemNum:it.ItemNum }));
+  // ItemId 可能是字符串（gid+level 格式），用 !! 判断非空即可
+  const validItems = items.filter(it=>!!it.ItemId&&it.ItemNum>0).map(it=>({ ItemId:it.ItemId, ItemNum:it.ItemNum }));
   batchMailModal.value.loading = true;
 
   // 按 server_id 分组

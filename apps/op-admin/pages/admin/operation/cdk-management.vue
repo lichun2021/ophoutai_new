@@ -20,7 +20,7 @@
           <div class="selected">
             <div v-for="(row, idx) in typeForm.items" :key="idx" class="selected-row">
               <USelectMenu
-                v-model.number="row.ItemId"
+                v-model="row.ItemId"
                 :options="itemOptions"
                 value-attribute="value"
                 option-attribute="label"
@@ -205,8 +205,8 @@ async function fetchTypes() {
 async function submitType() {
   // 前端校验：至少一行且物品与数量有效
   const prepared = typeForm.value.items
-    .filter(i => i.ItemId !== '' && Number(i.ItemId) > 0 && Number(i.ItemNum) > 0)
-    .map(i => ({ ItemId: Number(i.ItemId), ItemNum: Number(i.ItemNum) }));
+    .filter(i => !!i.ItemId && Number(i.ItemNum) > 0)
+    .map(i => ({ ItemId: i.ItemId, ItemNum: Number(i.ItemNum) }));
   if (prepared.length === 0) { alert('物品列表不能为空'); return; }
   const payload: any = { title: typeForm.value.title, content: typeForm.value.content, type: typeForm.value.type, items: prepared };
   if (typeForm.value.id) payload.id = typeForm.value.id;
@@ -275,11 +275,12 @@ async function loadAllItemOptions() {
   try {
     const res: any = await $fetch('/api/items');
     const list = res?.data || [];
-    itemOptionsFull.value = list.map((it: any) => ({ id: Number(it.id), label: it.name || it.cn || it.n }));
+    // 保留原始 ID 字符串，兼容纯数字 ID 和 gid+level 格式（如 "67240092_1"）
+    itemOptionsFull.value = list.map((it: any) => ({ id: it.id, label: it.name || it.cn || it.n }));
   } catch {}
 }
 
-const itemOptions = computed(() => itemOptionsFull.value.map(o => ({ value: Number(o.id), label: `${o.id} - ${o.label}` })));
+const itemOptions = computed(() => itemOptionsFull.value.map(o => ({ value: o.id, label: `${o.id} - ${o.label}` })));
 const isDataTypeSelected = computed(() => {
   const t = types.value.find(t => t.id === codeForm.value.cdk_type_id);
   return t?.type === 'data';

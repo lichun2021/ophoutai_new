@@ -298,10 +298,16 @@ export function validateGiftItems(giftItems: any[]): { valid: boolean; errors: s
       return;
     }
     
-    if (!item.i || typeof item.i !== 'number') {
-      errors.push(`第${index + 1}个物品缺少物品ID(i)或格式错误`);
-    } else if (!config[String(item.i)]) {
-      errors.push(`第${index + 1}个物品ID(${item.i})在配置中不存在`);
+    // 支持两种格式：纯数字 ID（number）或 gid+level 字符串（如 "67240092_1"）
+    const itemId = item.i;
+    const isValidId =
+      (typeof itemId === 'number' && itemId > 0) ||
+      (typeof itemId === 'string' && /^\d+(_\d+)?$/.test(itemId.trim()));
+    
+    if (!isValidId) {
+      errors.push(`第${index + 1}个物品缺少物品ID(i)或格式错误（需为数字或 gid_level 格式）`);
+    } else if (!config[String(itemId)]) {
+      errors.push(`第${index + 1}个物品ID(${itemId})在配置中不存在`);
     }
     
     if (!item.a || typeof item.a !== 'number' || item.a <= 0) {

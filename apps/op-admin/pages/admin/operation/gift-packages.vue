@@ -218,7 +218,7 @@
               >
                 <UFormGroup label="物品" class="flex-1">
                   <USelectMenu
-                    v-model.number="item.i"
+                    v-model="item.i"
                     :options="itemOptions"
                     value-attribute="value"
                     option-attribute="label"
@@ -710,7 +710,8 @@ const loadItems = async () => {
 
 // 供下拉使用的全量选项（本地过滤）
 const itemOptions = computed(() => {
-  return (items.value || []).map((it) => ({ value: Number(it.id), label: `${it.id} - ${it.cn || it.n || ''}` }));
+  // value 保留原始字符串，兼容纯数字 ID 和 gid+level 格式（如 "67240092_1"）
+  return (items.value || []).map((it) => ({ value: it.id, label: `${it.id} - ${it.cn || it.n || ''}` }));
 });
 
 function searchItems(query) {
@@ -797,7 +798,13 @@ const updateItemName = (index) => {
 function normalizeGiftItems(input) {
   try {
     const arr = Array.isArray(input) ? input : (typeof input === 'string' ? JSON.parse(input) : []);
-    return (arr || []).map((it) => ({ i: Number(it?.i ?? it?.id ?? it?.ItemId), a: Number(it?.a ?? it?.num ?? it?.ItemNum) })).filter(it => Number.isFinite(it.i) && it.i > 0 && Number.isFinite(it.a) && it.a > 0);
+    return (arr || []).map((it) => {
+      const rawId = it?.i ?? it?.id ?? it?.ItemId;
+      // 保留 gid+level 字符串 ID，不强转为 number
+      const i = (typeof rawId === 'string' && rawId.includes('_')) ? rawId : Number(rawId);
+      const a = Number(it?.a ?? it?.num ?? it?.ItemNum);
+      return { i, a };
+    }).filter(it => (typeof it.i === 'string' ? it.i.length > 0 : (Number.isFinite(it.i) && it.i > 0)) && Number.isFinite(it.a) && it.a > 0);
   } catch {
     return [];
   }

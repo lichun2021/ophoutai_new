@@ -391,7 +391,12 @@ export const sendItems = async (evt: H3Event) => {
         roleId: roleId || playerId,
         mailTitle: title,
         mailContent: content,
-        items: items.map((i: any) => ({ itemId: Number(i.ItemId ?? i.itemId), itemCount: Number(i.ItemNum ?? i.itemCount ?? i.itemNum) }))
+        // 支持纯数字 ID 和 gid+level 字符串（如 "67240092_1"）两种格式
+        items: items.map((i: any) => {
+          const rawId = i.ItemId ?? i.itemId;
+          const itemId = typeof rawId === 'string' && rawId.includes('_') ? rawId : Number(rawId);
+          return { itemId, itemCount: Number(i.ItemNum ?? i.itemCount ?? i.itemNum) };
+        })
       };
       await client.sendItemMail(requestPayload);
 
@@ -842,7 +847,12 @@ export const sendItemsBatch = async (evt: H3Event) => {
         roleId,
         mailTitle: title,
         mailContent: content,
-        items: items.map((i: any) => ({ itemId: Number(i.ItemId ?? i.itemId), itemCount: Number(i.ItemNum ?? i.itemCount ?? i.itemNum) }))
+        // 支持纯数字 ID 和 gid+level 字符串（如 "67240092_1"）两种格式
+        items: items.map((i: any) => {
+          const rawId = i.ItemId ?? i.itemId;
+          const itemId = typeof rawId === 'string' && rawId.includes('_') ? rawId : Number(rawId);
+          return { itemId, itemCount: Number(i.ItemNum ?? i.itemCount ?? i.itemNum) };
+        })
       };
 
       try {
