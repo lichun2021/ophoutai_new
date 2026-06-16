@@ -32,6 +32,8 @@ export const getMonthlyCheckInStatus = async (userId: number) => {
     const today = getBeijingDate();
     const yearMonth = today.slice(0, 7);
 
+    console.log(`[CheckIn][status] userId=${userId} today="${today}" yearMonth="${yearMonth}"`);
+
     // 本月所有签到记录
     const records = await sql({
         query: `SELECT check_date, cumulative_days, total_coins, bonus_coins
@@ -41,8 +43,31 @@ export const getMonthlyCheckInStatus = async (userId: number) => {
         values: [userId, `${yearMonth}%`],
     }) as { check_date: string; cumulative_days: number; total_coins: number; bonus_coins: number }[];
 
-    const checkedDates = records.map(r => r.check_date);
+    console.log(`[CheckIn][status] 查到 ${records.length} 条记录`);
+    if (records.length > 0) {
+        const r0 = records[0];
+        console.log(`[CheckIn][status] 第一条 check_date 原始值=`, r0.check_date);
+        console.log(`[CheckIn][status] 第一条 check_date typeof=`, typeof r0.check_date);
+        console.log(`[CheckIn][status] 第一条 check_date instanceof Date=`, r0.check_date instanceof Date);
+        console.log(`[CheckIn][status] String(check_date)=`, String(r0.check_date));
+        // 如果是 Date 对象，用 toISOString 转换
+        if (r0.check_date instanceof Date) {
+            console.log(`[CheckIn][status] toISOString=`, (r0.check_date as any).toISOString());
+        }
+    }
+
+    // 统一处理：Date对象用toISOString，字符串用slice
+    const checkedDates = records.map(r => {
+        const raw = r.check_date as any;
+        if (raw instanceof Date) {
+            return raw.toISOString().slice(0, 10);
+        }
+        return String(raw).slice(0, 10);
+    });
+
+    console.log(`[CheckIn][status] checkedDates=`, checkedDates);
     const todayChecked = checkedDates.includes(today);
+    console.log(`[CheckIn][status] todayChecked=${todayChecked}`);
 
     // 当月累计天数（取最新记录的 cumulative_days）
     const cumulativeDays = records.length > 0

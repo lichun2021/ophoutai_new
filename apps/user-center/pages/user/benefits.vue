@@ -131,8 +131,8 @@
             future: day.isFuture
           }"
         >
-          <span class="ci-day-icon" v-if="checkInStatus.checkedDates.includes(day.date)">✓</span>
-          <span class="ci-day-num" v-else>{{ day.num }}</span>
+          <span class="ci-day-num">{{ day.num }}</span>
+          <span class="ci-check-mark" v-if="checkInStatus.checkedDates.includes(day.date)">✓</span>
         </div>
       </div>
 
@@ -586,19 +586,33 @@ onMounted(async () => {
 }
 .ci-day {
   aspect-ratio: 1;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
   font-size: 12px;
   background: var(--surface-container-low);
   color: var(--on-surface-variant);
   font-weight: 500;
   position: relative;
+  gap: 1px;
 }
-.ci-day.checked {
-  background: linear-gradient(135deg, rgba(16,185,129,0.25), rgba(5,150,105,0.15));
+.ci-day-num {
+  font-size: 12px;
+  line-height: 1;
+}
+.ci-check-mark {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 900;
   color: #10b981;
 }
-.ci-day-icon { font-size: 14px; }
+.ci-day.checked {
+  background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(5,150,105,0.12));
+  color: #064e3b;
+}
+.ci-day.checked .ci-day-num { color: #065f46; font-weight: 700; }
 .ci-day.today {
   border: 2px solid #10b981;
   color: var(--on-surface); font-weight: 700;

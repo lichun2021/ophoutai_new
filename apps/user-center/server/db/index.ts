@@ -30,6 +30,9 @@ const pool = mysql.createPool({
   connectionLimit: dbConfig.connectionLimit,
   queueLimit: dbConfig.queueLimit,
 
+  // 让 DATE/DATETIME 字段直接以字符串返回，避免 Date 对象时区转换问题
+  dateStrings: true,
+
   // READ COMMITTED: 消除 next-key lock（间隙锁），减少锁等待
   sessionVariables: {
     transaction_isolation: 'READ-COMMITTED',

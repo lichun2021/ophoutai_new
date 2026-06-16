@@ -75,7 +75,7 @@ export const getMonthClaimedDates = async (userId: number, yearMonth: string): P
                 ORDER BY claim_date`,
         values: [userId, `${yearMonth}%`],
     }) as { claim_date: string }[];
-    return result.map(r => r.claim_date);
+    return result.map(r => String(r.claim_date).slice(0, 10));
 };
 
 /**
