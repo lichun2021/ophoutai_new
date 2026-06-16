@@ -31,6 +31,10 @@
           <span class="sn-icon">💳</span>
           <span>充值</span>
         </NuxtLink>
+        <NuxtLink to="/user/benefits" class="sn-item" :class="{ active: $route.path === '/user/benefits' }">
+          <span class="sn-icon">⭐</span>
+          <span>权益</span>
+        </NuxtLink>
         <NuxtLink to="/user/recharge" class="sn-item" :class="{ active: $route.path === '/user/recharge' }">
           <span class="sn-icon">📋</span>
           <span>充值记录</span>
@@ -88,17 +92,17 @@
         <span class="bn-icon">💳</span>
         <span class="bn-label">充值</span>
       </NuxtLink>
-      <NuxtLink to="/user/mall" class="bn-item bn-center" :class="{ active: $route.path === '/user/mall' }">
-        <span class="bn-icon-center">🎁</span>
+      <NuxtLink to="/user/benefits" class="bn-item bn-center" :class="{ active: $route.path === '/user/benefits' }">
+        <span class="bn-icon-center">⭐</span>
+        <span class="bn-label">权益</span>
+      </NuxtLink>
+      <NuxtLink to="/user/mall" class="bn-item" :class="{ active: $route.path === '/user/mall' }">
+        <span class="bn-icon">🎁</span>
         <span class="bn-label">商城</span>
       </NuxtLink>
       <NuxtLink to="/user/orders" class="bn-item" :class="{ active: $route.path === '/user/orders' }">
         <span class="bn-icon">📦</span>
         <span class="bn-label">记录</span>
-      </NuxtLink>
-      <NuxtLink to="/user/profile" class="bn-item" :class="{ active: $route.path === '/user/profile' }">
-        <span class="bn-icon">👤</span>
-        <span class="bn-label">我的</span>
       </NuxtLink>
     </nav>
 
@@ -162,12 +166,14 @@ const pageTitles = {
   '/user/mall': '礼包商城',
   '/user/orders': '购买记录',
   '/user/profile': '个人资料',
+  '/user/benefits': '权益中心',
 };
 const pageTitle = computed(() => pageTitles[route.path] || '会员中心');
 
 const menuItems = [
   { to: '/user/home', label: '首页', emoji: '🏠' },
   { to: '/user/cashier', label: '充值收银台', emoji: '💳' },
+  { to: '/user/benefits', label: '权益中心', emoji: '⭐' },
   { to: '/user/recharge', label: '充值记录', emoji: '📋' },
   { to: '/user/mall', label: '礼包商城', emoji: '🎁' },
   { to: '/user/orders', label: '购买记录', emoji: '📦' },

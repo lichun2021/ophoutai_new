@@ -27,6 +27,10 @@
           <span class="qa-icon">💳</span>
           <span>充值</span>
         </button>
+        <button class="qa-btn" @click="goToBenefits">
+          <span class="qa-icon">⭐</span>
+          <span>权益</span>
+        </button>
         <button class="qa-btn" @click="goToMall">
           <span class="qa-icon">🎁</span>
           <span>商城</span>
@@ -58,6 +62,13 @@
           <p class="stat-value">{{ stats.purchaseCount }}<small>次</small></p>
         </div>
       </div>
+    </div>
+
+    <!-- 权益提醒条 -->
+    <div v-if="benefitsReminder.show" class="benefits-reminder" @click="goToBenefits">
+      <span class="reminder-icon">⭐</span>
+      <span class="reminder-text">{{ benefitsReminder.text }}</span>
+      <span class="reminder-arrow">→</span>
     </div>
 
     <!-- 最近订单 -->
@@ -125,6 +136,29 @@ const recharge = () => router.push('/user/cashier');
 const goToMall = () => router.push('/user/mall');
 const goToRechargeRecords = () => router.push('/user/recharge');
 const viewAllOrders = () => router.push('/user/orders');
+const goToBenefits = () => router.push('/user/benefits');
+
+// 权益提醒条
+const benefitsReminder = ref({ show: false, text: '' });
+
+const loadBenefitsReminder = async () => {
+  if (!authStore.userInfo?.id) return;
+  try {
+    const [cardRes, ciRes] = await Promise.all([
+      $fetch('/api/client/benefits/monthly-card/status', { query: { user_id: authStore.userInfo.id } }),
+      $fetch('/api/client/benefits/checkin/status', { query: { user_id: authStore.userInfo.id } }),
+    ]);
+    const hasCard = cardRes.code === 200 && cardRes.data.cards.length > 0;
+    const cardUnclaimed = hasCard && !cardRes.data.todayClaimed;
+    const checkedIn = ciRes.code === 200 && ciRes.data.todayChecked;
+    const hints = [];
+    if (cardUnclaimed) hints.push('月卡今日未领取');
+    if (!checkedIn) hints.push('今日未签到');
+    if (hints.length > 0) {
+      benefitsReminder.value = { show: true, text: hints.join(' · ') };
+    }
+  } catch { /* 静默 */ }
+};
 
 const loadUserData = async () => {
   try {
@@ -147,6 +181,7 @@ onMounted(async () => {
   if (!authStore.isLoggedIn || !authStore.isUser) { router.push('/user/login'); return; }
   await authStore.refreshBalance();
   loadUserData();
+  loadBenefitsReminder();
 });
 </script>
 
@@ -156,6 +191,21 @@ onMounted(async () => {
   flex-direction: column;
   gap: 16px;
 }
+
+/* ============ 权益提醒条 ============ */
+.benefits-reminder {
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(135deg, rgba(124,58,237,0.12), rgba(91,33,182,0.08));
+  border: 1px solid rgba(124,58,237,0.25);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  cursor: pointer; transition: all 0.2s;
+}
+.benefits-reminder:hover { background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(91,33,182,0.15)); }
+.reminder-icon { font-size: 16px; flex-shrink: 0; }
+.reminder-text { flex: 1; font-size: 13px; color: #a78bfa; font-weight: 600; }
+.reminder-arrow { color: #a78bfa; font-size: 14px; }
+
 
 /* ============ Hero 卡片 ============ */
 .hero-card {

@@ -2178,6 +2178,48 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             });
         }
 
+        // ========== 月卡/终身卡激活检测 ==========
+        try {
+            const productName = String(localOrder.product_name || '');
+            const isMonthlyCard = productName.includes('月卡') || productName.includes('终身卡');
+            if (isMonthlyCard) {
+                const { activateCard, getCardByTransactionId, getBeijingDate } = await import('../model/monthlyCard');
+                const transId = localOrder.transaction_id || '';
+
+                // 防重：同一 transaction_id 只激活一次
+                const existingCard = await getCardByTransactionId(transId);
+                if (!existingCard) {
+                    const cardType = productName.includes('终身卡') ? 'lifetime' : 'monthly';
+                    const dailyCoins = cardType === 'lifetime' ? 500 : 300;
+                    const today = getBeijingDate();
+
+                    // 月卡：today + 29天（含今天共30天）；终身卡：NULL
+                    let expireDate: string | null = null;
+                    if (cardType === 'monthly') {
+                        const exp = new Date();
+                        exp.setTime(exp.getTime() + 8 * 60 * 60 * 1000 + 29 * 86400 * 1000);
+                        expireDate = exp.toISOString().slice(0, 10);
+                    }
+
+                    await activateCard({
+                        userId: localOrder.user_id!,
+                        cardType,
+                        dailyCoins,
+                        startDate: today,
+                        expireDate,
+                        purchaseAmount: orderAmount,
+                        transactionId: transId,
+                    });
+                    console.log(`[${requestId}] ✅ 月卡激活成功: type=${cardType}, userId=${localOrder.user_id}, expire=${expireDate || '永久'}`);
+                } else {
+                    console.log(`[${requestId}] ⚠️ 月卡已激活(重复回调), transaction_id=${transId}`);
+                }
+            }
+        } catch (cardErr: any) {
+            // 月卡激活失败不影响支付回调成功响应
+            console.error(`[${requestId}] 月卡激活失败(不影响回调):`, cardErr?.message);
+        }
+        // ========== END 月卡激活 ==========
 
         const endTime = Date.now();
         const processingTime = endTime - startTime;

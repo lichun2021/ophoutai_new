@@ -4,6 +4,7 @@ import * as UserCtrl from '../controller/user';
 import * as PaymentCtrl from '../controller/payment';
 import * as UserClientCtrl from '../controller/userClient';
 import * as CDKCtrl from '../controller/cdk';
+import * as BenefitsCtrl from '../controller/benefits';
 import { listActive, listCdkRedeemable } from '../model/gameServers';
 import * as SystemParamsCtrl from '../controller/systemParams';
 import * as PaymentSettingsCtrl from '../controller/paymentSettings';
@@ -292,6 +293,13 @@ router.get('/client/player-gift-packages', withLogging(UserClientCtrl.getPlayerG
 router.get('/client/purchase-history', withLogging(UserClientCtrl.getUserPurchaseHistory, '客户端-获取购买记录'));
 router.get('/client/recharge-history', withLogging(UserClientCtrl.getUserRechargeHistory, '客户端-获取充值记录'));
 router.get('/client/spend-history', withLogging(UserClientCtrl.getUserPlatformCoinSpendHistory, '客户端-获取平台币消费记录'));
+
+// ========== 权益中心接口 ==========
+
+router.get('/client/benefits/monthly-card/status', withLogging(BenefitsCtrl.getMonthlyCardStatus, '权益-月卡状态'));
+router.post('/client/benefits/monthly-card/claim', withLogging(BenefitsCtrl.claimMonthlyCard, '权益-领取月卡'));
+router.get('/client/benefits/checkin/status', withLogging(BenefitsCtrl.getCheckInStatus, '权益-签到状态'));
+router.post('/client/benefits/checkin', withLogging(BenefitsCtrl.doCheckIn, '权益-每日签到'));
 
 // ========== 角色信息 ==========
 
