@@ -190,7 +190,7 @@ const typeForm = ref<{ id?: number; title: string; content: string; type: 'unive
   title: 'GM发放奖励',
   content: '这是GM发放的奖励，请查收！',
   type: 'unique',
-  items: [{ ItemId: 1016 as number, ItemNum: 100 }]
+  items: [{ ItemId: '' as any, ItemNum: 1 }]
 });
 
 const types = ref<CdkType[]>([]);
@@ -206,7 +206,8 @@ async function submitType() {
   // 前端校验：至少一行且物品与数量有效
   const prepared = typeForm.value.items
     .filter(i => !!i.ItemId && Number(i.ItemNum) > 0)
-    .map(i => ({ ItemId: i.ItemId, ItemNum: Number(i.ItemNum) }));
+    // ItemId 统一存为字符串，防止后端写入数字
+    .map(i => ({ ItemId: String(i.ItemId), ItemNum: Number(i.ItemNum) }));
   if (prepared.length === 0) { alert('物品列表不能为空'); return; }
   const payload: any = { title: typeForm.value.title, content: typeForm.value.content, type: typeForm.value.type, items: prepared };
   if (typeForm.value.id) payload.id = typeForm.value.id;
@@ -216,7 +217,12 @@ async function submitType() {
 }
 
 function editType(t: any) {
-  const items = Array.isArray(t.items) ? t.items : [];
+  const rawItems = Array.isArray(t.items) ? t.items : [];
+  // 保证 ItemId 始终是字符串，防止数字类型与 option.value 不匹配
+  const items = rawItems.map((row: any) => ({
+    ItemId: String(row.ItemId ?? row.itemId ?? ''),
+    ItemNum: Number(row.ItemNum ?? row.itemNum ?? 1),
+  }));
   typeForm.value = { id: t.id, title: t.title, content: t.content, type: t.type, items } as any;
 }
 
@@ -275,8 +281,8 @@ async function loadAllItemOptions() {
   try {
     const res: any = await $fetch('/api/items');
     const list = res?.data || [];
-    // 保留原始 ID 字符串，兼容纯数字 ID 和 gid+level 格式（如 "67240092_1"）
-    itemOptionsFull.value = list.map((it: any) => ({ id: it.id, label: it.name || it.cn || it.n }));
+    // 保证 id 始终是字符串，与 USelectMenu value 属性匹配
+    itemOptionsFull.value = list.map((it: any) => ({ id: String(it.id), label: it.name || it.cn || it.n }));
   } catch {}
 }
 
@@ -293,6 +299,7 @@ function searchItems(query: string) {
 }
 
 function addEmptyItem() {
+  // 新行 ItemId 为空字符串，与 option value 类型一致
   typeForm.value.items.push({ ItemId: '' as any, ItemNum: 1 });
 }
 </script>
