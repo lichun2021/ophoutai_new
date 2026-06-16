@@ -167,6 +167,7 @@ const pageTitles = {
   '/user/orders': '购买记录',
   '/user/profile': '个人资料',
   '/user/benefits': '权益中心',
+  '/user/card-payment': '购买月卡',
 };
 const pageTitle = computed(() => pageTitles[route.path] || '会员中心');
 

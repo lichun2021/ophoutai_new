@@ -302,14 +302,26 @@ const claimCard = async () => {
       body: { user_id: authStore.userInfo?.id },
     });
     if (res.code === 200) {
+      // 乐观更新：立即设置已领取状态，不等接口刷新
+      cardStatus.value = {
+        ...cardStatus.value,
+        todayClaimed: true,
+        unclaimedCards: [],
+        claimedDates: [...cardStatus.value.claimedDates, cardStatus.value.today],
+      };
+      // 立即更新为颟
+      authStore.platformCoins = res.data.new_balance;
+      if (authStore.userInfo) {
+        authStore.userInfo = { ...authStore.userInfo, platform_coins: res.data.new_balance };
+      }
       rewardPopup.value = {
         show: true,
         title: '月卡权益领取成功！',
         coins: res.data.coins_claimed,
         newBalance: res.data.new_balance,
       };
-      await loadCardStatus();
-      await authStore.refreshBalance();
+      // 异步刷新（不阅塞 UI）
+      loadCardStatus();
     } else {
       tips.warning(res.message || '领取失败');
     }
@@ -329,17 +341,31 @@ const doCheckIn = async () => {
       body: { user_id: authStore.userInfo?.id },
     });
     if (res.code === 200) {
-      const title = res.data.bonus_coins > 0
-        ? `签到成功！累计 ${res.data.cumulative_days} 天，获得里程碑奖励！`
-        : `签到成功！累计 ${res.data.cumulative_days} 天`;
+      const { base_coins, bonus_coins, total_coins, cumulative_days, new_balance } = res.data;
+      // 乐观更新：立即标记今日已签，防止重复点击
+      const today = checkInStatus.value.today;
+      checkInStatus.value = {
+        ...checkInStatus.value,
+        todayChecked: true,
+        cumulativeDays: cumulative_days,
+        checkedDates: [...checkInStatus.value.checkedDates, today],
+      };
+      // 立即更新为颟
+      authStore.platformCoins = new_balance;
+      if (authStore.userInfo) {
+        authStore.userInfo = { ...authStore.userInfo, platform_coins: new_balance };
+      }
+      const title = bonus_coins > 0
+        ? `签到成功！累计 ${cumulative_days} 天，获得里程碑奖励！`
+        : `签到成功！累计 ${cumulative_days} 天`;
       rewardPopup.value = {
         show: true,
         title,
-        coins: res.data.total_coins,
-        newBalance: res.data.new_balance,
+        coins: total_coins,
+        newBalance: new_balance,
       };
-      await loadCheckInStatus();
-      await authStore.refreshBalance();
+      // 异步刷新签到状态（不阅塞 UI）
+      loadCheckInStatus();
     } else {
       tips.warning(res.message || '签到失败');
     }
@@ -351,8 +377,8 @@ const doCheckIn = async () => {
 };
 
 const purchaseCard = (cardType) => {
-  const productName = cardType === 'lifetime' ? '终身卡' : '月卡';
-  router.push({ path: '/user/cashier', query: { product: productName } });
+  // 调转到月卡专用收银台
+  router.push({ path: '/user/card-payment', query: { type: cardType } });
 };
 
 onMounted(async () => {
