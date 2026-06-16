@@ -1898,15 +1898,23 @@ export const doPayment = async (evt: H3Event) => {
             };
         }
 
-        // 订单类型判定：平台币充值/商城礼包跳过 rechargeConfig 校验
+        // ── 订单类型判定 ──────────────────────────────────────────────────
+        // 1. 礼包订单：server_url 以 gift:// 开头（已有 isGiftOrder）
+        // 2. 平台币充值：商品名含「平台币/充值/ptb」或 server_url 含「cashier」
+        // 3. 月卡/终身卡：专用收银台发起，cashier_payment=true 且商品名含「月卡/终身卡」
+        // 4. 普通商品充值：走 rechargeConfig 价格校验
         const normalizedProductNameForType = String(productName || '').toLowerCase();
         const isPlatformCoinRecharge = normalizedProductNameForType.includes('平台币')
             || normalizedProductNameForType.includes('充值')
             || normalizedProductNameForType.includes('ptb')
             || serverUrl.includes('cashier');
+        // 月卡 / 终身卡订单：前端传 cashier_payment=true，且商品名明确匹配
+        const isCardOrder = isCashierPayment
+            && (normalizedProductNameForType.includes('月卡')
+                || normalizedProductNameForType.includes('终身卡'));
 
-        // 读取商品配置并强校验价格：商城礼包（gift://）和平台币充值不依赖 rechargeConfig，跳过校验
-        if (!isGiftOrder && !isPlatformCoinRecharge) {
+        // 读取商品配置并强校验价格：礼包 / 平台币充值 / 月卡终身卡 均跳过 rechargeConfig 校验
+        if (!isGiftOrder && !isPlatformCoinRecharge && !isCardOrder) {
             try {
                 const productKey = productDesc || productName || '';
                 const { getRechargeConfig } = await import('../utils/rechargeConfig');
@@ -3012,6 +3020,29 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             return 'fail';
         }
 
+        // ── 月卡 / 终身卡 专项金额校验 ───────────────────────────────────────
+        // 固定价格配置（与前端 card-payment.vue CARD_CONFIG 保持一致）
+        const CARD_PRICE_CONFIG: Record<string, number> = {
+            '月卡':   328,
+            '终身卡': 980,
+        };
+        const productNameStr = String(localOrder.product_name || '');
+        const cardPriceKey = Object.keys(CARD_PRICE_CONFIG).find(k => productNameStr.includes(k));
+        if (cardPriceKey) {
+            const expectedPrice = CARD_PRICE_CONFIG[cardPriceKey];
+            if (Math.abs(notifyAmount - expectedPrice) > 0.01) {
+                console.error(`[${requestId}] 月卡金额校验失败:`, {
+                    product: productNameStr,
+                    expected: expectedPrice,
+                    notify: notifyAmount,
+                });
+                setResponseStatus(evt, 200);
+                return 'fail';
+            }
+            console.log(`[${requestId}] 月卡金额校验通过: ${productNameStr} ¥${notifyAmount}`);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
 
         // 更新订单状态
 
@@ -3040,8 +3071,65 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
 
         const giftHandled = await processGiftOrder(localOrder, requestId, body.trade_no);
 
-        if (!giftHandled) {
-            // 延迟通知游戏服
+        // ── 月卡 / 终身卡激活（直接写 DB，无需调用内部接口）─────────────────────
+        if (!giftHandled && cardPriceKey) {
+            try {
+                // 固定配置（与前端 CARD_CONFIG 保持一致）
+                const CARD_DB_CONFIG: Record<string, { card_type: string; daily_coins: number; expire_days: number | null }> = {
+                    '月卡':   { card_type: 'monthly',  daily_coins: 300, expire_days: 30 },
+                    '终身卡': { card_type: 'lifetime', daily_coins: 500, expire_days: null },
+                };
+                const cfg = CARD_DB_CONFIG[cardPriceKey];
+
+                // 防重：检查该 transaction_id 是否已激活
+                const existing = await sql({
+                    query: 'SELECT id FROM MonthlyCards WHERE transaction_id = ? LIMIT 1',
+                    values: [localOrder.transaction_id],
+                }) as any[];
+
+                if (existing.length > 0) {
+                    console.warn(`[${requestId}] 月卡已激活，跳过重复写入:`, localOrder.transaction_id);
+                } else {
+                    // 计算开始 / 到期时间（北京时间，只取日期部分 YYYY-MM-DD）
+                    const now = new Date();
+                    now.setTime(now.getTime() + 8 * 60 * 60 * 1000);
+                    const startAt = now.toISOString().slice(0, 10); // 只要日期
+                    let expireAt: string | null = null;
+                    if (cfg.expire_days !== null) {
+                        const exp = new Date(now);
+                        exp.setDate(exp.getDate() + cfg.expire_days);
+                        expireAt = exp.toISOString().slice(0, 10); // 只要日期
+                    }
+
+                    await sql({
+                        query: `INSERT INTO MonthlyCards
+                                    (user_id, card_type, daily_coins, start_date, expire_date,
+                                     transaction_id, is_active, purchase_amount)
+                                VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+                        values: [
+                            localOrder.user_id, cfg.card_type, cfg.daily_coins,
+                            startAt, expireAt, localOrder.transaction_id,
+                            notifyAmount,
+                        ],
+                    });
+
+                    console.log(`[${requestId}] 月卡激活成功: user=${localOrder.user_id} type=${cfg.card_type} expire=${expireAt ?? '永久'}`);
+                }
+            } catch (cardErr) {
+                console.error(`[${requestId}] 月卡激活失败:`, cardErr);
+                // 激活失败不影响回调响应，但记录日志
+                try {
+                    await sql({
+                        query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
+                        values: ['monthly_card_activate_error', `transaction_id=${localOrder.transaction_id} user=${localOrder.user_id} err=${String(cardErr)}`],
+                    });
+                } catch {}
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        if (!giftHandled && !cardPriceKey) {
+            // 延迟通知游戏服（非礼包、非月卡订单）
             setTimeout(async () => {
                 try {
                     await notifyGameServer(
@@ -3055,7 +3143,6 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
                     console.error(`[${requestId}] 延迟通知游戏服失败:`, error);
                 }
             }, 120000); // 120秒延迟
-        } else {
         }
 
         const endTime = Date.now();

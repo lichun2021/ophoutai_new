@@ -99,6 +99,7 @@ const selectedMethod = ref('');
 const paying    = ref(false);
 
 const METHOD_NAMES = { wx: '微信支付', zfb: '支付宝' };
+// 固定用 public 目录下的本地图片，不依赖数据库 icon_url
 const METHOD_ICONS = { wx: '/wx.png', zfb: '/zfb.png' };
 
 const loadMethods = async () => {
@@ -109,7 +110,7 @@ const loadMethods = async () => {
     methods.value = active.map(s => ({
       id: s.payment_method,
       name: METHOD_NAMES[s.payment_method] || s.payment_method,
-      icon: s.icon_url || METHOD_ICONS[s.payment_method] || '/default.png',
+      icon: METHOD_ICONS[s.payment_method],   // 只用本地图片
     }));
     if (methods.value.length > 0) selectedMethod.value = methods.value[0].id;
   } catch {

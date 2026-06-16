@@ -300,7 +300,7 @@ const loadPaymentMethods = async () => {
     paymentMethods.value = filteredSettings.map(setting => ({
       id: setting.payment_method,
       name: getPaymentMethodName(setting.payment_method),
-      icon: setting.icon_url || getDefaultIcon(setting.payment_method)
+      icon: getDefaultIcon(setting.payment_method)  // 固定用本地 public 图片
     }));
     
     // 如果有可用的支付方式，默认选择第一个
