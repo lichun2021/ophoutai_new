@@ -77,8 +77,14 @@ export const createType = async (evt: H3Event) => {
   if (!Array.isArray(items) || items.length === 0) {
     throw createError({ status: 400, message: '物品列表不能为空' });
   }
-  const validItems = items.filter((it: any) => Number(it?.ItemId) > 0 && Number(it?.ItemNum) > 0)
-    .map((it: any) => ({ ItemId: Number(it.ItemId), ItemNum: Number(it.ItemNum) }));
+  // 支持纯数字 ID 和 gid_level 字符串格式（如 "67240092_1"）
+  const isValidItemId = (v: any) => {
+    const s = String(v ?? '').trim();
+    return s.length > 0 && /^\d+(_\d+)?$/.test(s);
+  };
+  const validItems = items
+    .filter((it: any) => isValidItemId(it?.ItemId) && Number(it?.ItemNum) > 0)
+    .map((it: any) => ({ ItemId: String(it.ItemId), ItemNum: Number(it.ItemNum) }));
   if (validItems.length === 0) {
     throw createError({ status: 400, message: '物品列表无有效条目' });
   }
@@ -95,8 +101,14 @@ export const updateType = async (evt: H3Event) => {
     if (!Array.isArray(rest.items) || rest.items.length === 0) {
       throw createError({ status: 400, message: '物品列表不能为空' });
     }
-    const validItems = rest.items.filter((it: any) => Number(it?.ItemId) > 0 && Number(it?.ItemNum) > 0)
-      .map((it: any) => ({ ItemId: Number(it.ItemId), ItemNum: Number(it.ItemNum) }));
+    // 支持纯数字 ID 和 gid_level 字符串格式
+    const isValidItemId = (v: any) => {
+      const s = String(v ?? '').trim();
+      return s.length > 0 && /^\d+(_\d+)?$/.test(s);
+    };
+    const validItems = rest.items
+      .filter((it: any) => isValidItemId(it?.ItemId) && Number(it?.ItemNum) > 0)
+      .map((it: any) => ({ ItemId: String(it.ItemId), ItemNum: Number(it.ItemNum) }));
     if (validItems.length === 0) {
       throw createError({ status: 400, message: '物品列表无有效条目' });
     }
@@ -174,7 +186,7 @@ export const redeem = async (evt: H3Event) => {
       roleId: String(playerId),
       mailTitle: cdkType.title,
       mailContent: cdkType.content,
-      items: cdkType.items.map((i: any) => ({ itemId: Number(i.ItemId), itemCount: Number(i.ItemNum) })),
+      items: cdkType.items.map((i: any) => ({ itemId: String(i.ItemId), itemCount: Number(i.ItemNum) })),
     });
   };
 
