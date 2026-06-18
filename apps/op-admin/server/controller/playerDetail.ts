@@ -451,3 +451,127 @@ export const updateRemark = async (evt: H3Event) => {
         throw error;
     }
 };
+
+// ========== 月卡管理 ==========
+
+/**
+ * 获取玩家所有月卡（含已过期的）
+ */
+export const getPlayerCards = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        const userId = Number(body?.user_id);
+        if (!userId) throw createError({ statusCode: 400, message: '缺少 user_id' });
+
+        const rows = await sql({
+            query: `SELECT * FROM MonthlyCards WHERE user_id = ? ORDER BY created_at DESC`,
+            values: [userId],
+        }) as any[];
+
+        return { success: true, data: rows };
+    } catch (error: any) {
+        console.error('[Player Cards] 查询失败:', error);
+        throw error;
+    }
+};
+
+/**
+ * 手动激活月卡或终身卡
+ * card_type: 'monthly' | 'lifetime'
+ * daily_coins: 每日赠币数量
+ * days: 月卡有效天数（终身卡传 null 或不传）
+ */
+export const activatePlayerCard = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        const userId = Number(body?.user_id);
+        const cardType: 'monthly' | 'lifetime' = body?.card_type;
+        const dailyCoins = Number(body?.daily_coins ?? 0);
+        const days = body?.days !== undefined && body?.days !== null ? Number(body.days) : null;
+
+        if (!userId) throw createError({ statusCode: 400, message: '缺少 user_id' });
+        if (cardType !== 'monthly' && cardType !== 'lifetime') {
+            throw createError({ statusCode: 400, message: 'card_type 必须为 monthly 或 lifetime' });
+        }
+        if (dailyCoins < 0 || !Number.isFinite(dailyCoins)) {
+            throw createError({ statusCode: 400, message: 'daily_coins 无效' });
+        }
+        if (cardType === 'monthly' && (!days || days <= 0)) {
+            throw createError({ statusCode: 400, message: '月卡需要指定有效天数 days' });
+        }
+
+        // 北京时间日期
+        const nowBJ = new Date(Date.now() + 8 * 3600 * 1000);
+        const startDate = nowBJ.toISOString().slice(0, 10);
+
+        let expireDate: string | null = null;
+        if (cardType === 'monthly' && days) {
+            const exp = new Date(nowBJ);
+            exp.setDate(exp.getDate() + days - 1); // 当天算第一天
+            expireDate = exp.toISOString().slice(0, 10);
+        }
+
+        const transactionId = `admin_manual_${Date.now()}_${userId}`;
+
+        const result = await sql({
+            query: `INSERT INTO MonthlyCards
+                        (user_id, card_type, daily_coins, start_date, expire_date, is_active, purchase_amount, transaction_id)
+                    VALUES (?, ?, ?, ?, ?, 1, 0, ?)`,
+            values: [userId, cardType, dailyCoins, startDate, expireDate, transactionId],
+        }) as any;
+
+        console.log(`[Player Cards] 管理员手动激活 ${cardType} 卡，user_id=${userId}，card_id=${result.insertId}`);
+
+        return {
+            success: true,
+            message: `${cardType === 'monthly' ? '月卡' : '终身卡'}激活成功`,
+            data: {
+                card_id: result.insertId,
+                card_type: cardType,
+                start_date: startDate,
+                expire_date: expireDate,
+                daily_coins: dailyCoins,
+            },
+        };
+    } catch (error: any) {
+        console.error('[Player Cards] 激活失败:', error);
+        throw error;
+    }
+};
+
+/**
+ * 停用玩家指定月卡（设置 is_active = 0）
+ */
+export const deactivatePlayerCard = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        const cardId = Number(body?.card_id);
+        const userId = Number(body?.user_id);
+
+        if (!cardId) throw createError({ statusCode: 400, message: '缺少 card_id' });
+        if (!userId) throw createError({ statusCode: 400, message: '缺少 user_id' });
+
+        // 确认卡属于该用户
+        const rows = await sql({
+            query: 'SELECT id FROM MonthlyCards WHERE id = ? AND user_id = ? LIMIT 1',
+            values: [cardId, userId],
+        }) as any[];
+
+        if (rows.length === 0) {
+            throw createError({ statusCode: 404, message: '未找到该月卡，或卡不属于该用户' });
+        }
+
+        await sql({
+            query: 'UPDATE MonthlyCards SET is_active = 0 WHERE id = ?',
+            values: [cardId],
+        });
+
+        console.log(`[Player Cards] 管理员停用月卡 card_id=${cardId}，user_id=${userId}`);
+
+        return { success: true, message: '月卡已停用' };
+    } catch (error: any) {
+        console.error('[Player Cards] 停用失败:', error);
+        throw error;
+    }
+};
+

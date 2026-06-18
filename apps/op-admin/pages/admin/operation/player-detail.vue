@@ -130,6 +130,36 @@
                 </UButton>
               </div>
             </div>
+            <div class="summary-item" style="grid-column: 1 / -1">
+              <span class="label">月卡 / 终身卡</span>
+              <div class="value flex items-center gap-2 flex-wrap">
+                <template v-if="playerCards.length > 0">
+                  <UBadge
+                    v-for="card in playerCards.filter(c => c.is_active)"
+                    :key="card.id"
+                    :color="card.card_type === 'lifetime' ? 'purple' : 'blue'"
+                    variant="subtle"
+                  >
+                    {{ card.card_type === 'lifetime' ? '终身卡' : '月卡' }}
+                    · {{ card.daily_coins }}币/天
+                    <span v-if="card.expire_date">· 至{{ card.expire_date }}</span>
+                    <span v-else>· 永久</span>
+                  </UBadge>
+                  <span v-if="playerCards.filter(c => c.is_active).length === 0" class="text-gray-400 italic text-sm">无有效卡</span>
+                </template>
+                <span v-else-if="cardsLoading" class="text-gray-400 text-sm">加载中...</span>
+                <span v-else class="text-gray-400 italic text-sm">暂无月卡</span>
+                <UButton
+                  size="xs"
+                  color="violet"
+                  variant="outline"
+                  icon="i-heroicons-credit-card"
+                  @click="openActivateCardDialog"
+                >
+                  激活月卡
+                </UButton>
+              </div>
+            </div>
           </div>
         </UCard>
 
@@ -299,6 +329,74 @@
                 <td class="px-3 py-2 text-gray-500">
                   <div>交易号: {{ record.transaction_id || '-' }}</div>
                   <div>商户单号: {{ record.mch_order_id || '-' }}</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </UCard>
+
+      <!-- 月卡管理卡片 -->
+      <UCard class="mt-6">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900">月卡 / 终身卡记录</h3>
+            <UButton
+              size="sm"
+              color="violet"
+              icon="i-heroicons-plus"
+              @click="openActivateCardDialog"
+            >
+              手动激活
+            </UButton>
+          </div>
+        </template>
+
+        <div v-if="cardsLoading" class="py-8 text-center text-gray-400">加载中...</div>
+        <div v-else-if="playerCards.length === 0" class="py-8 text-center text-gray-400">暂无月卡记录</div>
+        <div v-else class="overflow-auto">
+          <table class="w-full table-auto text-sm">
+            <thead class="bg-gray-50 text-gray-600 uppercase text-xs tracking-wide">
+              <tr>
+                <th class="px-3 py-2 text-left">ID</th>
+                <th class="px-3 py-2 text-left">类型</th>
+                <th class="px-3 py-2 text-right">每日赠币</th>
+                <th class="px-3 py-2 text-left">开始日期</th>
+                <th class="px-3 py-2 text-left">到期日期</th>
+                <th class="px-3 py-2 text-center">状态</th>
+                <th class="px-3 py-2 text-left">创建时间</th>
+                <th class="px-3 py-2 text-center">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="card in playerCards" :key="card.id" class="hover:bg-gray-50 transition">
+                <td class="px-3 py-2 text-gray-500">{{ card.id }}</td>
+                <td class="px-3 py-2">
+                  <UBadge :color="card.card_type === 'lifetime' ? 'purple' : 'blue'" variant="subtle">
+                    {{ card.card_type === 'lifetime' ? '终身卡' : '月卡' }}
+                  </UBadge>
+                </td>
+                <td class="px-3 py-2 text-right font-semibold text-indigo-600">{{ card.daily_coins }} 币</td>
+                <td class="px-3 py-2 text-gray-600">{{ card.start_date }}</td>
+                <td class="px-3 py-2 text-gray-600">{{ card.expire_date || '永久' }}</td>
+                <td class="px-3 py-2 text-center">
+                  <UBadge :color="card.is_active ? 'green' : 'gray'" variant="subtle">
+                    {{ card.is_active ? '有效' : '已停用' }}
+                  </UBadge>
+                </td>
+                <td class="px-3 py-2 text-gray-500">{{ formatDate(card.created_at) }}</td>
+                <td class="px-3 py-2 text-center">
+                  <UButton
+                    v-if="card.is_active"
+                    size="xs"
+                    color="red"
+                    variant="outline"
+                    :loading="deactivatingCardId === card.id"
+                    @click="handleDeactivateCard(card)"
+                  >
+                    停用
+                  </UButton>
+                  <span v-else class="text-gray-400 text-xs">-</span>
                 </td>
               </tr>
             </tbody>
@@ -479,6 +577,71 @@
       </template>
     </UCard>
   </UModal>
+
+  <!-- 激活月卡/终身卡弹窗 -->
+  <UModal v-model="activateCardDialogVisible" :ui="{ width: 'w-full max-w-md' }">
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-semibold text-gray-900">手动激活月卡 / 终身卡</h3>
+      </template>
+
+      <div class="space-y-4">
+        <div class="text-sm text-gray-600">
+          当前用户：<span class="font-semibold text-gray-900">{{ result?.user?.username }}</span>
+        </div>
+        <UFormGroup label="卡片类型" required>
+          <USelectMenu
+            v-model="activateCardType"
+            :options="cardTypeOptions"
+            value-attribute="value"
+            option-attribute="label"
+          />
+        </UFormGroup>
+        <UFormGroup label="每日赠币数量" required>
+          <UInput
+            v-model.number="activateCardCoins"
+            type="number"
+            min="0"
+            placeholder="例如：100"
+          />
+        </UFormGroup>
+        <UFormGroup v-if="activateCardType === 'monthly'" label="有效天数" required>
+          <UInput
+            v-model.number="activateCardDays"
+            type="number"
+            min="1"
+            placeholder="例如：30"
+          />
+          <template #hint>
+            <span class="text-gray-400 text-xs">当天起算，填 30 即从今天起 30 天有效</span>
+          </template>
+        </UFormGroup>
+        <div v-if="activateCardType === 'lifetime'" class="text-sm text-violet-600 bg-violet-50 rounded px-3 py-2">
+          终身卡永久有效，无到期日期
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <UButton
+            color="gray"
+            variant="outline"
+            @click="activateCardDialogVisible = false"
+            :disabled="activatingCard"
+          >
+            取消
+          </UButton>
+          <UButton
+            color="violet"
+            :loading="activatingCard"
+            @click="submitActivateCard"
+          >
+            确认激活
+          </UButton>
+        </div>
+      </template>
+    </UCard>
+  </UModal>
 </template>
 
 <script setup>
@@ -508,6 +671,20 @@ const remarkDialogVisible = ref(false)
 const remarkInput = ref('')
 const savingRemark = ref(false)
 
+// 月卡管理
+const playerCards = ref([])
+const cardsLoading = ref(false)
+const activateCardDialogVisible = ref(false)
+const activateCardType = ref('monthly')
+const activateCardCoins = ref(0)
+const activateCardDays = ref(30)
+const activatingCard = ref(false)
+const deactivatingCardId = ref(null)
+const cardTypeOptions = [
+  { label: '月卡（有时限）', value: 'monthly' },
+  { label: '终身卡（永久）', value: 'lifetime' },
+]
+
 const handleSearch = async () => {
   const keyword = (userIdInput.value || '').toString().trim()
   if (!keyword) {
@@ -522,6 +699,7 @@ const handleSearch = async () => {
   try {
     loading.value = true
     result.value = null
+    playerCards.value = []
     const response = await $fetch('/api/admin/player/detail', {
       method: 'POST',
       body: { user_id: keyword }
@@ -529,6 +707,8 @@ const handleSearch = async () => {
 
     if (response.code === 200) {
       result.value = response.data
+      // 同步加载月卡列表
+      loadPlayerCards(response.data.user.id)
     } else {
       throw new Error(response.message || '查询失败')
     }
@@ -541,6 +721,110 @@ const handleSearch = async () => {
     })
   } finally {
     loading.value = false
+  }
+}
+
+const loadPlayerCards = async (userId) => {
+  try {
+    cardsLoading.value = true
+    const response = await $fetch('/api/admin/player/cards', {
+      method: 'POST',
+      body: { user_id: userId }
+    })
+    playerCards.value = response?.data || []
+  } catch (error) {
+    playerCards.value = []
+  } finally {
+    cardsLoading.value = false
+  }
+}
+
+
+
+const openActivateCardDialog = () => {
+  if (!result.value?.user?.id) {
+    toast.add({ title: '请先查询玩家信息', color: 'red' })
+    return
+  }
+  activateCardType.value = 'monthly'
+  activateCardCoins.value = 0
+  activateCardDays.value = 30
+  activateCardDialogVisible.value = true
+}
+
+const submitActivateCard = async () => {
+  if (activatingCard.value) return
+  if (!result.value?.user?.id) return
+
+  if (activateCardCoins.value < 0) {
+    toast.add({ title: '每日赠币数量不能为负数', color: 'red' })
+    return
+  }
+  if (activateCardType.value === 'monthly' && (!activateCardDays.value || activateCardDays.value < 1)) {
+    toast.add({ title: '月卡需要填写有效天数（至少1天）', color: 'red' })
+    return
+  }
+
+  try {
+    activatingCard.value = true
+    const body = {
+      user_id: result.value.user.id,
+      card_type: activateCardType.value,
+      daily_coins: activateCardCoins.value,
+      days: activateCardType.value === 'monthly' ? activateCardDays.value : null,
+    }
+    const response = await $fetch('/api/admin/player/cards/activate', {
+      method: 'POST',
+      body,
+    })
+    if (response?.success) {
+      toast.add({
+        title: response.message || '激活成功',
+        color: 'green'
+      })
+      activateCardDialogVisible.value = false
+      await loadPlayerCards(result.value.user.id)
+    } else {
+      throw new Error(response?.message || '激活失败')
+    }
+  } catch (error) {
+    toast.add({
+      title: '激活失败',
+      description: error.message || '请稍后再试',
+      color: 'red'
+    })
+  } finally {
+    activatingCard.value = false
+  }
+}
+
+const handleDeactivateCard = async (card) => {
+  if (deactivatingCardId.value) return
+  if (!confirm(`确认停用这张${card.card_type === 'lifetime' ? '终身卡' : '月卡'}（ID: ${card.id}）？`)) return
+
+  try {
+    deactivatingCardId.value = card.id
+    const response = await $fetch('/api/admin/player/cards/deactivate', {
+      method: 'POST',
+      body: {
+        card_id: card.id,
+        user_id: result.value.user.id,
+      }
+    })
+    if (response?.success) {
+      toast.add({ title: '月卡已停用', color: 'green' })
+      await loadPlayerCards(result.value.user.id)
+    } else {
+      throw new Error(response?.message || '停用失败')
+    }
+  } catch (error) {
+    toast.add({
+      title: '停用失败',
+      description: error.message || '请稍后再试',
+      color: 'red'
+    })
+  } finally {
+    deactivatingCardId.value = null
   }
 }
 

@@ -27,6 +27,9 @@ AGENT_PM2_NAME="agent-admin"
 OP_REMOTE_PATH="/data/op-admin"
 OP_RESTART_SCRIPT="/data/restart-op.sh"
 OP_PM2_NAME="op-admin"
+
+# SSH 公共选项：保活 + 连接超时
+SSH_OPTS="-p $SSH_PORT -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15"
 # =================================================
 
 # 颜色输出
@@ -150,8 +153,8 @@ deploy_app() {
   # --- 步骤4: 上传 ---
   log_info "[3/6] 上传 $ZIP_NAME 到服务器..."
   # 先确保远程目录存在
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP "mkdir -p $REMOTE_PATH"
-  scp -P $SSH_PORT "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
+  ssh $SSH_OPTS $USERNAME@$SERVER_IP "mkdir -p $REMOTE_PATH"
+  scp $SSH_OPTS "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
   if [ $? -ne 0 ]; then
     log_error "上传失败"
     cd - > /dev/null
@@ -162,7 +165,7 @@ deploy_app() {
   # --- 步骤5: 服务器上解压 ---
   log_info "[4/6] 服务器解压..."
   # unzip：必须把选项放在压缩包名前；-o 与 -q 合并为 -oq；勿在包名后再写 -q（否则会被当成「要解压的文件名」）
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
+  ssh $SSH_OPTS $USERNAME@$SERVER_IP "
     cd $REMOTE_PATH &&
     find . -type f ! -name '$ZIP_NAME' -delete 2>/dev/null;
     find . -mindepth 1 -type d -empty -delete 2>/dev/null;
@@ -176,24 +179,24 @@ deploy_app() {
   fi
   log_success "解压完成"
 
-  # 安装运行时依赖（Nuxt nitro 打包后 package.json 在 server/ 下）：
+  # 安装运行时依赖
   #   - server/node_modules 不存在时自动安装（首次部署 / 手动清理后）
-  #   - 传入 --install 时强制重装（新增 npm 包时用，如 grammy 这类动态 import 未被打包的）
-  if ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/server/package.json ]"; then
+  #   - 传入 --install 时强制重装（新增 npm 包时用）
+  #   - grammy 无论何时都额外确保安装（因为是 external 依赖，Nitro 不会打包它）
+  if ssh $SSH_OPTS $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/server/package.json ]"; then
     NEED_INSTALL=false
     if [ "$INSTALL_DEPS" = true ]; then
       NEED_INSTALL=true
       log_info "[4.5/6] --install 强制重装依赖 (server/)..."
-    elif ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/server/node_modules ]"; then
+    elif ssh $SSH_OPTS $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/server/node_modules ]"; then
       NEED_INSTALL=true
       log_info "[4.5/6] server/node_modules 不存在，自动安装依赖..."
     fi
 
     if [ "$NEED_INSTALL" = true ]; then
-      ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
+      ssh $SSH_OPTS $USERNAME@$SERVER_IP "
         cd $REMOTE_PATH/server &&
-        npm install --omit=dev --ignore-scripts 2>&1 | tail -10 &&
-        npm install grammy --save --ignore-scripts 2>&1 | tail -5
+        npm install --omit=dev --ignore-scripts 2>&1 | tail -10
       "
       if [ $? -ne 0 ]; then
         log_warn "npm install 执行异常，请手动检查"
@@ -201,13 +204,22 @@ deploy_app() {
         log_success "依赖安装完成"
       fi
     fi
+
+    # grammy 是 external 依赖（Nitro 不打包），每次部署后在当前 SSH 中异步安装，不阻塞 PM2 重启
+    log_info "[4.6/6] 确保 grammy 已安装 (server/)，后台安装..."
+    ssh $SSH_OPTS $USERNAME@$SERVER_IP "
+      cd $REMOTE_PATH/server &&
+      node -e \"require('grammy')\" 2>/dev/null ||
+      nohup npm install grammy --save --ignore-scripts >/tmp/grammy-install.log 2>&1 &
+      echo 'grammy check/install launched'
+    " && log_success "grammy 就绪" || log_warn "grammy 检测异常，请手动检查"
   else
     log_warn "[4.5/6] 未找到 server/package.json，跳过依赖安装"
   fi
 
   # --- 步骤6: 重启服务 ---
   log_info "[5/6] 重启 PM2 服务 ($PM2_NAME)..."
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
+  ssh $SSH_OPTS $USERNAME@$SERVER_IP "
     if command -v pm2 &>/dev/null; then
       if pm2 list | grep -q '$PM2_NAME'; then
         pm2 restart $PM2_NAME
