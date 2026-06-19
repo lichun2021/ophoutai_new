@@ -15,56 +15,86 @@
       <div class="section-head">
         <span class="section-icon">🃏</span>
         <h3 class="section-title">月卡权益</h3>
-        <span v-if="cardStatus.cards.length > 0" class="section-badge active">已开通</span>
-        <span v-else class="section-badge">未开通</span>
       </div>
 
-      <!-- 有月卡 -->
-      <template v-if="cardStatus.cards.length > 0">
-        <!-- 卡片列表 -->
-        <div class="card-list">
-          <div v-for="card in cardStatus.cards" :key="card.id" class="mc-card"
-               :class="card.card_type">
-            <div class="mc-card-top">
-              <div class="mc-card-badge">{{ card.card_type === 'lifetime' ? '终身卡' : '月卡' }}</div>
-              <div class="mc-card-coins">
-                <span class="coin-num">{{ card.daily_coins }}</span>
-                <span class="coin-unit">平台币/天</span>
-              </div>
-            </div>
-            <div class="mc-card-bottom">
-              <span class="mc-expire" v-if="card.expire_date">
-                到期：{{ card.expire_date }}
-                <span v-if="getDaysLeft(card.expire_date) <= 3" class="expire-warn">（即将到期）</span>
-              </span>
-              <span class="mc-expire lifetime" v-else>永久有效</span>
-            </div>
-          </div>
-        </div>
+      <!-- 始终并列 2 张卡 -->
+      <div class="card-list">
 
-        <!-- 合并领取区 -->
-        <div class="claim-area">
-          <div class="claim-info">
-            <div class="claim-total">
-              今日可领：<strong>{{ cardStatus.totalDailyCoins }}</strong> 平台币
-            </div>
-            <div class="claim-stacked" v-if="cardStatus.cards.length > 1">
-              （月卡 + 终身卡叠加）
-            </div>
+        <!-- 月卡 -->
+        <div class="mc-card" :class="monthlyCard ? 'monthly active-card' : 'monthly inactive-card'">
+          <div class="mc-card-top">
+            <div class="mc-card-badge">🌙 月卡</div>
+            <div v-if="monthlyCard" class="mc-status-tag on">已开通</div>
+            <div v-else class="mc-status-tag off">未开通</div>
+          </div>
+          <div class="mc-card-coins" v-if="monthlyCard">
+            <span class="coin-num">{{ monthlyCard.daily_coins }}</span>
+            <span class="coin-unit">平台币/天</span>
+          </div>
+          <div class="mc-card-coins inactive" v-else>
+            <span class="coin-num">300</span>
+            <span class="coin-unit">平台币/天</span>
+          </div>
+          <div class="mc-card-meta">
+            <template v-if="monthlyCard">
+              <span class="mc-expire">
+                到期：{{ monthlyCard.expire_date }}
+                <span v-if="getDaysLeft(monthlyCard.expire_date) <= 3" class="expire-warn">（即将到期）</span>
+              </span>
+            </template>
+            <span v-else class="mc-expire dim">30 天有效</span>
           </div>
           <button
-            class="claim-btn"
-            :class="{ claimed: cardStatus.todayClaimed, loading: cardClaiming }"
-            :disabled="cardStatus.todayClaimed || cardClaiming"
+            v-if="monthlyCard"
+            class="card-claim-btn"
+            :class="{ claimed: isCardClaimed(monthlyCard), loading: cardClaiming }"
+            :disabled="isCardClaimed(monthlyCard) || cardClaiming"
             @click="claimCard"
           >
-            <template v-if="cardStatus.todayClaimed">✅ 今日已领取</template>
+            <template v-if="isCardClaimed(monthlyCard)">✅ 今日已领取</template>
             <template v-else-if="cardClaiming">领取中...</template>
-            <template v-else>领取今日 {{ cardStatus.totalDailyCoins }} 平台币</template>
+            <template v-else>领取 {{ monthlyCard.daily_coins }} 平台币</template>
           </button>
+          <button v-else class="card-claim-btn buy" @click="purchaseCard('monthly')">立即购买</button>
         </div>
 
-        <!-- 本月领取日历 -->
+        <!-- 终身卡 -->
+        <div class="mc-card" :class="lifetimeCard ? 'lifetime active-card' : 'lifetime inactive-card'">
+          <div class="mc-card-top">
+            <div class="mc-card-badge">✨ 终身卡</div>
+            <div v-if="lifetimeCard" class="mc-status-tag on">已开通</div>
+            <div v-else class="mc-status-tag off">未开通</div>
+          </div>
+          <div class="mc-card-coins" v-if="lifetimeCard">
+            <span class="coin-num">{{ lifetimeCard.daily_coins }}</span>
+            <span class="coin-unit">平台币/天</span>
+          </div>
+          <div class="mc-card-coins inactive" v-else>
+            <span class="coin-num">500</span>
+            <span class="coin-unit">平台币/天</span>
+          </div>
+          <div class="mc-card-meta">
+            <span v-if="lifetimeCard" class="mc-expire lifetime">永久有效</span>
+            <span v-else class="mc-expire dim">永久有效</span>
+          </div>
+          <button
+            v-if="lifetimeCard"
+            class="card-claim-btn gold"
+            :class="{ claimed: isCardClaimed(lifetimeCard), loading: cardClaiming }"
+            :disabled="isCardClaimed(lifetimeCard) || cardClaiming"
+            @click="claimCard"
+          >
+            <template v-if="isCardClaimed(lifetimeCard)">✅ 今日已领取</template>
+            <template v-else-if="cardClaiming">领取中...</template>
+            <template v-else>领取 {{ lifetimeCard.daily_coins }} 平台币</template>
+          </button>
+          <button v-else class="card-claim-btn buy gold" @click="purchaseCard('lifetime')">立即购买</button>
+        </div>
+
+      </div>
+
+      <!-- 本月领取日历（有任意卡时显示） -->
+      <template v-if="cardStatus.cards.length > 0">
         <div class="mini-calendar">
           <div class="mini-cal-title">本月领取记录</div>
           <div class="mini-cal-grid">
@@ -80,30 +110,6 @@
             >
               {{ day.num }}
             </div>
-          </div>
-        </div>
-      </template>
-
-      <!-- 无月卡：购买入口 -->
-      <template v-else>
-        <p class="no-card-hint">购买月卡，每天自动解锁专属平台币</p>
-        <div class="card-shop">
-          <div class="shop-card monthly">
-            <div class="shop-icon">🌙</div>
-            <div class="shop-name">月卡</div>
-            <div class="shop-price">¥ 328</div>
-            <div class="shop-perday">每天 300 平台币</div>
-            <div class="shop-duration">有效期 30 天</div>
-            <button class="shop-btn" @click="purchaseCard('monthly')">立即购买</button>
-          </div>
-          <div class="shop-card lifetime">
-            <div class="shop-top-tag">推荐</div>
-            <div class="shop-icon">✨</div>
-            <div class="shop-name">终身卡</div>
-            <div class="shop-price">¥ 980</div>
-            <div class="shop-perday">每天 500 平台币</div>
-            <div class="shop-duration">永久有效</div>
-            <button class="shop-btn" @click="purchaseCard('lifetime')">立即购买</button>
           </div>
         </div>
       </template>
@@ -235,6 +241,21 @@ const rewardPopup = ref({
   coins: 0,
   newBalance: 0,
 });
+
+// ─── 月卡快捷访问器 ───
+const monthlyCard = computed(() =>
+  cardStatus.value.cards.find(c => c.card_type === 'monthly') ?? null
+);
+const lifetimeCard = computed(() =>
+  cardStatus.value.cards.find(c => c.card_type === 'lifetime') ?? null
+);
+
+// 某张卡今天是否已领取
+const isCardClaimed = (card) => {
+  if (!card) return false;
+  // unclaimedCards 里没有这张卡就表示已领
+  return !cardStatus.value.unclaimedCards.some(c => c.id === card.id);
+};
 
 // ─── 格式化 ───
 const formatBalance = (v) => Math.floor(Number(v || 0)).toString();
@@ -428,76 +449,91 @@ onMounted(async () => {
 }
 .section-icon { font-size: 20px; }
 .section-title { margin: 0; font-size: 17px; font-weight: 700; color: var(--on-surface); flex: 1; }
-.section-badge {
-  font-size: 11px; padding: 3px 10px;
-  border-radius: var(--radius-xl);
-  background: var(--outline-variant);
-  color: var(--on-surface-variant);
-  font-weight: 600;
-}
-.section-badge.active {
-  background: rgba(127,230,219,0.2);
-  color: var(--secondary);
-}
 
-/* ── 月卡卡片 ── */
+/* ── 月卡卡片布局 ── */
 .card-list {
-  display: flex; gap: 12px; flex-wrap: wrap;
+  display: flex; gap: 12px;
   margin-bottom: 18px;
 }
 .mc-card {
-  flex: 1; min-width: 140px;
+  flex: 1;
   border-radius: var(--radius-md);
   padding: 16px;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.mc-card.monthly {
+/* 有效状态 */
+.mc-card.monthly.active-card {
   background: linear-gradient(135deg, #7c3aed, #5b21b6);
   color: #fff;
 }
-.mc-card.lifetime {
+.mc-card.lifetime.active-card {
   background: linear-gradient(135deg, #d97706, #92400e);
   color: #fff;
 }
-.mc-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+/* 未开通状态 */
+.mc-card.monthly.inactive-card {
+  background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(91,33,182,0.05));
+  border: 2px dashed rgba(124,58,237,0.3);
+  color: var(--on-surface-variant);
+}
+.mc-card.lifetime.inactive-card {
+  background: linear-gradient(135deg, rgba(217,119,6,0.08), rgba(146,64,14,0.05));
+  border: 2px dashed rgba(217,119,6,0.3);
+  color: var(--on-surface-variant);
+}
+.mc-card-top {
+  display: flex; justify-content: space-between; align-items: center;
+}
 .mc-card-badge {
-  background: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.2);
   border-radius: var(--radius-xl);
   padding: 3px 10px; font-size: 12px; font-weight: 700;
 }
-.coin-num { font-size: 26px; font-weight: 900; display: block; text-align: right; }
-.coin-unit { font-size: 11px; color: rgba(255,255,255,0.7); display: block; text-align: right; }
-.mc-card-bottom .mc-expire { font-size: 12px; color: rgba(255,255,255,0.8); }
-.mc-card-bottom .mc-expire.lifetime { color: rgba(255,255,255,0.9); font-weight: 600; }
-.expire-warn { color: #fbbf24; font-weight: 600; }
-
-/* ── 领取区 ── */
-.claim-area {
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--surface-container-low);
-  border-radius: var(--radius-md);
-  padding: 14px 18px;
-  margin-bottom: 18px;
-  gap: 12px;
-}
-.claim-total { font-size: 15px; color: var(--on-surface); }
-.claim-total strong { color: #7c3aed; font-size: 20px; font-weight: 900; }
-.claim-stacked { font-size: 12px; color: var(--on-surface-variant); margin-top: 2px; }
-.claim-btn {
-  padding: 12px 22px;
-  background: linear-gradient(135deg, #7c3aed, #5b21b6);
-  border: none; border-radius: var(--radius-md);
-  color: #fff; font-size: 14px; font-weight: 700;
-  cursor: pointer; transition: all 0.2s; white-space: nowrap;
-  font-family: var(--font-family);
-}
-.claim-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124,58,237,0.4); }
-.claim-btn.claimed, .claim-btn:disabled {
-  background: var(--surface-container-low);
+.inactive-card .mc-card-badge {
+  background: rgba(0,0,0,0.06);
   color: var(--on-surface-variant);
-  cursor: default;
 }
-.claim-btn.loading { opacity: 0.7; }
+.mc-status-tag {
+  font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: var(--radius-xl);
+}
+.mc-status-tag.on {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+.mc-status-tag.off {
+  background: rgba(0,0,0,0.08);
+  color: var(--on-surface-variant);
+}
+.mc-card-coins {
+  text-align: center;
+}
+.mc-card-coins.inactive {
+  opacity: 0.35;
+}
+.coin-num {
+  font-size: 28px; font-weight: 900;
+  display: block;
+  color: inherit;
+}
+.coin-unit {
+  font-size: 11px;
+  display: block;
+  color: rgba(255,255,255,0.7);
+}
+.inactive-card .coin-unit {
+  color: var(--on-surface-variant);
+}
+.mc-card-meta .mc-expire {
+  font-size: 11px;
+  color: rgba(255,255,255,0.8);
+}
+.mc-card-meta .mc-expire.lifetime { color: rgba(255,255,255,0.9); font-weight: 600; }
+.mc-card-meta .mc-expire.dim { color: var(--on-surface-variant); opacity: 0.6; }
+.expire-warn { color: #fbbf24; font-weight: 600; }
 
 /* ── 月历 ── */
 .mini-calendar { margin-top: 4px; }
@@ -528,37 +564,6 @@ onMounted(async () => {
 }
 .mini-day.future { opacity: 0.35; }
 
-/* ── 无月卡 ── */
-.no-card-hint {
-  font-size: 13px; color: var(--on-surface-variant);
-  margin: 0 0 16px; text-align: center;
-}
-.card-shop { display: flex; gap: 14px; }
-.shop-card {
-  flex: 1; border-radius: var(--radius-md); padding: 20px 16px;
-  position: relative; text-align: center;
-  background: var(--surface-container-low);
-  border: 2px solid var(--outline-variant);
-  transition: all 0.2s;
-}
-.shop-card:hover { transform: translateY(-2px); }
-.shop-card.lifetime {
-  border-color: #d97706;
-  background: linear-gradient(135deg, rgba(217,119,6,0.05), rgba(146,64,14,0.05));
-}
-.shop-card.monthly {
-  border-color: #7c3aed;
-  background: linear-gradient(135deg, rgba(124,58,237,0.05), rgba(91,33,182,0.05));
-}
-.shop-top-tag {
-  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-  background: #d97706; color: #fff;
-  padding: 2px 12px; border-radius: var(--radius-xl);
-  font-size: 11px; font-weight: 700;
-}
-.shop-icon { font-size: 28px; margin-bottom: 8px; }
-.shop-name { font-size: 16px; font-weight: 800; color: var(--on-surface); margin-bottom: 6px; }
-.shop-price { font-size: 24px; font-weight: 900; color: var(--primary); margin-bottom: 6px; }
 .shop-perday { font-size: 13px; color: var(--on-surface-variant); margin-bottom: 4px; }
 .shop-duration { font-size: 12px; color: var(--on-surface-variant); margin-bottom: 14px; }
 .shop-btn {
@@ -703,10 +708,7 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
-  .claim-area { flex-direction: column; align-items: stretch; text-align: center; }
-  .claim-btn { width: 100%; }
   .checkin-action { flex-direction: column; align-items: stretch; text-align: center; }
   .checkin-btn { width: 100%; }
-  .card-shop { flex-direction: column; }
 }
 </style>

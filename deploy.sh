@@ -28,8 +28,10 @@ OP_REMOTE_PATH="/data/op-admin"
 OP_RESTART_SCRIPT="/data/restart-op.sh"
 OP_PM2_NAME="op-admin"
 
-# SSH 公共选项：保活 + 连接超时
+# SSH/SCP 公共选项：保活 + 连接超时
+# ssh 用小写 -p 指定端口，scp 用大写 -P
 SSH_OPTS="-p $SSH_PORT -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15"
+SCP_OPTS="-P $SSH_PORT -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15"
 # =================================================
 
 # 颜色输出
@@ -154,7 +156,7 @@ deploy_app() {
   log_info "[3/6] 上传 $ZIP_NAME 到服务器..."
   # 先确保远程目录存在
   ssh $SSH_OPTS $USERNAME@$SERVER_IP "mkdir -p $REMOTE_PATH"
-  scp $SSH_OPTS "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
+  scp $SCP_OPTS "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
   if [ $? -ne 0 ]; then
     log_error "上传失败"
     cd - > /dev/null
