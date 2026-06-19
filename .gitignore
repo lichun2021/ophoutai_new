@@ -31,3 +31,4 @@ zips/
 backup_*.sh
 backup_db.sql
 clear_db.sql
+.zip
