@@ -139,6 +139,7 @@ deploy_app() {
   fi
 
   cd "$LOCAL_PATH" || exit 1
+  local APP_DIR="$PWD"  # 记录应用目录，避免 cd .output 后 cd - 出错
 
   # --- 步骤1: 构建 ---
   log_info "[1/6] 构建 $APP_LABEL..."
@@ -200,17 +201,15 @@ deploy_app() {
   log_success "上传完成"
 
   # --- 步骤5: 服务器上解压 ---
-  log_info "[4/6] 服务器解压..."
-  # 删除旧文件时保留 node_modules，避免每次重装依赖
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
-    cd $REMOTE_PATH &&
-    find . -maxdepth 1 -mindepth 1 ! -name 'node_modules' ! -name '$ZIP_NAME' -exec rm -rf {} + 2>/dev/null;
-    unzip -oq $ZIP_NAME -d . &&
+  ssh -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
+    set -e
+    cd $REMOTE_PATH
+    find . -maxdepth 1 -mindepth 1 ! -name 'node_modules' ! -name '$ZIP_NAME' -exec rm -rf {} + 2>/dev/null || true
+    unzip -oq $ZIP_NAME -d .
     rm -f $ZIP_NAME
-  "
+ENDSSH
   if [ $? -ne 0 ]; then
     log_error "服务器解压失败"
-    cd - > /dev/null
     return 1
   fi
   log_success "解压完成"
@@ -229,10 +228,10 @@ deploy_app() {
     fi
 
     if [ "$NEED_INSTALL" = true ]; then
-      ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
-        cd $REMOTE_PATH &&
+      ssh -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
+        cd $REMOTE_PATH
         npm install --omit=dev --ignore-scripts 2>&1 | tail -5
-      "
+ENDSSH
       if [ $? -ne 0 ]; then
         log_warn "npm install 执行异常，请手动检查"
       else
@@ -243,7 +242,7 @@ deploy_app() {
 
   # --- 步骤6: 重启服务 ---
   log_info "[5/6] 重启 PM2 服务 ($PM2_NAME)..."
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP "
+  ssh -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
     if command -v pm2 &>/dev/null; then
       if pm2 list | grep -q '$PM2_NAME'; then
         pm2 restart $PM2_NAME
@@ -256,7 +255,7 @@ deploy_app() {
     else
       echo '[warn] pm2 未安装，跳过重启'
     fi
-  "
+ENDSSH
   if [ $? -ne 0 ]; then
     log_warn "重启命令执行异常，请手动检查"
   else
@@ -268,7 +267,7 @@ deploy_app() {
   rm -f "$ZIP_NAME"
   log_success "$APP_LABEL 部署完成！"
 
-  cd - > /dev/null
+  cd "$SCRIPT_DIR" > /dev/null 2>&1 || true
   return 0
 }
 

@@ -514,11 +514,13 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
                 : giftPackage.gift_items;
         } catch { giftItems = []; }
 
+        // 解析物品ID：兼容纯数字（67174411）和 gid_level 格式（67174463_1）
+        // 不转 Number，字符串原样传给游戏服务器
         const toNum = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : NaN; };
         const sendItemList = Array.isArray(giftItems) ? giftItems.map((it: any) => ({
-            itemId:    toNum(it?.ItemId ?? it?.itemId ?? it?.id ?? it?.ItemID ?? it?.item_id ?? it?.i),
+            itemId:    String(it?.ItemId ?? it?.itemId ?? it?.id ?? it?.ItemID ?? it?.item_id ?? it?.i ?? ''),
             itemCount: toNum(it?.ItemNum ?? it?.itemNum ?? it?.num ?? it?.quantity ?? it?.count ?? it?.a),
-        })).filter(x => Number.isFinite(x.itemId) && x.itemId > 0 && Number.isFinite(x.itemCount) && x.itemCount > 0) : [];
+        })).filter(x => x.itemId.length > 0 && x.itemId !== '0' && Number.isFinite(x.itemCount) && x.itemCount > 0) : [];
 
         if (sendItemList.length === 0) {
             await sql({
@@ -636,16 +638,12 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
             giftItems = [];
         }
 
-        // 规范化物资列表（兼容多种字段命名，包括 i/a 形式）
-        const toNumber = (v: any) => {
-            const n = Number(v);
-            return Number.isFinite(n) ? n : NaN;
-        };
-        const sendItemList = Array.isArray(giftItems) ? giftItems.map((it: any) => {
-            const id = toNumber(it?.ItemId ?? it?.itemId ?? it?.id ?? it?.ItemID ?? it?.item_id ?? it?.i);
-            const num = toNumber(it?.ItemNum ?? it?.itemNum ?? it?.num ?? it?.quantity ?? it?.count ?? it?.a);
-            return { ItemId: id, ItemNum: num };
-        }).filter(x => Number.isFinite(x.ItemId) && x.ItemId > 0 && Number.isFinite(x.ItemNum) && x.ItemNum > 0) : [];
+        // 解析物品ID：兼容纯数字（67174411）和 gid_level 格式（67174463_1）
+        // 不转 Number，字符串原样传给游戏服务器
+        const sendItemList = Array.isArray(giftItems) ? giftItems.map((it: any) => ({
+            ItemId:  String(it?.ItemId ?? it?.itemId ?? it?.id ?? it?.ItemID ?? it?.item_id ?? it?.i ?? ''),
+            ItemNum: Number(it?.ItemNum ?? it?.itemNum ?? it?.num ?? it?.quantity ?? it?.count ?? it?.a),
+        })).filter(x => x.ItemId.length > 0 && x.ItemId !== '0' && Number.isFinite(x.ItemNum) && x.ItemNum > 0) : [];
 
         if (sendItemList.length === 0) {
             await sql({

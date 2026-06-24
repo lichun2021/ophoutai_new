@@ -717,8 +717,8 @@ const itemOptions = computed(() => {
 function searchItems(query) {
   const q = (query || '').trim().toLowerCase();
   const opts = itemOptions.value || [];
-  if (!q) return opts.slice(0, 20);
-  return opts.filter(o => o.label.toLowerCase().includes(q)).slice(0, 200);
+  if (!q) return opts.slice(0, 500);
+  return opts.filter(o => o.label.toLowerCase().includes(q)).slice(0, 500);
 }
 
 // 搜索物品（防抖）

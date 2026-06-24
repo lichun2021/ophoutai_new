@@ -509,7 +509,8 @@ const allItems   = ref([]);
 const itemOptions = computed(() => allItems.value.map(it => ({ value: it.id, label:`${it.id} - ${it.name}` })));
 const searchItems = (q) => {
   const lq = (q||'').toLowerCase();
-  return lq ? itemOptions.value.filter(o=>o.label.toLowerCase().includes(lq)).slice(0,200) : itemOptions.value.slice(0,20);
+  // 无搜索词时返回全量（最多500），有词时在全量中过滤，避免 数字_数字 物品因排序靠后而不显示
+  return lq ? itemOptions.value.filter(o=>o.label.toLowerCase().includes(lq)).slice(0,500) : itemOptions.value.slice(0,500);
 };
 
 onMounted(async () => {
@@ -538,8 +539,8 @@ const loadPkgs = async () => {
 const parsePkgItems = (items) => {
   try {
     const arr = typeof items==='string' ? JSON.parse(items) : items;
-    // 保留原始 ID 字符串，兼容纯数字 ID 和 gid+level 格式
-    return Array.isArray(arr) ? arr.map(i=>({ ItemId: i.i, ItemNum:Number(i.a) })) : [];
+    // 统一转为字符串，避免纯数字 ID (number) 与 itemOptions 中 string value 不匹配
+    return Array.isArray(arr) ? arr.map(i=>({ ItemId: String(i.i), ItemNum:Number(i.a) })) : [];
   } catch { return []; }
 };
 const applyPkg = (modal) => {
