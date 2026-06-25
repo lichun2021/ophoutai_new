@@ -8,6 +8,7 @@ import { listActive, listCdkRedeemable } from '../model/gameServers';
 import * as SystemParamsCtrl from '../controller/systemParams';
 import * as PaymentSettingsCtrl from '../controller/paymentSettings';
 import { generateCaptcha, verifyCaptcha } from '../utils/captcha';
+import * as BenefitsCtrl from '../controller/benefits';
 
 const router = createRouter();
 
@@ -285,5 +286,12 @@ router.get('/payment/user/:user_id', defineEventHandler(PaymentCtrl.getPaymentBy
 router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知'));
 router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知'));
 router.post('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知'));
+
+// ========== 权益中心：月卡 + 签到 ==========
+
+router.get('/client/benefits/monthly-card/status', withLogging(BenefitsCtrl.getMonthlyCardStatus, '权益-月卡状态'));
+router.post('/client/benefits/monthly-card/claim', withLogging(BenefitsCtrl.claimMonthlyCard, '权益-领取月卡'));
+router.get('/client/benefits/checkin/status', withLogging(BenefitsCtrl.getCheckInStatus, '权益-签到状态'));
+router.post('/client/benefits/checkin', withLogging(BenefitsCtrl.doCheckIn, '权益-每日签到'));
 
 export default useBase('/api', router.handler);
