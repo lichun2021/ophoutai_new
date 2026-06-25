@@ -1913,37 +1913,25 @@ export const doPayment = async (evt: H3Event) => {
             && (normalizedProductNameForType.includes('月卡')
                 || normalizedProductNameForType.includes('终身卡'));
 
-        // 读取商品配置并强校验价格：礼包 / 平台币充值 / 月卡终身卡 均跳过 rechargeConfig 校验
-        if (!isGiftOrder && !isPlatformCoinRecharge && !isCardOrder) {
-            try {
-                const productKey = productDesc || productName || '';
-                const { getRechargeConfig } = await import('../utils/rechargeConfig');
-                const cfg = productKey ? getRechargeConfig(productKey) : null;
-                const cfgPrice = cfg && typeof (cfg as any).price === 'number' ? Number((cfg as any).price) : NaN;
-
-                // 配置缺失或价格无效，直接拒绝
-                if (!cfg || isNaN(cfgPrice) || cfgPrice <= 0) {
-                    setResponseStatus(evt, 200);
-                    return {
-                        code: -10,
-                        msg: '商品价格配置缺失或无效',
-                        data: null
-                    };
-                }
-
-                // 所有支付方式（含平台币）都要求金额与配置价一致
-                if (Math.abs(amountNumGlobal - cfgPrice) > 0.001) {
-                    setResponseStatus(evt, 200);
-                    return {
-                        code: -10,
-                        msg: '支付金额与商品配置不一致',
-                        data: null
-                    };
-                }
-            } catch (e) {
-                console.warn('[doPayment] 金额与配置校验异常:', e);
-            }
-        }
+        // WAO 平台不使用 rechargeConfig 价格校验，注释保留供参考
+        // if (!isGiftOrder && !isPlatformCoinRecharge && !isCardOrder) {
+        //     try {
+        //         const productKey = productDesc || productName || '';
+        //         const { getRechargeConfig } = await import('../utils/rechargeConfig');
+        //         const cfg = productKey ? getRechargeConfig(productKey) : null;
+        //         const cfgPrice = cfg && typeof (cfg as any).price === 'number' ? Number((cfg as any).price) : NaN;
+        //         if (!cfg || isNaN(cfgPrice) || cfgPrice <= 0) {
+        //             setResponseStatus(evt, 200);
+        //             return { code: -10, msg: '商品价格配置缺失或无效', data: null };
+        //         }
+        //         if (Math.abs(amountNumGlobal - cfgPrice) > 0.001) {
+        //             setResponseStatus(evt, 200);
+        //             return { code: -10, msg: '支付金额与商品配置不一致', data: null };
+        //         }
+        //     } catch (e) {
+        //         console.warn('[doPayment] 金额与配置校验异常:', e);
+        //     }
+        // }
 
         // 处理不同支付方式
         if (paymentMethod === 'kf') {
