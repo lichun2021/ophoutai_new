@@ -222,7 +222,7 @@ export const getPlayerDetail = async (evt: H3Event) => {
 
         // 提前获取角色的基本信息（区服、等级等）
         const characterRows = await sql({
-            query: 'SELECT uuid, server_id, server_name, character_level FROM GameCharacters WHERE user_id = ?',
+            query: 'SELECT uuid, server_id, server_name, character_level FROM gamecharacters WHERE user_id = ?',
             values: [userId]
         }) as any[];
         
