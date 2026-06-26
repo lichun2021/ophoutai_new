@@ -3372,139 +3372,140 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         }
         // --- End ---
 
-        // ========== 收银台支付特殊处理：平台币到账逻辑 ==========
-        console.log(`[${requestId}] 开始处理平台币到账...`);
+        // ========== 收银台支付：区分月卡激活 vs 普通平台币充值 ==========
 
-        try {
-            // 计算应该到账的平台币数量（按SystemParams系数，默认1:10）
-            const rateStr = await getSystemParam('ptb_exchange_rate', '10');
-            const rate = Math.max(1, parseFloat(rateStr) || 10);
-            const platformCoinsToAdd = orderAmount * rate;
-            console.log(`[${requestId}] 计算平台币到账数量: ${orderAmount}元 = ${platformCoinsToAdd}平台币`);
+        // 固定价格配置
+        const CARD_PRICE_CONFIG: Record<string, number> = { '月卡': 328, '终身卡': 980 };
+        const CARD_DB_CONFIG: Record<string, { card_type: string; daily_coins: number; expire_days: number | null }> = {
+            '月卡':   { card_type: 'monthly',  daily_coins: 300, expire_days: 30 },
+            '终身卡': { card_type: 'lifetime', daily_coins: 500, expire_days: null },
+        };
+        const productNameStr2 = String(localOrder.product_name || '');
+        const cardPriceKey2 = Object.keys(CARD_PRICE_CONFIG).find(k => productNameStr2.includes(k));
 
-            // 获取用户当前平台币余额
-            const user = await sql({
-                query: 'SELECT id, platform_coins FROM users WHERE id = ?',
-                values: [localOrder.user_id],
-            }) as any[];
-
-            if (user.length === 0) {
-                console.error(`[${requestId}] 用户不存在:`, localOrder.user_id);
-                setResponseStatus(evt, 200);
-                return 'fail';
-            }
-
-            const currentPlatformCoins = parseFloat(user[0].platform_coins) || 0;
-
-            console.log(`[${requestId}] 平台币余额更新: ${currentPlatformCoins} + ${platformCoinsToAdd}`);
-
-            // 更新用户平台币余额（使用统一方法）
-            const updateResult = await UserModel.updatePlatformCoinsUnified(localOrder.user_id, platformCoinsToAdd, 3);
-            if (!updateResult.success) {
-                console.error(`[${requestId}] 平台币余额更新失败:`, updateResult.message);
-                setResponseStatus(evt, 200);
-                return 'fail';
-            }
-
-            const newPlatformCoins = updateResult.newBalance!;
-            console.log(`[${requestId}] 平台币余额更新成功!`);
-
-            // 同步记录到 PaymentRecords（平台币充值的余额变化）
+        if (cardPriceKey2) {
+            // ── 月卡 / 终身卡：激活权益，不发平台币 ──────────────────────────
             try {
-                await PaymentModel.updateByTransactionId(localOrder.transaction_id || '', {
-                    ptb_before: currentPlatformCoins,
-                    ptb_change: platformCoinsToAdd,
-                    ptb_after: newPlatformCoins
-                } as any);
-                console.log(`[${requestId}] PaymentRecords 平台币变化已记录`, {
-                    before: currentPlatformCoins,
-                    change: platformCoinsToAdd,
-                    after: newPlatformCoins
-                });
-            } catch (e: any) {
-                console.warn(`[${requestId}] PaymentRecords 平台币变化记录失败(不影响到账):`, e?.message || e);
-            }
-
-            // 记录平台币充值日志
-            await sql({
-                query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
-                values: [
-                    'platform_coin_recharge',
-                    `用户ID: ${localOrder.user_id}, 用户名: ${localOrder.wuid}, 充值金额: ${orderAmount}元, 到账平台币: ${platformCoinsToAdd}, 交易ID: ${localOrder.transaction_id}`
-                ],
-            });
-
-            console.log(`[${requestId}] 平台币充值日志记录成功!`);
-
-
-        } catch (platformCoinError: any) {
-            console.error(`[${requestId}] 平台币到账处理失败:`, platformCoinError);
-            // 平台币到账失败不影响支付回调的成功响应，但需要记录错误
-            await sql({
-                query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
-                values: [
-                    'platform_coin_recharge_error',
-                    `用户ID: ${localOrder.user_id}, 交易ID: ${localOrder.transaction_id}, 错误: ${platformCoinError.message}`
-                ],
-            });
-        }
-
-        // ========== 月卡/终身卡激活（直接写 DB，不依赖 rechargeConfig）==========
-        try {
-            const productNameStr = String(localOrder.product_name || '');
-            const CARD_PRICE_CONFIG: Record<string, number> = { '月卡': 328, '终身卡': 980 };
-            const CARD_DB_CONFIG: Record<string, { card_type: string; daily_coins: number; expire_days: number | null }> = {
-                '月卡':   { card_type: 'monthly',  daily_coins: 300, expire_days: 30 },
-                '终身卡': { card_type: 'lifetime', daily_coins: 500, expire_days: null },
-            };
-            const cardPriceKey = Object.keys(CARD_PRICE_CONFIG).find(k => productNameStr.includes(k));
-
-            if (cardPriceKey) {
                 // 金额二次校验
-                const expectedPrice = CARD_PRICE_CONFIG[cardPriceKey];
-                if (Math.abs(notifyAmount - expectedPrice) > 0.01) {
-                    console.error(`[${requestId}] 月卡金额校验失败(cashier):`, { expected: expectedPrice, notify: notifyAmount });
-                } else {
-                    // 防重：同一 transaction_id 只激活一次
-                    const existingCard = await sql({
-                        query: 'SELECT id FROM MonthlyCards WHERE transaction_id = ? LIMIT 1',
-                        values: [localOrder.transaction_id],
-                    }) as any[];
-
-                    if (existingCard.length > 0) {
-                        console.warn(`[${requestId}] 月卡已激活(cashier)，跳过重复写入:`, localOrder.transaction_id);
-                    } else {
-                        const cfg = CARD_DB_CONFIG[cardPriceKey];
-                        const now = new Date();
-                        now.setTime(now.getTime() + 8 * 60 * 60 * 1000);
-                        const startAt = now.toISOString().slice(0, 10);
-                        let expireAt: string | null = null;
-                        if (cfg.expire_days !== null) {
-                            const exp = new Date(now);
-                            exp.setDate(exp.getDate() + cfg.expire_days);
-                            expireAt = exp.toISOString().slice(0, 10);
-                        }
-
-                        await sql({
-                            query: `INSERT INTO MonthlyCards
-                                        (user_id, card_type, daily_coins, start_date, expire_date,
-                                         transaction_id, is_active, purchase_amount)
-                                    VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-                            values: [
-                                localOrder.user_id, cfg.card_type, cfg.daily_coins,
-                                startAt, expireAt, localOrder.transaction_id,
-                                notifyAmount,
-                            ],
-                        });
-                        console.log(`[${requestId}] ✅ 月卡激活成功(cashier): user=${localOrder.user_id} type=${cfg.card_type} expire=${expireAt ?? '永久'}`);
-                    }
+                const expectedCardPrice = CARD_PRICE_CONFIG[cardPriceKey2];
+                if (Math.abs(notifyAmount - expectedCardPrice) > 0.01) {
+                    console.error(`[${requestId}] 月卡金额校验失败:`, { expected: expectedCardPrice, notify: notifyAmount });
+                    setResponseStatus(evt, 200);
+                    return 'fail';
                 }
+
+                // 防重
+                const existingCard = await sql({
+                    query: 'SELECT id FROM MonthlyCards WHERE transaction_id = ? LIMIT 1',
+                    values: [localOrder.transaction_id],
+                }) as any[];
+
+                if (existingCard.length > 0) {
+                    console.warn(`[${requestId}] 月卡已激活，跳过重复写入:`, localOrder.transaction_id);
+                } else {
+                    const cfg2 = CARD_DB_CONFIG[cardPriceKey2];
+                    const now2 = new Date();
+                    now2.setTime(now2.getTime() + 8 * 60 * 60 * 1000);
+                    const startAt2 = now2.toISOString().slice(0, 10);
+                    let expireAt2: string | null = null;
+                    if (cfg2.expire_days !== null) {
+                        const exp2 = new Date(now2);
+                        exp2.setDate(exp2.getDate() + cfg2.expire_days);
+                        expireAt2 = exp2.toISOString().slice(0, 10);
+                    }
+
+                    await sql({
+                        query: `INSERT INTO MonthlyCards
+                                    (user_id, card_type, daily_coins, start_date, expire_date,
+                                     transaction_id, is_active, purchase_amount)
+                                VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+                        values: [
+                            localOrder.user_id, cfg2.card_type, cfg2.daily_coins,
+                            startAt2, expireAt2, localOrder.transaction_id,
+                            notifyAmount,
+                        ],
+                    });
+                    console.log(`[${requestId}] ✅ 月卡激活成功(cashier): user=${localOrder.user_id} type=${cfg2.card_type} expire=${expireAt2 ?? '永久'}`);
+                }
+            } catch (cardErr2: any) {
+                console.error(`[${requestId}] 月卡激活失败(cashier):`, cardErr2);
+                try {
+                    await sql({
+                        query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
+                        values: ['monthly_card_activate_error', `cashier transaction_id=${localOrder.transaction_id} user=${localOrder.user_id} err=${String(cardErr2)}`],
+                    });
+                } catch {}
             }
-        } catch (cardErr: any) {
-            // 月卡激活失败不影响回调成功
-            console.error(`[${requestId}] 月卡激活失败(cashier, 不影响回调):`, cardErr?.message);
+
+        } else {
+            // ── 普通平台币充值 ────────────────────────────────────────────────
+            try {
+                const { getSystemParam } = await import('../utils/systemConfig');
+                const rateStr = await getSystemParam('ptb_exchange_rate', '10');
+                const rate = Math.max(1, parseFloat(rateStr) || 10);
+                const platformCoinsToAdd = orderAmount * rate;
+                console.log(`[${requestId}] 计算平台币到账数量: ${orderAmount}元 = ${platformCoinsToAdd}平台币`);
+
+                const user = await sql({
+                    query: 'SELECT id, platform_coins FROM users WHERE id = ?',
+                    values: [localOrder.user_id],
+                }) as any[];
+
+                if (user.length === 0) {
+                    console.error(`[${requestId}] 用户不存在:`, localOrder.user_id);
+                    setResponseStatus(evt, 200);
+                    return 'fail';
+                }
+
+                const currentPlatformCoins = parseFloat(user[0].platform_coins) || 0;
+                console.log(`[${requestId}] 平台币余额更新: ${currentPlatformCoins} + ${platformCoinsToAdd}`);
+
+                const updateResult = await UserModel.updatePlatformCoinsUnified(localOrder.user_id, platformCoinsToAdd, 3);
+                if (!updateResult.success) {
+                    console.error(`[${requestId}] 平台币余额更新失败:`, updateResult.message);
+                    setResponseStatus(evt, 200);
+                    return 'fail';
+                }
+
+                const newPlatformCoins = updateResult.newBalance!;
+                console.log(`[${requestId}] 平台币余额更新成功!`);
+
+                try {
+                    await PaymentModel.updateByTransactionId(localOrder.transaction_id || '', {
+                        ptb_before: currentPlatformCoins,
+                        ptb_change: platformCoinsToAdd,
+                        ptb_after: newPlatformCoins
+                    } as any);
+                    console.log(`[${requestId}] PaymentRecords 平台币变化已记录`, {
+                        before: currentPlatformCoins,
+                        change: platformCoinsToAdd,
+                        after: newPlatformCoins
+                    });
+                } catch (e: any) {
+                    console.warn(`[${requestId}] PaymentRecords 平台币变化记录失败(不影响到账):`, e?.message || e);
+                }
+
+                await sql({
+                    query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
+                    values: [
+                        'platform_coin_recharge',
+                        `用户ID: ${localOrder.user_id}, 用户名: ${localOrder.wuid}, 充值金额: ${orderAmount}元, 到账平台币: ${platformCoinsToAdd}, 交易ID: ${localOrder.transaction_id}`
+                    ],
+                });
+                console.log(`[${requestId}] 平台币充值日志记录成功!`);
+
+            } catch (platformCoinError: any) {
+                console.error(`[${requestId}] 平台币到账处理失败:`, platformCoinError);
+                await sql({
+                    query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
+                    values: [
+                        'platform_coin_recharge_error',
+                        `用户ID: ${localOrder.user_id}, 交易ID: ${localOrder.transaction_id}, 错误: ${platformCoinError.message}`
+                    ],
+                });
+            }
         }
-        // ========== END 月卡激活 ==========
+
 
 
         const endTime = Date.now();
