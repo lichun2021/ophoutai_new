@@ -3377,7 +3377,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         // 固定价格配置
         const CARD_PRICE_CONFIG: Record<string, number> = { '月卡': 328, '终身卡': 980 };
         const CARD_DB_CONFIG: Record<string, { card_type: string; daily_coins: number; expire_days: number | null }> = {
-            '月卡':   { card_type: 'monthly',  daily_coins: 300, expire_days: 30 },
+            '月卡':   { card_type: 'monthly',  daily_coins: 648, expire_days: 30 },
             '终身卡': { card_type: 'lifetime', daily_coins: 500, expire_days: null },
         };
         const productNameStr2 = String(localOrder.product_name || '');

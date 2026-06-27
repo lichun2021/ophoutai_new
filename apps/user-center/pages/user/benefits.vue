@@ -32,7 +32,7 @@
             <span class="coin-unit">平台币/天</span>
           </div>
           <div class="mc-card-coins inactive" v-else>
-            <span class="coin-num">300</span>
+            <span class="coin-num">648</span>
             <span class="coin-unit">平台币/天</span>
           </div>
           <div class="mc-card-meta">

@@ -13,18 +13,18 @@ export interface CheckInRecord {
     created_at: string;
 }
 
-// 里程碑配置：累计天数 -> 额外奖励（WAO 平台为 main 的一半）
+// 里程碑配置：累计天数 -> 额外奖励
 const MILESTONES: { days: number; bonus: number }[] = [
-    { days: 3,  bonus: 150  },
-    { days: 7,  bonus: 200  },
-    { days: 13, bonus: 300  },
-    { days: 17, bonus: 400  },
-    { days: 25, bonus: 500  },
-    { days: 30, bonus: 600  },
+    { days: 3,  bonus: 300  },
+    { days: 7,  bonus: 400  },
+    { days: 13, bonus: 600  },
+    { days: 17, bonus: 800  },
+    { days: 25, bonus: 1000 },
+    { days: 30, bonus: 1200 },
 ];
 
-// WAO 平台每日签到基础奖励（main: 200，WAO: 100）
-const BASE_COINS = 100;
+// 每日签到基础奖励
+const BASE_COINS = 200;
 
 /**
  * 获取用户本月签到状态
