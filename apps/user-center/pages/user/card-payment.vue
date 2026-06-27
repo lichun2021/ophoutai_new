@@ -87,7 +87,7 @@ const cardType = computed(() => route.query.type === 'lifetime' ? 'lifetime' : '
 
 // 卡片配置
 const CARD_CONFIG = {
-  monthly:  { price: 328, dailyCoins: 300, productName: '月卡' },
+  monthly:  { price: 328, dailyCoins: 648, productName: '月卡' },
   lifetime: { price: 980, dailyCoins: 500, productName: '终身卡' },
 };
 const cardConfig = computed(() => CARD_CONFIG[cardType.value]);

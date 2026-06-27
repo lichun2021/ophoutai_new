@@ -2190,7 +2190,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
                 const existingCard = await getCardByTransactionId(transId);
                 if (!existingCard) {
                     const cardType = productName.includes('终身卡') ? 'lifetime' : 'monthly';
-                    const dailyCoins = cardType === 'lifetime' ? 500 : 300;
+                    const dailyCoins = cardType === 'lifetime' ? 500 : 648;
                     const today = getBeijingDate();
 
                     // 月卡：today + 29天（含今天共30天）；终身卡：NULL
