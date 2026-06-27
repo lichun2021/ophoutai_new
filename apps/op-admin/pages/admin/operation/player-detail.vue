@@ -238,6 +238,7 @@
                 <th class="px-4 py-3 text-right">昨日触发值</th>
                 <th class="px-4 py-3 text-right">今日触发值</th>
                 <th class="px-4 py-3 text-right">最近消费时间</th>
+                <th class="px-4 py-3 text-center">操作</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -268,6 +269,16 @@
                 </td>
                 <td class="px-4 py-3 text-right text-gray-500">
                   {{ formatDate(stat.lastPurchaseAt) }}
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <UButton
+                    size="xs"
+                    color="orange"
+                    variant="outline"
+                    @click="openRoleServerDialog(stat)"
+                  >
+                    修改区服
+                  </UButton>
                 </td>
               </tr>
             </tbody>
@@ -533,6 +544,54 @@
     </UCard>
   </UModal>
 
+  <!-- 修改角色区服弹窗 -->
+  <UModal v-model="roleServerDialogVisible" :ui="{ width: 'w-full max-w-md' }">
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-semibold text-gray-900">修改角色区服</h3>
+      </template>
+
+      <div class="space-y-4">
+        <div class="text-sm text-gray-600 space-y-1">
+          <div>当前用户：<span class="font-semibold text-gray-900">{{ result?.user?.username }}</span></div>
+          <div>角色ID：<span class="font-semibold text-gray-900">{{ selectedRoleStat?.roleId }}</span></div>
+          <div>当前区服：<span class="font-semibold text-gray-900">{{ selectedRoleStat ? `${selectedRoleStat.serverName} (${selectedRoleStat.serverId})` : '-' }}</span></div>
+        </div>
+        <UFormGroup label="目标区服" required>
+          <USelectMenu
+            v-model="selectedGameServerId"
+            :options="gameServerOptions"
+            value-attribute="value"
+            option-attribute="label"
+            searchable
+            placeholder="请选择目标区服"
+            :loading="loadingGameServers"
+          />
+        </UFormGroup>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <UButton
+            color="gray"
+            variant="outline"
+            @click="roleServerDialogVisible = false"
+            :disabled="updatingRoleServer"
+          >
+            取消
+          </UButton>
+          <UButton
+            color="orange"
+            :loading="updatingRoleServer"
+            @click="submitRoleServer"
+          >
+            确认修改
+          </UButton>
+        </div>
+      </template>
+    </UCard>
+  </UModal>
+
   <!-- 备注编辑弹窗 -->
   <UModal v-model="remarkDialogVisible" :ui="{ width: 'w-full max-w-md' }">
     <UCard>
@@ -667,6 +726,12 @@ const newChannelCode = ref('')
 const updatingChannel = ref(false)
 const channelOptions = ref([])
 const loadingChannels = ref(false)
+const roleServerDialogVisible = ref(false)
+const selectedRoleStat = ref(null)
+const selectedGameServerId = ref('')
+const gameServerOptions = ref([])
+const loadingGameServers = ref(false)
+const updatingRoleServer = ref(false)
 const remarkDialogVisible = ref(false)
 const remarkInput = ref('')
 const savingRemark = ref(false)
@@ -886,6 +951,89 @@ const loadChannelOptions = async () => {
     })
   } finally {
     loadingChannels.value = false
+  }
+}
+
+const loadGameServerOptions = async () => {
+  try {
+    loadingGameServers.value = true
+    const response = await $fetch('/api/admin/servers')
+    const servers = Array.isArray(response?.data) ? response.data : []
+    gameServerOptions.value = servers.map(server => {
+      const displayServerId = server.server_id ?? server.id
+      return {
+        label: `${server.name || '未命名区服'} (${displayServerId})`,
+        value: String(server.id),
+        serverId: displayServerId,
+        name: server.name || ''
+      }
+    })
+  } catch (error) {
+    gameServerOptions.value = []
+    toast.add({
+      title: '加载区服列表失败',
+      description: error.message || '请稍后再试',
+      color: 'red'
+    })
+  } finally {
+    loadingGameServers.value = false
+  }
+}
+
+const openRoleServerDialog = async (stat) => {
+  if (!result.value?.user?.id) {
+    toast.add({ title: '请先查询玩家信息', color: 'red' })
+    return
+  }
+  selectedRoleStat.value = stat
+  selectedGameServerId.value = ''
+  await loadGameServerOptions()
+  const currentOption = gameServerOptions.value.find(option => String(option.serverId) === String(stat.serverId))
+  selectedGameServerId.value = currentOption?.value || ''
+  roleServerDialogVisible.value = true
+}
+
+const submitRoleServer = async () => {
+  if (updatingRoleServer.value) return
+  if (!result.value?.user?.id || !selectedRoleStat.value?.roleId) {
+    toast.add({ title: '未找到角色信息', color: 'red' })
+    return
+  }
+  if (!selectedGameServerId.value) {
+    toast.add({ title: '请选择目标区服', color: 'red' })
+    return
+  }
+
+  try {
+    updatingRoleServer.value = true
+    const response = await $fetch('/api/admin/player/update-role-server', {
+      method: 'POST',
+      body: {
+        user_id: result.value.user.id,
+        role_id: selectedRoleStat.value.roleId,
+        game_server_id: selectedGameServerId.value
+      }
+    })
+
+    if (response?.success) {
+      toast.add({
+        title: '角色区服已更新',
+        description: response.message || '操作成功',
+        color: 'green'
+      })
+      roleServerDialogVisible.value = false
+      await handleSearch()
+    } else {
+      throw new Error(response?.message || '修改失败')
+    }
+  } catch (error) {
+    toast.add({
+      title: '修改失败',
+      description: error.message || '请稍后再试',
+      color: 'red'
+    })
+  } finally {
+    updatingRoleServer.value = false
   }
 }
 

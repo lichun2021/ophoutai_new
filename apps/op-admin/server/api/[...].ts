@@ -680,6 +680,7 @@ router.post('/admin/payment-routing/settings/update', adminWrap(PaymentRoutingCt
  */
 router.post('/admin/player/detail', adminWrap(PlayerDetailCtrl.getPlayerDetail, '获取玩家详情'));
 router.post('/admin/player/update-remark', adminWrap(PlayerDetailCtrl.updateRemark, '更新玩家备注'));
+router.post('/admin/player/update-role-server', adminWrap(PlayerDetailCtrl.updateRoleServer, '修改角色区服'));
 router.post('/admin/player/cards', adminWrap(PlayerDetailCtrl.getPlayerCards, '查询玩家月卡列表'));
 router.post('/admin/player/cards/activate', adminWrap(PlayerDetailCtrl.activatePlayerCard, '手动激活月卡/终身卡'));
 router.post('/admin/player/cards/deactivate', adminWrap(PlayerDetailCtrl.deactivatePlayerCard, '停用月卡'));
