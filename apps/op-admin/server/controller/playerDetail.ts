@@ -363,6 +363,29 @@ export const getPlayerDetail = async (evt: H3Event) => {
             }
         }
 
+        characterRows.forEach((row: any) => {
+            const roleId = String(row.uuid || '').trim();
+            if (!roleId || roleStatMap.has(roleId)) {
+                return;
+            }
+            roleStatMap.set(roleId, {
+                roleId,
+                serverName: row.server_name || '未知区服',
+                serverId: row.server_id ?? '-',
+                level: row.character_level || 1,
+                platformCoinSpent: 0,
+                giftCashSpent: 0,
+                cashbackTriggerValue: 0,
+                todayPlatformCoinSpent: 0,
+                todayGiftCashSpent: 0,
+                todayCashbackTriggerValue: 0,
+                yesterdayPlatformCoinSpent: 0,
+                yesterdayGiftCashSpent: 0,
+                yesterdayCashbackTriggerValue: 0,
+                lastPurchaseAt: null,
+            });
+        });
+
         const roleStats: RoleStat[] = Array.from(roleStatMap.values()).map(stat => ({
             ...stat,
             cashbackTriggerValue: stat.platformCoinSpent + stat.giftCashSpent * 10,
@@ -448,6 +471,68 @@ export const updateRemark = async (evt: H3Event) => {
         return { success: true, message: '备注已保存' };
     } catch (error: any) {
         console.error('[Player Detail] 更新备注失败:', error);
+        throw error;
+    }
+};
+
+// 修改角色区服
+export const updateRoleServer = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        const userId = Number(body?.user_id);
+        const roleId = String(body?.role_id || '').trim();
+        const gameServerId = Number(body?.game_server_id);
+
+        if (!userId) {
+            throw createError({ statusCode: 400, message: '缺少 user_id 参数' });
+        }
+        if (!roleId) {
+            throw createError({ statusCode: 400, message: '缺少 role_id 参数' });
+        }
+        if (!gameServerId) {
+            throw createError({ statusCode: 400, message: '请选择目标区服' });
+        }
+
+        const characterRows = await sql({
+            query: 'SELECT id, uuid, server_id, server_name FROM gamecharacters WHERE user_id = ? AND uuid = ? LIMIT 1',
+            values: [userId, roleId],
+        }) as any[];
+
+        if (characterRows.length === 0) {
+            throw createError({ statusCode: 404, message: '未找到该玩家角色' });
+        }
+
+        const serverRows = await sql({
+            query: 'SELECT id, server_id, name FROM gameservers WHERE id = ? LIMIT 1',
+            values: [gameServerId],
+        }) as any[];
+
+        if (serverRows.length === 0) {
+            throw createError({ statusCode: 404, message: '目标区服不存在' });
+        }
+
+        const targetServer = serverRows[0];
+        const targetServerId = targetServer.server_id ?? targetServer.id;
+        const targetServerName = targetServer.name || `区服${targetServerId}`;
+
+        await sql({
+            query: 'UPDATE gamecharacters SET server_id = ?, server_name = ? WHERE id = ?',
+            values: [targetServerId, targetServerName, characterRows[0].id],
+        });
+
+        console.log(`[Player Detail] 管理员修改角色区服 user_id=${userId}, role_id=${roleId}, server_id=${targetServerId}, server_name=${targetServerName}`);
+
+        return {
+            success: true,
+            message: '角色区服已更新',
+            data: {
+                role_id: roleId,
+                server_id: targetServerId,
+                server_name: targetServerName,
+            },
+        };
+    } catch (error: any) {
+        console.error('[Player Detail] 修改角色区服失败:', error);
         throw error;
     }
 };
