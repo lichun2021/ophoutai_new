@@ -23,8 +23,8 @@ const MILESTONES: { days: number; bonus: number }[] = [
     { days: 30, bonus: 600  },
 ];
 
-// WAO 平台每日签到基础奖励（main: 200，WAO: 100）
-const BASE_COINS = 100;
+// WAO 平台每日签到基础奖励（与 main 一致）
+const BASE_COINS = 200;
 
 /**
  * 获取用户本月签到状态
