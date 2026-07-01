@@ -153,6 +153,7 @@ export const initBot = () => {
             const rechargeData = stats.recharge;
             const loginData = stats.login;
             const onlineData = stats.online;
+            const retentionData = stats.retention;
 
             const successRate = rechargeData.total_orders > 0
                 ? ((rechargeData.success_orders / rechargeData.total_orders) * 100).toFixed(1)
@@ -166,11 +167,14 @@ export const initBot = () => {
 总订单数：${formatNumber(rechargeData.total_orders || 0)} 笔
 成功率：${successRate}%
 充值用户：${formatNumber(rechargeData.unique_users || 0)} 人
+新增付费：${formatNumber(stats.newPayUsers || 0)} 人
+充值超100：${formatNumber(stats.highValueUsers || 0)} 人
 
 【用户数据】
 今日登录：${formatNumber(loginData.total_logins || 0)} 次
 登录用户：${formatNumber(loginData.unique_users || 0)} 人
 当前在线：${formatNumber(onlineData.online_users || 0)} 人
+昨日留存：${(retentionData?.rate ?? 0).toFixed(2)}%（${formatNumber(retentionData?.retained_users || 0)}/${formatNumber(retentionData?.reg_users || 0)}）
 
 更新时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
 

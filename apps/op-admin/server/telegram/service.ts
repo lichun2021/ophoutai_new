@@ -20,7 +20,7 @@ const getTodayRange = () => {
     return { todayStart, todayEnd, dateStr: `${year}-${month}-${day}` };
 };
 
-import { getChinaDateString } from '../utils/timezone';
+import { getChinaDateString, getChinaYesterdayString } from '../utils/timezone';
 
 /**
  * 获取今日综合统计数据
@@ -72,11 +72,76 @@ export const getTodayStats = async () => {
         values: []
     });
 
+    // 昨日留存率：昨日注册用户中，今日有登录的占比（D1 留存）
+    const yesterday = getChinaYesterdayString();
+    const retentionQuery = `
+        SELECT
+            COUNT(DISTINCT u.id) AS reg,
+            COUNT(DISTINCT CASE WHEN ull.username IS NOT NULL THEN u.id END) AS retained
+        FROM users u
+        LEFT JOIN userloginlogs ull
+            ON u.username = ull.username AND DATE(ull.login_time) = ?
+        WHERE DATE(u.created_at) = ?
+    `;
+    const retentionResult: any = await sql({
+        query: retentionQuery,
+        values: [today, yesterday]
+    });
+    const regUsers = retentionResult[0]?.reg || 0;
+    const retainedUsers = retentionResult[0]?.retained || 0;
+    const retentionRate = regUsers > 0
+        ? Math.min(100, (retainedUsers / regUsers) * 100)
+        : 0;
+
+    // 新增付费用户数：首次付费日 = 今日（排除平台币）
+    const newPayQuery = `
+        SELECT COUNT(*) AS new_pay_users
+        FROM (
+            SELECT user_id, DATE(MIN(created_at)) AS first_pay_date
+            FROM paymentrecords
+            WHERE payment_status = 3
+              AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')
+            GROUP BY user_id
+            HAVING first_pay_date = ?
+        ) t
+    `;
+    const newPayResult: any = await sql({
+        query: newPayQuery,
+        values: [today]
+    });
+    const newPayUsers = newPayResult[0]?.new_pay_users || 0;
+
+    // 充值超100用户数：今日累计充值 > 100（排除平台币）
+    const highValueQuery = `
+        SELECT COUNT(*) AS high_value_users
+        FROM (
+            SELECT user_id, SUM(amount) AS day_amount
+            FROM paymentrecords
+            WHERE payment_status = 3
+              AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')
+              AND DATE(created_at) = ?
+            GROUP BY user_id
+            HAVING day_amount > 100
+        ) t
+    `;
+    const highValueResult: any = await sql({
+        query: highValueQuery,
+        values: [today]
+    });
+    const highValueUsers = highValueResult[0]?.high_value_users || 0;
+
     return {
         dateStr: today,
         recharge: rechargeResult[0],
         login: loginResult[0],
-        online: onlineResult[0]
+        online: onlineResult[0],
+        retention: {
+            reg_users: regUsers,
+            retained_users: retainedUsers,
+            rate: Math.round(retentionRate * 100) / 100
+        },
+        newPayUsers,
+        highValueUsers
     };
 };
 

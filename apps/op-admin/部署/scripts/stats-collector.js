@@ -146,6 +146,107 @@ class StatsCollector {
             const rechargeTimes = realPayResult[0]?.recharge_times || 0;
             const realRechargeAmount = parseFloat(realPayResult[0]?.real_recharge_amount || 0);
 
+            // 通用渠道/游戏过滤片段（用于支付/用户相关查询）
+            let pcFilter = '';
+            const pcParams = [];
+            if (channelCode && channelCode !== 'all') {
+                pcFilter += ' AND pr.channel_code = ?';
+                pcParams.push(channelCode);
+            }
+            if (gameCode && gameCode !== 'all') {
+                pcFilter += ' AND pr.game_code = ?';
+                pcParams.push(gameCode);
+            }
+
+            let ucFilter = '';
+            const ucParams = [];
+            if (channelCode && channelCode !== 'all') {
+                ucFilter += ' AND u.channel_code = ?';
+                ucParams.push(channelCode);
+            }
+            if (gameCode && gameCode !== 'all') {
+                ucFilter += ' AND u.game_code = ?';
+                ucParams.push(gameCode);
+            }
+
+            // 昨日留存率：前一天注册的用户中，当天有登录的占比
+            const prevDate = new Date(dateStr);
+            prevDate.setDate(prevDate.getDate() - 1);
+            const prevDateStr = prevDate.toISOString().split('T')[0];
+
+            const retentionQuery = `
+                SELECT
+                    COUNT(DISTINCT u.id) AS reg,
+                    COUNT(DISTINCT CASE WHEN ull.username IS NOT NULL THEN u.id END) AS retained
+                FROM users u
+                LEFT JOIN userloginlogs ull
+                    ON u.username = ull.username AND DATE(ull.login_time) = ?
+                WHERE DATE(u.created_at) = ? ${ucFilter}
+            `;
+            const [retentionResult] = await this.connection.execute(
+                retentionQuery, [dateStr, prevDateStr, ...ucParams]
+            );
+            const prevRegUsers = retentionResult[0]?.reg || 0;
+            const prevRetainedUsers = retentionResult[0]?.retained || 0;
+            let yesterdayRetention = prevRegUsers > 0 ? (prevRetainedUsers / prevRegUsers * 100) : 0.0;
+            if (yesterdayRetention > 100) yesterdayRetention = 100.0;
+            if (yesterdayRetention < 0) yesterdayRetention = 0.0;
+
+            // 新增付费用户数（首次付费日 = 统计日）及其付费金额
+            const newPayQuery = `
+                SELECT
+                    COUNT(DISTINCT fp.user_id) AS new_pay_users,
+                    COALESCE(SUM(pr.amount), 0) AS new_pay_amount
+                FROM (
+                    SELECT user_id, DATE(MIN(created_at)) AS first_pay_date
+                    FROM paymentrecords
+                    WHERE payment_status = 3
+                      AND payment_way NOT LIKE '%平台币%'
+                      AND payment_way NOT LIKE '%platform%'
+                    GROUP BY user_id
+                    HAVING first_pay_date = ?
+                ) fp
+                JOIN paymentrecords pr
+                    ON pr.user_id = fp.user_id
+                    AND pr.payment_status = 3
+                    AND pr.payment_way NOT LIKE '%平台币%'
+                    AND pr.payment_way NOT LIKE '%platform%'
+                    AND DATE(pr.created_at) = ? ${pcFilter}
+            `;
+            const [newPayResult] = await this.connection.execute(
+                newPayQuery, [dateStr, dateStr, ...pcParams]
+            );
+            const newPayUsers = newPayResult[0]?.new_pay_users || 0;
+            const newPayAmount = parseFloat(newPayResult[0]?.new_pay_amount || 0);
+
+            // 高价值用户：当天累计充值 > 100 / > 200
+            const highValueQuery = `
+                SELECT
+                    COUNT(*) AS hv100,
+                    COALESCE(SUM(CASE WHEN day_amount > 200 THEN 1 ELSE 0 END), 0) AS hv200,
+                    COALESCE(SUM(CASE WHEN day_amount > 200 THEN day_amount ELSE 0 END), 0) AS hv200_amount
+                FROM (
+                    SELECT pr.user_id, SUM(pr.amount) AS day_amount
+                    FROM paymentrecords pr
+                    WHERE pr.payment_status = 3
+                      AND pr.payment_way NOT LIKE '%平台币%'
+                      AND pr.payment_way NOT LIKE '%platform%'
+                      AND DATE(pr.created_at) = ? ${pcFilter}
+                    GROUP BY pr.user_id
+                    HAVING day_amount > 100
+                ) t
+            `;
+            const [highValueResult] = await this.connection.execute(
+                highValueQuery, [dateStr, ...pcParams]
+            );
+            const highValueUsers = highValueResult[0]?.hv100 || 0;
+            const highValueUsers200 = highValueResult[0]?.hv200 || 0;
+            const highValueRechargeAmount = parseFloat(highValueResult[0]?.hv200_amount || 0);
+
+            // 新增付费率 / 新增付费 ARPU
+            const newPayRate = registerUsers > 0 ? (newPayUsers / registerUsers * 100) : 0.0;
+            const newPayArpu = newPayUsers > 0 ? (newPayAmount / newPayUsers) : 0.0;
+
             // Calculate rates and ARPU
             let payRate = activeUsers > 0 ? (payUsers / activeUsers * 100) : 0.0;
 
@@ -168,25 +269,25 @@ class StatsCollector {
                 register_users: registerUsers,
                 valid_register_users: validRegisterUsers,
                 character_count: characterCount,
-                yesterday_retention: 0.0,
+                yesterday_retention: Math.round(yesterdayRetention * 100) / 100,
                 pay_users: payUsers,
-                new_pay_users: 0,
+                new_pay_users: newPayUsers,
                 recharge_users: payUsers,
                 recharge_times: rechargeTimes,
-                high_value_users: 0,
-                high_value_users_200: 0,
+                high_value_users: highValueUsers,
+                high_value_users_200: highValueUsers200,
                 consume_amount: Math.round(realRechargeAmount * 100) / 100,
                 real_recharge_amount: Math.round(realRechargeAmount * 100) / 100,
-                high_value_recharge_amount: 0.0,
+                high_value_recharge_amount: Math.round(highValueRechargeAmount * 100) / 100,
                 pay_amount: Math.round(realRechargeAmount * 100) / 100,
-                new_pay_amount: 0.0,
+                new_pay_amount: Math.round(newPayAmount * 100) / 100,
                 new_user_recharge: 0.0,
                 pay_rate: Math.round(payRate * 100) / 100,
-                new_pay_rate: 0.0,
+                new_pay_rate: Math.round(newPayRate * 100) / 100,
                 active_arpu: Math.round(activeArpu * 100) / 100,
                 pay_arpu: Math.round(payArpu * 100) / 100,
                 new_arpu: 0.0,
-                new_pay_arpu: 0.0
+                new_pay_arpu: Math.round(newPayArpu * 100) / 100
             };
 
         } catch (error) {
