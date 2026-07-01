@@ -175,20 +175,12 @@ router.post('/user/register', withLogging(async (event: H3Event) => {
   }
   // ---- END IP 限制 ----
 
-  // 验证码校验（支持滑块验证和图形验证码两种方式）
+  // 安全验证（滑块验证）
   const body = await readBody(event);
   const { captcha_token, captcha_input } = body || {};
-  if (!captcha_token || !captcha_input) {
-    throw createError({ statusCode: 400, statusMessage: '请完成安全验证' });
-  }
-  // 滑块验证：token 以 slider_ 开头，input 为 __SLIDER_PASSED__
-  const isSliderVerify = String(captcha_token).startsWith('slider_') && captcha_input === '__SLIDER_PASSED__';
+  const isSliderVerify = String(captcha_token || '').startsWith('slider_') && captcha_input === '__SLIDER_PASSED__';
   if (!isSliderVerify) {
-    // 走原图形验证码流程
-    const captchaOk = await verifyCaptcha(captcha_token, captcha_input);
-    if (!captchaOk) {
-      throw createError({ statusCode: 400, statusMessage: '验证码错误或已过期，请刷新重试' });
-    }
+    throw createError({ statusCode: 400, statusMessage: '请完成安全验证' });
   }
 
 
