@@ -683,11 +683,18 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
             return { success: false, message: '物资列表为空或无效' };
         }
 
-        // 更新状态为正在发送
-        await sql({
-            query: 'UPDATE GiftPackagePurchaseRecords SET game_delivery_status = ?, delivery_attempts = delivery_attempts + 1 WHERE id = ?',
-            values: ['sent', purchaseRecordId],
-        });
+        // 🔒 幂等锁：只处理 waiting/failed 状态，原子占位（防同一记录重复发放）
+        const lock = await sql({
+            query: `UPDATE GiftPackagePurchaseRecords
+                    SET game_delivery_status = 'sent', delivery_attempts = delivery_attempts + 1
+                    WHERE id = ? AND game_delivery_status IN ('waiting','failed')`,
+            values: [purchaseRecordId],
+        }) as any;
+
+        if (lock.affectedRows === 0) {
+            console.warn(`[deliverPackageToGameViaIDIP] 记录 ${purchaseRecordId} 已发放或发放中，跳过（防重放）`);
+            return { success: false, message: '礼包已发放，请勿重复' };
+        }
 
         // RoleId 使用 thirdparty_uid（即角色UUID）
         const actualRoleId = record.thirdparty_uid || roleId || '';

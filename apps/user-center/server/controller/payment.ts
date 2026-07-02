@@ -1484,7 +1484,59 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                         message: '礼包不存在'
                     };
                 }
-                
+
+                // 🔒 安全校验1：礼包必须已上架
+                if (!giftPackage.is_active) {
+                    console.error('礼包未上架, package_id=', packageId);
+                    return {
+                        success: false,
+                        message: '礼包未上架'
+                    };
+                }
+
+                // 🔒 安全校验2：有效期校验
+                const now = new Date();
+                if (giftPackage.start_time && new Date(giftPackage.start_time) > now) {
+                    console.error('礼包未开始, package_id=', packageId);
+                    return {
+                        success: false,
+                        message: '礼包未开始'
+                    };
+                }
+                if (giftPackage.end_time && new Date(giftPackage.end_time) < now) {
+                    console.error('礼包已结束, package_id=', packageId);
+                    return {
+                        success: false,
+                        message: '礼包已结束'
+                    };
+                }
+
+                // 🔒 安全校验3（关键）：收货角色必须属于付款账号
+                const ownerCheck = await sql({
+                    query: `SELECT gc.uuid FROM GameCharacters gc
+                            INNER JOIN SubUsers su ON gc.subuser_id = su.id
+                            WHERE su.parent_user_id = ? AND gc.uuid = ? AND gc.server_id = ?
+                            LIMIT 1`,
+                    values: [orderDetail.user_id, characterUuid, Number(serverId)],
+                }) as any[];
+                if (ownerCheck.length === 0) {
+                    console.error(`[礼包发放] 角色归属校验失败: user=${orderDetail.user_id}, role=${characterUuid}, server=${serverId}`);
+                    return {
+                        success: false,
+                        message: '收货角色不属于当前账号或不存在'
+                    };
+                }
+
+                // 🔒 安全校验4：校验扣款金额 == 礼包平台币定价（防篡改 price）
+                const expectedPtb = Number(giftPackage.price_platform_coins || 0);
+                if (expectedPtb > 0 && Number(orderDetail.amount || 0) < expectedPtb) {
+                    console.error(`[礼包发放] 金额校验失败: 支付${orderDetail.amount} < 定价${expectedPtb}`);
+                    return {
+                        success: false,
+                        message: '支付金额与礼包价格不符'
+                    };
+                }
+
                 // 检查用户是否可以购买该礼包（使用角色UUID进行限购检查）
                 const checkResult = await ExternalGiftPackageModel.checkUserCanPurchase(characterUuid, packageId, quantity);
                 if (!checkResult.canPurchase) {

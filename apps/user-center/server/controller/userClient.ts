@@ -344,7 +344,30 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: '礼包不存在'
             };
         }
-        
+
+        // 🔒 安全校验1：礼包必须已上架
+        if (!giftPackage.is_active) {
+            return {
+                code: 400,
+                message: '礼包未上架'
+            };
+        }
+
+        // 🔒 安全校验2：有效期校验
+        const now = new Date();
+        if (giftPackage.start_time && new Date(giftPackage.start_time) > now) {
+            return {
+                code: 400,
+                message: '礼包未开始'
+            };
+        }
+        if (giftPackage.end_time && new Date(giftPackage.end_time) < now) {
+            return {
+                code: 400,
+                message: '礼包已结束'
+            };
+        }
+
         // 计算总价
         const totalAmount = giftPackage.price_platform_coins * quantity;
         

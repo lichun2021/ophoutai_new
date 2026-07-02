@@ -220,11 +220,27 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
             console.log(`角色上报成功: 更新信息 uuid=${characterData.uuid}, 服务器ID=${existingResult[0].server_id}`);
             return { isNew: false, id: existingId };
         } else {
+            // 🔒 安全校验：插入前检查同服同 uuid 是否已被其他账号绑定
+            const crossCheck = await sql({
+                query: `SELECT gc.id, gc.user_id, u.username
+                        FROM GameCharacters gc
+                        INNER JOIN Users u ON gc.user_id = u.id
+                        WHERE gc.uuid = ? AND gc.server_id = ?
+                        LIMIT 1`,
+                values: [characterData.uuid, characterData.server_id || 1],
+            }) as any[];
+
+            if (crossCheck.length > 0 && crossCheck[0].user_id !== characterData.user_id) {
+                const msg = `角色 ${characterData.uuid}(服务器${characterData.server_id || 1}) 已被账号 ${crossCheck[0].username}(ID:${crossCheck[0].user_id}) 绑定，不能重复上报`;
+                console.error(`[角色上报] ${msg}`);
+                throw new Error(msg);
+            }
+
             // 3. 如果不存在，则执行插入
             const result = await sql({
                 query: `
-                    INSERT INTO GameCharacters 
-                    (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at) 
+                    INSERT INTO GameCharacters
+                    (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 `,
                 values: [
@@ -239,7 +255,7 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
                     extData,
                 ],
             }) as any;
-            
+
             const id = result.insertId || result.lastInsertId;
             console.log(`角色上报成功: 新建角色 uuid=${characterData.uuid}, 服务器ID=${characterData.server_id || 1}`);
             return { isNew: true, id };
