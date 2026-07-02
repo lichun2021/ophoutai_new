@@ -169,8 +169,7 @@ deploy_app() {
   # unzip：必须把选项放在压缩包名前；-o 与 -q 合并为 -oq；勿在包名后再写 -q（否则会被当成「要解压的文件名」）
   ssh $SSH_OPTS $USERNAME@$SERVER_IP "
     cd $REMOTE_PATH &&
-    find . -type f ! -name '$ZIP_NAME' -delete 2>/dev/null;
-    find . -mindepth 1 -type d -empty -delete 2>/dev/null;
+    find . -maxdepth 1 -mindepth 1 ! -name '$ZIP_NAME' ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true;
     unzip -oq $ZIP_NAME -d . &&
     rm -f $ZIP_NAME
   "
