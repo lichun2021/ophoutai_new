@@ -1,8 +1,13 @@
 import { H3Event, createError } from 'h3';
 import { getRedisCluster } from './redis-cluster';
 
-const DEFAULT_SALT = process.env.API_SIGN_KEY || 'fasdjhkfh2348!@#$!617';
+// ============ 安全改进: 移除硬编码，强制使用环境变量 ============
+const DEFAULT_SALT = process.env.API_SIGN_KEY!;
 const DEFAULT_SKEW_SECONDS = parseInt(process.env.API_SIGN_SKEW_SEC || '60', 10); // 1 分钟
+
+if (!DEFAULT_SALT) {
+    throw new Error('API_SIGN_KEY 环境变量未配置');
+}
 
 // 使用与前端完全一致的 MD5 实现
 function md5(input: string): string {

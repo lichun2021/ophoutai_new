@@ -1,14 +1,13 @@
 import { H3Event, createError } from 'h3';
 import { getRedisCluster } from './redis-cluster';
 
-const DEFAULT_SALT = process.env.API_SIGN_KEY || 'fasdjhkfh2348!@#$!617';
+// ============ 安全改进: 移除硬编码，强制使用环境变量 ============
+const DEFAULT_SALT = process.env.API_SIGN_KEY!;
 const DEFAULT_SKEW_SECONDS = parseInt(process.env.API_SIGN_SKEW_SEC || '60', 10); // 1 分钟
 
-// 启动时打印一次，确认运行时使用的 salt 值
-// console.log('[API_SIGN][INIT] ================================');
-// console.log('[API_SIGN][INIT] process.env.API_SIGN_KEY =', process.env.API_SIGN_KEY ? `"${process.env.API_SIGN_KEY}"` : '(未设置，使用默认值)');
-// console.log('[API_SIGN][INIT] DEFAULT_SALT =', `"${DEFAULT_SALT}"`);
-// console.log('[API_SIGN][INIT] ================================');
+if (!DEFAULT_SALT) {
+    throw new Error('API_SIGN_KEY 环境变量未配置');
+}
 
 // 使用与前端完全一致的 MD5 实现
 function md5(input: string): string {
@@ -95,12 +94,39 @@ export function calcSign(params: Record<string, any>, token: string): string {
   return md5(base + token);
 }
 
+// 🔒 需纳入签名的高危业务字段（防篡改：改了这些字段签名就失效）
+// 前后端必须保持一致
+export const SIGNED_BUSINESS_FIELDS = [
+  'server_url', // 礼包元数据 gift://{pid,cid,sid}
+  'role_id',    // 收货角色
+  'uid',        // 外部用户ID
+  'p',          // 金额（充值/购买）
+  'price',      // 金额（另一命名）
+  'package_id', // 礼包ID
+  'pid',        // 礼包ID（简写）
+  'payment_method', // 支付方式
+  'l',          // 操作类型 buy 等
+];
+
+// 从完整参数中挑出参与签名的字段：ts + nonce + 出现的高危业务字段
+export function pickSignParams(allParams: Record<string, any>): Record<string, any> {
+  const picked: Record<string, any> = {
+    ts: allParams.ts,
+    nonce: allParams.nonce,
+  };
+  for (const f of SIGNED_BUSINESS_FIELDS) {
+    if (allParams[f] !== undefined && allParams[f] !== null) {
+      picked[f] = allParams[f];
+    }
+  }
+  return picked;
+}
+
 export function shouldBypass(pathname: string): boolean {
   // 第三方回调等无法携带签名的接口，放行
   const bypassList = [
     '/api/payment/third-party-notify',
     '/api/payment/cashier-notify',
-    '/api/payment/steam-notify',
     '/api/client/cdk/redeem',
     '/api/internal/',  // 内部API（供后台脚本调用）
   ];
@@ -125,42 +151,28 @@ export async function verifyApiSignature(
     ...(['POST', 'PUT', 'PATCH', 'DELETE'].includes((method || 'GET').toUpperCase()) ? (requestBody || {}) : {})
   };
 
-
   const ts = normalizeTs(params.ts);
   const providedSign = String(params.sign || '');
   const nonce = String(params.nonce || '');
 
-
   if (!ts || !providedSign) {
-    console.error('[API_SIGN][FAIL] 缺少 ts 或 sign!', { path: pathname, method, ts, providedSign: providedSign ? '(has)' : '(empty)' });
     throw createError({ statusCode: 401, statusMessage: 'missing_ts_or_sign' });
   }
   if (!nonce) {
-    console.error('[API_SIGN][FAIL] 缺少 nonce!', { path: pathname });
     throw createError({ statusCode: 401, statusMessage: 'missing_nonce' });
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const skewDiff = Math.abs(nowSec - ts);
-  if (skewDiff > skew) {
-    console.error('[API_SIGN][FAIL] 时间偏差过大!', { nowSec, ts, diff: skewDiff, skew });
+  if (Math.abs(nowSec - ts) > skew) {
     throw createError({ statusCode: 401, statusMessage: 'ts_skew' });
   }
 
   const dateForToken = new Date(ts * 1000);
-  const ymdForLog = formatYmd(dateForToken);
   const token = calcDailyToken(dateForToken, salt);
-  const baseForLog = buildSignBase({ ts, nonce });
-  // 仅使用固定参数参与签名：ts 与 nonce
-  const expected = calcSign({ ts, nonce }, token);
-
+  // 🔒 签名纳入 ts + nonce + 出现的高危业务字段（防篡改 server_url/price/uid 等）
+  const signParams = pickSignParams(params);
+  const expected = calcSign(signParams, token);
   if (expected !== providedSign) {
-    const base = buildSignBase({ ts, nonce });
-    const ymd = formatYmd(dateForToken);
-    console.warn('[API_SIGN][server] invalid_sign', {
-      path: pathname, method, ts, nonce,
-      expected, provided: providedSign, ymd
-    });
     throw createError({ statusCode: 401, statusMessage: 'invalid_sign' });
   }
 

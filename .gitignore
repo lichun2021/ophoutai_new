@@ -32,3 +32,10 @@ backup_*.sh
 backup_db.sql
 clear_db.sql
 .zip
+
+# PM2 敏感配置
+.env.production
+ecosystem.config.local.js
+
+# 密钥备份
+*.backup.*

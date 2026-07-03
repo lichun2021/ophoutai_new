@@ -14,6 +14,7 @@ import * as PaymentModel from '../model/payment';
 import { sdkMessages } from '../utils/i18n';
 import { selectGameIpByAmount } from '../utils/gameIp';
 import { generateUserLoginUrl } from './payment';
+import { signJWT, setAuthCookie } from '@quantum/shared/server/utils/jwt';
 function getGameIp(amount?: number): string {
     const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
     return selectGameIpByAmount(value);
@@ -837,7 +838,20 @@ export const userLogin = async (evt: H3Event) => {
         // 返回用户信息（不包含密码）
         const { password: pwd, ...userInfo } = userData;
 
-        // 使用“支付宝/微信成功充值总额”来选择游戏服IP
+        // ============ JWT 认证: 生成 token ============
+        const jwtToken = signJWT({
+            userId: userData.id!,
+            username: userData.username || '',
+            channelCode: userData.channel_code || ''
+        });
+
+        // 设置 HttpOnly Cookie (防止 XSS 攻击)
+        setAuthCookie(evt, jwtToken);
+
+        console.log(`[JWT] 用户 ${userData.username} (ID: ${userData.id}) 登录成功，token 已生成`);
+        // ============================================
+
+        // 使用”支付宝/微信成功充值总额”来选择游戏服IP
         const rechargeTotal = await getUserZfbWxSuccessTotal(userId);
 
         const response = {
@@ -845,6 +859,7 @@ export const userLogin = async (evt: H3Event) => {
             message: '登录成功',
             data: {
                 user: userInfo,
+                token: jwtToken,  // 🆕 返回 token (供移动端/API使用)
                 rechargeUrl: rechargeUrl,
                 mallUrl: mallUrl,
                 cdkUrl: cdkUrl,
@@ -855,7 +870,7 @@ export const userLogin = async (evt: H3Event) => {
             }
         };
 
-        console.log("用户登录返回数据:", response);
+        console.log(“用户登录返回数据:”, response);
         return response;
     } catch (e: any) {
         console.error("用户登录异常:", e);

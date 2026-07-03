@@ -1,0 +1,17 @@
+{
+  "name": "@quantum/shared",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Shared utilities and models for Quantum Publish platform",
+  "exports": {
+    "./server/utils/jwt": "./server/utils/jwt.ts",
+    "./server/utils/envCheck": "./server/utils/envCheck.ts"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "h3": "^1.10.0"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.5"
+  }
+}
