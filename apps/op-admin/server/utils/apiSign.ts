@@ -155,15 +155,24 @@ export async function verifyApiSignature(
   const providedSign = String(params.sign || '');
   const nonce = String(params.nonce || '');
 
+  // 【调试】前后端签名对比用，定位问题后请删除
+  console.log('[API_SIGN][BACKEND] ---- 验签开始 ----');
+  console.log('[API_SIGN][BACKEND] method:', method, '| path:', pathname);
+  console.log('[API_SIGN][BACKEND] 收到 ts:', params.ts, '| nonce:', params.nonce, '| sign:', providedSign);
+  console.log('[API_SIGN][BACKEND] 后端 salt:', `"${salt}"`);
+
   if (!ts || !providedSign) {
+    console.log('[API_SIGN][BACKEND] ✗ 缺少 ts 或 sign');
     throw createError({ statusCode: 401, statusMessage: 'missing_ts_or_sign' });
   }
   if (!nonce) {
+    console.log('[API_SIGN][BACKEND] ✗ 缺少 nonce');
     throw createError({ statusCode: 401, statusMessage: 'missing_nonce' });
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
   if (Math.abs(nowSec - ts) > skew) {
+    console.log('[API_SIGN][BACKEND] ✗ ts 超时: serverNow=', nowSec, '| ts=', ts, '| diff=', Math.abs(nowSec - ts), '| skew=', skew);
     throw createError({ statusCode: 401, statusMessage: 'ts_skew' });
   }
 
@@ -172,6 +181,15 @@ export async function verifyApiSignature(
   // 🔒 签名纳入 ts + nonce + 出现的高危业务字段（防篡改 server_url/price/uid 等）
   const signParams = pickSignParams(params);
   const expected = calcSign(signParams, token);
+
+  // 【调试】打印后端计算过程，与前端 [API_SIGN][FRONTEND] 逐字段对照
+  const _debugBase = buildSignBase(signParams);
+  console.log('[API_SIGN][BACKEND] token:', token, '| signBase:', `"${_debugBase}"`);
+  console.log('[API_SIGN][BACKEND] expected sign:', expected);
+  console.log('[API_SIGN][BACKEND] provided sign:', providedSign);
+  console.log('[API_SIGN][BACKEND] 匹配:', expected === providedSign ? '✓ 通过' : '✗ 不一致');
+  console.log('[API_SIGN][BACKEND] ---- 验签结束 ----');
+
   if (expected !== providedSign) {
     throw createError({ statusCode: 401, statusMessage: 'invalid_sign' });
   }

@@ -5,7 +5,8 @@
   "description": "Shared utilities and models for Quantum Publish platform",
   "exports": {
     "./server/utils/jwt": "./server/utils/jwt.ts",
-    "./server/utils/envCheck": "./server/utils/envCheck.ts"
+    "./server/utils/envCheck": "./server/utils/envCheck.ts",
+    "./server/utils/logger": "./server/utils/logger.ts"
   },
   "dependencies": {
     "jsonwebtoken": "^9.0.2",

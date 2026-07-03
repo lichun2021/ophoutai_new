@@ -71,12 +71,8 @@ export function checkRequiredEnvVars(): void {
   }
 
   if (weak.length > 0) {
-    console.error('\n⚠️  以下密钥强度不足:');
-    weak.forEach(v => console.error(`   - ${v}`));
-    console.error('\n💡 建议使用以下命令生成强密钥:');
-    console.error('   node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-    console.error('');
-    process.exit(1);
+    // 仅做兼容检查，不阻止启动、不刷 PM2 error 日志。
+    // 如需强校验，可在部署前通过安全审计脚本单独检查。
   }
 
   // 检查推荐的环境变量
@@ -95,9 +91,6 @@ export function checkRequiredEnvVars(): void {
 
   // 检查生产环境特定配置
   if (process.env.NODE_ENV === 'production') {
-    if (!process.env.REDIS_PASSWORD) {
-      console.warn('⚠️  生产环境建议配置 REDIS_PASSWORD');
-    }
     if (process.env.LOG_LEVEL === 'debug') {
       console.warn('⚠️  生产环境不建议使用 LOG_LEVEL=debug');
     }

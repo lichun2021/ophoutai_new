@@ -12,6 +12,7 @@ import { updateTransactionHasPay, getRedisCluster } from '../utils/redis-cluster
 import { getSystemConfig, getThirdPartyPaymentConfig, getSystemParam } from '../utils/systemConfig';
 import { getByWorldId } from '../model/gameServers';
 import * as GameCharactersModel from '../model/gameCharacters';
+import { requireAuth } from '@quantum/shared/server/utils/jwt';
 
 /**
  * 处理IP地址，将IPv6格式转换为IPv4格式
@@ -1717,6 +1718,53 @@ export const doPayment = async (evt: H3Event) => {
         }
         const query = getQuery(evt) || {};
         const params = { ...query, ...(body && typeof body === 'object' ? body : {}) };
+
+        const extractGiftRoleId = (serverUrl: any): string => {
+            const raw = String(serverUrl || '');
+            if (!raw.startsWith('gift://')) return '';
+            try {
+                const meta = JSON.parse(decodeURIComponent(raw.slice('gift://'.length)) || '{}');
+                return String(meta.cid || meta.character_uuid || meta.characterUuid || '').trim();
+            } catch {
+                return '';
+            }
+        };
+
+        // 仅用户中心商城礼包购买走 JWT userId + 角色归属校验。
+        // 平台币充值、月卡/终身卡、普通 SDKAPI 游戏内购买不走这段逻辑。
+        const isMallGiftOrder = String(params.server_url || '').startsWith('gift://');
+        if (isMallGiftOrder) {
+            const auth = await requireAuth(evt);
+            const userRows = await sql({
+                query: 'SELECT id, username, thirdparty_uid, game_code, channel_code FROM Users WHERE id = ? LIMIT 1',
+                values: [auth.userId],
+            }) as any[];
+            if (userRows.length === 0) {
+                return { code: -2, msg: '用户不存在', data: null };
+            }
+            const tokenUser = userRows[0];
+
+            // 商城礼包购买不信任前端传入的用户身份字段，统一以 JWT 解析出的用户为准。
+            params.f = tokenUser.username || auth.username;
+            params.d = tokenUser.game_code || params.d;
+            params.e = tokenUser.channel_code || params.e;
+
+            const roleId = String(params.role_id || params.character_uuid || params.cid || extractGiftRoleId(params.server_url) || '').trim();
+            if (!roleId) {
+                return { code: -3, msg: '缺少角色ID', data: null };
+            }
+
+            const roleRows = await sql({
+                query: 'SELECT id, subuser_id, server_id FROM GameCharacters WHERE uuid = ? AND user_id = ? LIMIT 1',
+                values: [roleId, auth.userId],
+            }) as any[];
+            if (roleRows.length === 0) {
+                return { code: -3, msg: '角色不存在或不属于当前用户', data: null };
+            }
+
+            params.role_id = roleId;
+            if (!params.tr && roleRows[0].subuser_id) params.tr = String(roleRows[0].subuser_id);
+        }
 
         // 清除前端签名（MD5），用 SDK 密钥（HMAC-SHA256）重新签名
         delete params.sign;
