@@ -2553,6 +2553,19 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
                 price_real_money: pkg.price_real_money
             });
 
+            // 🔒 安全校验：收货角色必须属于付款账号
+            const ownerCheck = await sql({
+                query: `SELECT gc.uuid FROM GameCharacters gc
+                        INNER JOIN SubUsers su ON gc.subuser_id = su.id
+                        WHERE su.parent_user_id = ? AND gc.uuid = ? AND gc.server_id = ?
+                        LIMIT 1`,
+                values: [orderDetail.user_id, characterUuid, Number(serverId)],
+            }) as any[];
+            if (ownerCheck.length === 0) {
+                console.error(`[PaymentQuery] 角色归属校验失败: user=${orderDetail.user_id}, role=${characterUuid}, server=${serverId}`);
+                throw new Error('收货角色不属于当前账号或不存在');
+            }
+
             // 解析 gift_items
             let giftItems;
             try {

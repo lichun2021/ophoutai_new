@@ -144,16 +144,11 @@ const benefitsReminder = ref({ show: false, text: '' });
 const loadBenefitsReminder = async () => {
   if (!authStore.userInfo?.id) return;
   try {
-    const [cardRes, ciRes] = await Promise.all([
-      $fetch('/api/client/benefits/monthly-card/status', { query: { user_id: authStore.userInfo.id } }),
-      $fetch('/api/client/benefits/checkin/status', { query: { user_id: authStore.userInfo.id } }),
-    ]);
+    const cardRes = await $fetch('/api/client/benefits/monthly-card/status', { query: { user_id: authStore.userInfo.id } });
     const hasCard = cardRes.code === 200 && cardRes.data.cards.length > 0;
     const cardUnclaimed = hasCard && !cardRes.data.todayClaimed;
-    const checkedIn = ciRes.code === 200 && ciRes.data.todayChecked;
     const hints = [];
     if (cardUnclaimed) hints.push('月卡今日未领取');
-    if (!checkedIn) hints.push('今日未签到');
     if (hints.length > 0) {
       benefitsReminder.value = { show: true, text: hints.join(' · ') };
     }

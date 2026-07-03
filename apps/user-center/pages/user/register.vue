@@ -164,6 +164,7 @@ const PASS_THRESHOLD = SLIDER_WIDTH - BTN_SIZE - 4; // 需要拖动的距离
 
 const sliderPassed = ref(false);
 const sliderX = ref(0);  // 当前位移
+const captchaToken = ref('');  // 滑块验证通过后的标记（后端不强校验，仅前端流程使用）
 let isDragging = false;
 let startX = 0;
 let startSliderX = 0;
