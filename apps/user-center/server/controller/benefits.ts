@@ -53,7 +53,6 @@ export const claimMonthlyCard = defineEventHandler(async (event: H3Event) => {
         console.log(`[JWT认证] 用户ID: ${userId} 领取月卡`);
         // ========================================================
 
-    try {
         const today = MonthlyCardModel.getBeijingDate();
 
         // 获取当前有效月卡
@@ -167,7 +166,6 @@ export const doCheckIn = defineEventHandler(async (event: H3Event) => {
         console.log(`[JWT认证] 用户ID: ${userId} 执行签到`);
         // ========================================================
 
-    try {
         // 先检查今日是否已签（Redis 快速防重）
         try {
             const { getRedisCluster } = await import('../utils/redis-cluster');

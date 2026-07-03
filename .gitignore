@@ -39,3 +39,4 @@ ecosystem.config.local.js
 
 # 密钥备份
 *.backup.*
+*.zip

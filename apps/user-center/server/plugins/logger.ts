@@ -3,7 +3,7 @@ import { createLogger } from '@quantum/shared/server/utils/logger';
 const logger = createLogger('startup');
 
 export default defineNitroPlugin(() => {
-  logger.info('🚀 op-admin 启动', {
+  logger.info('🚀 user-center 启动', {
     NODE_ENV: process.env.NODE_ENV,
     PORT: process.env.PORT,
     LOG_LEVEL: process.env.LOG_LEVEL || 'info',
