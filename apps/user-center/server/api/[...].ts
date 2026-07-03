@@ -1,4 +1,4 @@
-import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, createError, setResponseStatus, type H3Event } from "h3";
+import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, setCookie, createError, setResponseStatus, type H3Event } from "h3";
 import { verifyApiSignature } from '../utils/apiSign';
 import * as UserCtrl from '../controller/user';
 import * as PaymentCtrl from '../controller/payment';
@@ -130,10 +130,18 @@ router.post('/user/login', defineEventHandler(async (event) => {
   try {
     const ok = !!(result && result.data && result.data.user);
     if (ok) {
-      event.node.res.setHeader('Set-Cookie', [
-        'auth_logged_in=true; Path=/; HttpOnly; SameSite=Lax',
-        'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax'
-      ]);
+      setCookie(event, 'auth_logged_in', 'true', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+      });
+      setCookie(event, 'auth_is_user', 'true', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+      });
     }
   } catch { }
   return result;
@@ -272,6 +280,7 @@ router.post('/user/payment/query', defineEventHandler(PaymentCtrl.queryPaymentOr
 
 router.get('/client/user/profile/:id', withLogging(UserClientCtrl.getUserProfile, '客户端-获取用户个人信息'));
 router.get('/client/user/home-stats', withLogging(UserClientCtrl.getUserHomeStats, '客户端-获取首页统计'));
+router.get('/client/me', withLogging(UserClientCtrl.getCurrentUser, '客户端-当前用户会话校验'));
 router.get('/client/user/stats/:id', withLogging(UserClientCtrl.getUserStats, '客户端-获取个人资料统计'));
 
 // ========== 余额接口 ==========
@@ -326,7 +335,11 @@ router.get('/client/cdk/servers', withLogging(async () => {
 
 // ========== 充值链接（SDK 调用）==========
 
-router.post('/rechargeurl/get', withLogging(PaymentCtrl.paymentNewReps, '获取充值链接'));
+router.post('/rechargeurl/get', defineEventHandler(() => ({
+  code: 410,
+  msg: '接口已停用',
+  data: null
+})));
 
 // ========== 支付状态查询 ==========
 

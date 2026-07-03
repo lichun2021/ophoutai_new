@@ -15,6 +15,30 @@ import { sdkMessages } from '../utils/i18n';
 import { selectGameIpByAmount } from '../utils/gameIp';
 import { generateUserLoginUrl } from './payment';
 import { signJWT, setAuthCookie } from '@quantum/shared/server/utils/jwt';
+
+/**
+ * 打印一行红色错误日志（不打印堆栈），保持终端输出整洁。
+ * 支持 Error / H3Error / 普通对象 / 字符串。
+ */
+function logError(prefix: string, e?: any): void {
+    // ANSI 红色
+    const RED = '\x1b[31m';
+    const RESET = '\x1b[0m';
+    let msg = '';
+    if (e == null) {
+        msg = '';
+    } else if (typeof e === 'string') {
+        msg = e;
+    } else {
+        // H3Error / Error 等通用字段
+        msg = e.statusMessage || e.message || String(e);
+        // 业务码（如 429 / 401）有助于排查，附加显示
+        const code = e.statusCode || e.status;
+        if (code) msg = `[${code}] ${msg}`;
+    }
+    console.error(`${RED}✗ ${prefix}${msg ? ': ' + msg : ''}${RESET}`);
+}
+
 function getGameIp(amount?: number): string {
     const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
     return selectGameIpByAmount(value);
@@ -92,7 +116,7 @@ export const checkChannelStatus = async (evt: H3Event) => {
             admin_name: admin.name
         };
     } catch (e: any) {
-        console.error('检查代理账号状态失败:', e);
+        logError('检查代理账号状态失败', e);
         return {
             valid: false,
             message: '检查代理账号状态时发生错误'
@@ -220,7 +244,7 @@ export const webLogin = async (evt: H3Event) => {
             }
         };
     } catch (e: any) {
-        console.error("用户网页登录异常:", e);
+        logError('用户网页登录异常', e);
         throw createError({
             status: e.status || 500,
             message: e.message || '登录失败',
@@ -266,7 +290,7 @@ export const page = async (evt: H3Event) => {
             channel_codes: adminWithPermissions.allowed_channel_codes || []
         };
     } catch (error) {
-        console.error('权限检查失败:', error);
+        logError('权限检查失败', error);
         throw createError({
             status: 403,
             message: '权限验证失败',
@@ -466,7 +490,7 @@ export const reg = async (evt: H3Event) => {
             message: result === null ? "注册失败" : "注册成功"
         };
     } catch (e: any) {
-        console.error('注册错误:', e);
+        logError('注册错误', e);
         throw createError({
             status: 500,
             message: e.message || '注册失败',
@@ -604,7 +628,7 @@ export const getpostorders = defineEventHandler(async (event) => {
                     }
                 }
             } catch (redisError) {
-                console.error(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
+                logError(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
                 // 继续处理下一个订单
             }
         }
@@ -615,7 +639,7 @@ export const getpostorders = defineEventHandler(async (event) => {
             total: validOrders.length
         };
     } catch (error) {
-        console.error('获取订单列表出错:', error);
+        logError('获取订单列表出错', error);
         throw createError({
             status: 500,
             message: '获取订单列表时发生错误'
@@ -669,7 +693,7 @@ export const getorders = defineEventHandler(async (event) => {
                     }
                 }
             } catch (redisError) {
-                console.error(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
+                logError(`获取Redis数据出错，订单ID: ${order.transaction_id}`, redisError);
                 // 继续处理下一个订单
             }
         }
@@ -680,7 +704,7 @@ export const getorders = defineEventHandler(async (event) => {
             total: validOrders.length
         };
     } catch (error) {
-        console.error('获取订单列表出错:', error);
+        logError('获取订单列表出错', error);
         throw createError({
             status: 500,
             message: '获取订单列表时发生错误'
@@ -696,7 +720,8 @@ export const userLogin = async (evt: H3Event) => {
 
     try {
         const body = await readBody(evt);
-        console.log("用户登录请求:", body);
+        // 避免打印明文密码等敏感信息
+        console.log("用户登录请求:", { username: body?.username || '', hasToken: !!body?.t });
 
         const { username, password, t } = body;
         usernameToLog = username || '';
@@ -711,6 +736,26 @@ export const userLogin = async (evt: H3Event) => {
             || xRealIp
             || 'unknown';
         const userAgent = (headers['user-agent'] as string) || '';
+
+        // 防脚本刷登录：同一 IP 1 分钟内只允许请求一次用户登录接口
+        if (ipAddress && ipAddress !== 'unknown') {
+            try {
+                const redis = getRedisCluster();
+                const loginLimitKey = `user_login_ip_limit:${ipAddress}`;
+                const acquired = await redis.set(loginLimitKey, '1', 'EX', 60, 'NX');
+                if (acquired !== 'OK') {
+                    const ttl = await redis.ttl(loginLimitKey);
+                    throw createError({
+                        status: 429,
+                        message: `登录过于频繁，请 ${Math.max(1, ttl)} 秒后再试`,
+                    });
+                }
+            } catch (err: any) {
+                if (err?.statusCode || err?.status) throw err;
+                logError('用户登录限流 Redis 异常', err);
+                throw createError({ status: 503, message: '登录服务暂不可用，请稍后再试' });
+            }
+        }
 
         // token 自动登录不需要 username（用 token 反查 user_id）
         if (!username && !t) {
@@ -734,7 +779,7 @@ export const userLogin = async (evt: H3Event) => {
                 const redis = getRedisCluster();
                 userIdStr = await (redis as any).call('GETDEL', `autologin:${t}`);
             } catch (redisErr) {
-                console.error('autologin token 校验失败 Redis 异常:', redisErr);
+                logError('autologin token 校验失败 Redis 异常', redisErr);
                 throw createError({ status: 500, message: '登录服务暂不可用' });
             }
             if (!userIdStr) {
@@ -873,7 +918,7 @@ export const userLogin = async (evt: H3Event) => {
         console.log("用户登录返回数据:", response);
         return response;
     } catch (e: any) {
-        console.error("用户登录异常:", e);
+        logError('用户登录异常', e);
 
         // 如果还没有记录过登录日志且有用户名，记录失败的登录
         if (!loginSuccess && usernameToLog) {
@@ -892,8 +937,8 @@ export const userLogin = async (evt: H3Event) => {
                     device: userAgent,
                     channel_code: ''
                 });
-            } catch (logError) {
-                console.error("记录登录日志失败:", logError);
+            } catch (logErr) {
+                logError('记录登录日志失败', logErr);
             }
         }
         throw createError({
@@ -979,8 +1024,8 @@ export const sdkLogin = async (evt: H3Event) => {
                     device: deviceInfo || userAgent,
                     channel_code: agentId || ''
                 });
-            } catch (logError) {
-                console.error("记录SDK登录日志失败:", logError);
+            } catch (logErr) {
+                logError('记录SDK登录日志失败', logErr);
             }
 
             return {
@@ -1013,8 +1058,8 @@ export const sdkLogin = async (evt: H3Event) => {
                     device: deviceInfo || userAgent,
                     channel_code: userData.channel_code || agentId || ''
                 });
-            } catch (logError) {
-                console.error("记录SDK登录日志失败:", logError);
+            } catch (logErr) {
+                logError('记录SDK登录日志失败', logErr);
             }
 
             return {
@@ -1088,7 +1133,7 @@ export const sdkLogin = async (evt: H3Event) => {
         return response;
 
     } catch (e: any) {
-        console.error("SDK登录异常:", e);
+        logError('SDK登录异常', e);
 
         // 如果还没有记录过登录日志且有用户名，记录失败的登录
         if (!loginSuccess && usernameToLog) {
@@ -1107,8 +1152,8 @@ export const sdkLogin = async (evt: H3Event) => {
                     device: userAgent,
                     channel_code: ''
                 });
-            } catch (logError) {
-                console.error("记录SDK登录日志失败:", logError);
+            } catch (logErr) {
+                logError('记录SDK登录日志失败', logErr);
             }
         }
 
@@ -1209,7 +1254,7 @@ export const getSubAccountList = async (evt: H3Event) => {
         };
 
     } catch (e: any) {
-        console.error("获取子账号列表异常:", e);
+        logError('获取子账号列表异常', e);
         setResponseStatus(evt, 200);
         return {
             code: "0",
@@ -1350,7 +1395,7 @@ export const addSubAccount = async (evt: H3Event) => {
         };
 
     } catch (e: any) {
-        console.error("添加子账号异常:", e);
+        logError('添加子账号异常', e);
 
         // 处理数据库触发器错误
         if (e.message && e.message.includes('不能为单个主账号创建超过10个子账号')) {
@@ -1480,7 +1525,7 @@ export const editSubAccountNickname = async (evt: H3Event) => {
         };
 
     } catch (e: any) {
-        console.error("编辑子账号昵称异常:", e);
+        logError('编辑子账号昵称异常', e);
         setResponseStatus(evt, 200);
         return {
             code: "0",
@@ -1649,7 +1694,7 @@ export const reportRole = async (evt: H3Event) => {
         };
 
     } catch (e: any) {
-        console.error("角色上报异常:", e);
+        logError('角色上报异常', e);
         setResponseStatus(evt, 200);
         return {
             z: -1,
@@ -1691,7 +1736,7 @@ export const updateSubUserWuid = async (evt: H3Event) => {
         return result;
 
     } catch (error) {
-        console.error('更新子用户wuid失败:', error);
+        logError('更新子用户wuid失败', error);
         return {
             success: false,
             message: '注册失败：系统错误'
@@ -1932,7 +1977,7 @@ export const register = async (evt: H3Event) => {
         };
 
     } catch (error) {
-        console.error('用户注册失败:', error);
+        logError('用户注册失败', error);
 
         // 处理数据库重复键错误
         if (error instanceof Error) {
@@ -2016,7 +2061,7 @@ export const banUser = async (evt: H3Event) => {
             };
         }
     } catch (error) {
-        console.error('封号/解封用户失败:', error);
+        logError('封号/解封用户失败', error);
         return {
             status: "fail",
             message: "封号/解封用户失败，请稍后重试"

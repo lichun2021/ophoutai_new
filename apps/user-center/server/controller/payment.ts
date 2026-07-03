@@ -2413,6 +2413,19 @@ export const queryPaymentOrder = async (evt: H3Event) => {
             };
         }
 
+        const { userId } = await requireAuth(evt);
+        if (!orderDetail.user_id || Number(orderDetail.user_id) !== Number(userId)) {
+            console.warn('[PaymentQuery] 订单归属校验失败:', {
+                transaction_id,
+                orderUserId: orderDetail.user_id,
+                tokenUserId: userId,
+            });
+            return {
+                code: 403,
+                msg: '无权查询该订单'
+            };
+        }
+
         console.log('[PaymentQuery] 订单详情:', {
             transaction_id,
             mch_order_id: orderDetail.mch_order_id,

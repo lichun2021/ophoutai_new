@@ -973,18 +973,39 @@ export const getUserStats = defineEventHandler(async (event) => {
     }
 });
 
+// 获取当前登录用户信息（Cookie JWT 会话校验）
+export const getCurrentUser = defineEventHandler(async (event) => {
+    try {
+        const { userId } = await requireAuth(event);
+        const user = await UserModel.findById(userId);
+        if (!user) {
+            return { code: 404, message: '用户不存在', data: null };
+        }
+
+        const platformCoins = await UserModel.getPlatformCoins(userId);
+        const { password, ...safeUser } = user as any;
+        return {
+            code: 200,
+            message: '会话有效',
+            data: {
+                user: {
+                    ...safeUser,
+                    platform_coins: platformCoins,
+                }
+            }
+        };
+    } catch (error) {
+        console.error('[会话校验] 异常:', error);
+        return { code: 401, message: '未授权，请先登录', data: null };
+    }
+});
+
 // 获取当前用户的平台币余额
 export const getUserBalance = defineEventHandler(async (event) => {
     try {
-        const authorizationHeader = getHeader(event, 'authorization');
-        const userId = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
-        if (!userId || isNaN(userId)) {
-            return {
-                code: 401,
-                message: '未授权，请先登录'
-            };
-        }
+        // Cookie JWT 优先：从 HttpOnly Cookie / Bearer token 获取真实用户ID，不再信任前端 user_id 或数字 Authorization
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询余额`);
         
         // 验证用户是否存在
         const user = await UserModel.findById(userId);
@@ -1008,8 +1029,8 @@ export const getUserBalance = defineEventHandler(async (event) => {
     } catch (error) {
         console.error('[余额查询] 异常:', error);
         return {
-            code: 500,
-            message: '获取余额失败'
+            code: 401,
+            message: '未授权，请先登录'
         };
     }
 });

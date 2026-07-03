@@ -174,6 +174,30 @@ export const useAuthStore = defineStore('auth', {
         return { error: errorMsg };
       }
     },
+    async validateUserSession() {
+      if (!this.isLoggedIn || !this.isUser) return false;
+
+      try {
+        const response = await $fetch('/api/client/me') as any;
+        if (response?.code === 200 && response.data?.user) {
+          const user = response.data.user;
+          this.id = user.id;
+          this.name = user.username;
+          this.userInfo = user;
+          this.platformCoins = user.platform_coins || 0;
+
+          localStorage.setItem('auth_id', this.id.toString());
+          localStorage.setItem('auth_name', this.name);
+          localStorage.setItem('auth_userInfo', JSON.stringify(this.userInfo));
+          return true;
+        }
+      } catch (error) {
+        console.warn('用户 Cookie 会话校验失败，清理本地登录态:', error);
+      }
+
+      this.clearAuthState();
+      return false;
+    },
     clearAuthState() {
       this.isLoggedIn = false;
       this.permissions = null;
@@ -230,12 +254,8 @@ export const useAuthStore = defineStore('auth', {
       
       try {
         console.log('🔄 刷新用户余额...');
-        // 使用客户端余额接口，携带 Authorization 头便于后端鉴权
-        const response = await $fetch(`/api/client/balance?user_id=${this.id}`, {
-          headers: {
-            Authorization: String(this.id)
-          }
-        }) as any;
+        // 使用 HttpOnly Cookie JWT 鉴权，后端从 cookie 中解析真实用户ID
+        const response = await $fetch('/api/client/balance') as any;
         
         console.log('💰 balance API 原始响应:', JSON.stringify(response));
         if (response && response.code === 200 && response.data) {

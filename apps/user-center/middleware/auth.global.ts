@@ -1,7 +1,7 @@
 // middleware/auth.global.ts - 用户中心版本
 import { useAuthStore } from '~/store/auth';
 
-export default defineNuxtRouteMiddleware((to, from) => {
+export default defineNuxtRouteMiddleware(async (to, from) => {
   // 只在客户端执行
   if (process.server) return;
   
@@ -36,6 +36,12 @@ export default defineNuxtRouteMiddleware((to, from) => {
   
   // 管理员误入用户中心 → 跳转到用户首页（用户中心只服务普通用户）
   if (auth.isLoggedIn && !auth.isUser) {
+    return navigateTo('/user/login');
+  }
+
+  // localStorage 只能作为展示缓存，受保护页面必须确认 HttpOnly JWT Cookie 仍有效
+  const ok = await auth.validateUserSession();
+  if (!ok) {
     return navigateTo('/user/login');
   }
 });

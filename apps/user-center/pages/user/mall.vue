@@ -711,7 +711,7 @@ const submitRmbPurchase = async () => {
 const loadUserCharacters = async () => {
   const userId = authStore.userInfo?.id || authStore.id;
   if (!userId) return;
-  const res = await $fetch('/api/client/getUserCharacters', { query: { user_id: userId } });
+  const res = await $fetch('/api/client/getUserCharacters');
   if (res.code === 200) {
     const list = res.data.characters || [];
     characterList.value = list;

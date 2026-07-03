@@ -158,7 +158,7 @@ const loadBenefitsReminder = async () => {
 const loadUserData = async () => {
   try {
     if (!authStore.userInfo?.id) return;
-    const res = await $fetch('/api/client/user/home-stats', { query: { user_id: authStore.userInfo.id } });
+    const res = await $fetch('/api/client/user/home-stats');
     if (res.code === 200) {
       stats.value = { totalRecharge: res.data.totalRecharge || 0, purchaseCount: res.data.purchaseCount || 0 };
       recentOrders.value = (res.data.recentOrders || []).map(r => ({
