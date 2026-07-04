@@ -4,25 +4,11 @@ import * as MonthlyCardModel from '../model/monthlyCard';
 import * as CheckInModel from '../model/checkIn';
 import * as UserModel from '../model/user';
 import * as PaymentModel from '../model/payment';
+import { requireAuth } from '@quantum/shared/server/utils/jwt';
 
 // ────────────────────────────────────
-// 辅助：从 cookie 或 Authorization 头获取 user_id
+// ⚠️ 已废弃: getCurrentUserId - 改用 JWT 认证
 // ────────────────────────────────────
-async function getCurrentUserId(event: H3Event): Promise<number | null> {
-    // 先尝试从 cookie 取
-    const cookieUserId = getCookie(event, 'user_id');
-    if (cookieUserId) {
-        const id = parseInt(cookieUserId);
-        if (!isNaN(id) && id > 0) return id;
-    }
-    // 再尝试从请求体或 query 取 user_id
-    const query = getQuery(event);
-    if (query.user_id) {
-        const id = parseInt(query.user_id as string);
-        if (!isNaN(id) && id > 0) return id;
-    }
-    return null;
-}
 
 // 生成唯一 transaction_id
 function genTransactionId(prefix: string, userId: number): string {
@@ -43,8 +29,10 @@ function nowDatetime(): string {
 // ────────────────────────────────────
 export const getMonthlyCardStatus = defineEventHandler(async (event: H3Event) => {
     try {
-        const userId = await getCurrentUserId(event);
-        if (!userId) return { code: 401, message: '未登录' };
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询月卡状态`);
+        // ========================================================
 
         const status = await MonthlyCardModel.getCardStatus(userId);
         return { code: 200, data: status };
@@ -59,11 +47,12 @@ export const getMonthlyCardStatus = defineEventHandler(async (event: H3Event) =>
 // 领取今日月卡平台币
 // ────────────────────────────────────
 export const claimMonthlyCard = defineEventHandler(async (event: H3Event) => {
-    const body = await readBody(event);
-    const userId = body?.user_id ? parseInt(body.user_id) : await getCurrentUserId(event);
-    if (!userId) return { code: 401, message: '未登录' };
-
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 领取月卡`);
+        // ========================================================
+
         const today = MonthlyCardModel.getBeijingDate();
 
         // 获取当前有效月卡
@@ -153,8 +142,10 @@ export const claimMonthlyCard = defineEventHandler(async (event: H3Event) => {
 // ────────────────────────────────────
 export const getCheckInStatus = defineEventHandler(async (event: H3Event) => {
     try {
-        const userId = await getCurrentUserId(event);
-        if (!userId) return { code: 401, message: '未登录' };
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询签到状态`);
+        // ========================================================
 
         const status = await CheckInModel.getMonthlyCheckInStatus(userId);
         return { code: 200, data: status };
@@ -169,11 +160,12 @@ export const getCheckInStatus = defineEventHandler(async (event: H3Event) => {
 // 执行每日签到
 // ────────────────────────────────────
 export const doCheckIn = defineEventHandler(async (event: H3Event) => {
-    const body = await readBody(event);
-    const userId = body?.user_id ? parseInt(body.user_id) : await getCurrentUserId(event);
-    if (!userId) return { code: 401, message: '未登录' };
-
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 执行签到`);
+        // ========================================================
+
         // 先检查今日是否已签（Redis 快速防重）
         try {
             const { getRedisCluster } = await import('../utils/redis-cluster');

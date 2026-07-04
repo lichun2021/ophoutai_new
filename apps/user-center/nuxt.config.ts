@@ -22,7 +22,7 @@ export default defineNuxtConfig({
 
   nitro: {
     externals: {
-      inline: ["lru-cache"]
+      inline: ["lru-cache", "@quantum/shared"]
     }
   },
 

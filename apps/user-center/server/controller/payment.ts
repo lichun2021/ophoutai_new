@@ -12,6 +12,7 @@ import { updateTransactionHasPay, getRedisCluster } from '../utils/redis-cluster
 import { getSystemConfig, getThirdPartyPaymentConfig, getSystemParam } from '../utils/systemConfig';
 import { getByWorldId } from '../model/gameServers';
 import * as GameCharactersModel from '../model/gameCharacters';
+import { requireAuth } from '@quantum/shared/server/utils/jwt';
 
 /**
  * 处理IP地址，将IPv6格式转换为IPv4格式
@@ -1484,7 +1485,59 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
                         message: '礼包不存在'
                     };
                 }
-                
+
+                // 🔒 安全校验1：礼包必须已上架
+                if (!giftPackage.is_active) {
+                    console.error('礼包未上架, package_id=', packageId);
+                    return {
+                        success: false,
+                        message: '礼包未上架'
+                    };
+                }
+
+                // 🔒 安全校验2：有效期校验
+                const now = new Date();
+                if (giftPackage.start_time && new Date(giftPackage.start_time) > now) {
+                    console.error('礼包未开始, package_id=', packageId);
+                    return {
+                        success: false,
+                        message: '礼包未开始'
+                    };
+                }
+                if (giftPackage.end_time && new Date(giftPackage.end_time) < now) {
+                    console.error('礼包已结束, package_id=', packageId);
+                    return {
+                        success: false,
+                        message: '礼包已结束'
+                    };
+                }
+
+                // 🔒 安全校验3（关键）：收货角色必须属于付款账号
+                const ownerCheck = await sql({
+                    query: `SELECT gc.uuid FROM GameCharacters gc
+                            INNER JOIN SubUsers su ON gc.subuser_id = su.id
+                            WHERE su.parent_user_id = ? AND gc.uuid = ? AND gc.server_id = ?
+                            LIMIT 1`,
+                    values: [orderDetail.user_id, characterUuid, Number(serverId)],
+                }) as any[];
+                if (ownerCheck.length === 0) {
+                    console.error(`[礼包发放] 角色归属校验失败: user=${orderDetail.user_id}, role=${characterUuid}, server=${serverId}`);
+                    return {
+                        success: false,
+                        message: '收货角色不属于当前账号或不存在'
+                    };
+                }
+
+                // 🔒 安全校验4：校验扣款金额 == 礼包平台币定价（防篡改 price）
+                const expectedPtb = Number(giftPackage.price_platform_coins || 0);
+                if (expectedPtb > 0 && Number(orderDetail.amount || 0) < expectedPtb) {
+                    console.error(`[礼包发放] 金额校验失败: 支付${orderDetail.amount} < 定价${expectedPtb}`);
+                    return {
+                        success: false,
+                        message: '支付金额与礼包价格不符'
+                    };
+                }
+
                 // 检查用户是否可以购买该礼包（使用角色UUID进行限购检查）
                 const checkResult = await ExternalGiftPackageModel.checkUserCanPurchase(characterUuid, packageId, quantity);
                 if (!checkResult.canPurchase) {
@@ -1665,6 +1718,53 @@ export const doPayment = async (evt: H3Event) => {
         }
         const query = getQuery(evt) || {};
         const params = { ...query, ...(body && typeof body === 'object' ? body : {}) };
+
+        const extractGiftRoleId = (serverUrl: any): string => {
+            const raw = String(serverUrl || '');
+            if (!raw.startsWith('gift://')) return '';
+            try {
+                const meta = JSON.parse(decodeURIComponent(raw.slice('gift://'.length)) || '{}');
+                return String(meta.cid || meta.character_uuid || meta.characterUuid || '').trim();
+            } catch {
+                return '';
+            }
+        };
+
+        // 仅用户中心商城礼包购买走 JWT userId + 角色归属校验。
+        // 平台币充值、月卡/终身卡、普通 SDKAPI 游戏内购买不走这段逻辑。
+        const isMallGiftOrder = String(params.server_url || '').startsWith('gift://');
+        if (isMallGiftOrder) {
+            const auth = await requireAuth(evt);
+            const userRows = await sql({
+                query: 'SELECT id, username, thirdparty_uid, game_code, channel_code FROM Users WHERE id = ? LIMIT 1',
+                values: [auth.userId],
+            }) as any[];
+            if (userRows.length === 0) {
+                return { code: -2, msg: '用户不存在', data: null };
+            }
+            const tokenUser = userRows[0];
+
+            // 商城礼包购买不信任前端传入的用户身份字段，统一以 JWT 解析出的用户为准。
+            params.f = tokenUser.username || auth.username;
+            params.d = tokenUser.game_code || params.d;
+            params.e = tokenUser.channel_code || params.e;
+
+            const roleId = String(params.role_id || params.character_uuid || params.cid || extractGiftRoleId(params.server_url) || '').trim();
+            if (!roleId) {
+                return { code: -3, msg: '缺少角色ID', data: null };
+            }
+
+            const roleRows = await sql({
+                query: 'SELECT id, subuser_id, server_id FROM GameCharacters WHERE uuid = ? AND user_id = ? LIMIT 1',
+                values: [roleId, auth.userId],
+            }) as any[];
+            if (roleRows.length === 0) {
+                return { code: -3, msg: '角色不存在或不属于当前用户', data: null };
+            }
+
+            params.role_id = roleId;
+            if (!params.tr && roleRows[0].subuser_id) params.tr = String(roleRows[0].subuser_id);
+        }
 
         // 清除前端签名（MD5），用 SDK 密钥（HMAC-SHA256）重新签名
         delete params.sign;
@@ -2313,6 +2413,19 @@ export const queryPaymentOrder = async (evt: H3Event) => {
             };
         }
 
+        const { userId } = await requireAuth(evt);
+        if (!orderDetail.user_id || Number(orderDetail.user_id) !== Number(userId)) {
+            console.warn('[PaymentQuery] 订单归属校验失败:', {
+                transaction_id,
+                orderUserId: orderDetail.user_id,
+                tokenUserId: userId,
+            });
+            return {
+                code: 403,
+                msg: '无权查询该订单'
+            };
+        }
+
         console.log('[PaymentQuery] 订单详情:', {
             transaction_id,
             mch_order_id: orderDetail.mch_order_id,
@@ -2500,6 +2613,19 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
                 package_name: pkg.package_name,
                 price_real_money: pkg.price_real_money
             });
+
+            // 🔒 安全校验：收货角色必须属于付款账号
+            const ownerCheck = await sql({
+                query: `SELECT gc.uuid FROM GameCharacters gc
+                        INNER JOIN SubUsers su ON gc.subuser_id = su.id
+                        WHERE su.parent_user_id = ? AND gc.uuid = ? AND gc.server_id = ?
+                        LIMIT 1`,
+                values: [orderDetail.user_id, characterUuid, Number(serverId)],
+            }) as any[];
+            if (ownerCheck.length === 0) {
+                console.error(`[PaymentQuery] 角色归属校验失败: user=${orderDetail.user_id}, role=${characterUuid}, server=${serverId}`);
+                throw new Error('收货角色不属于当前账号或不存在');
+            }
 
             // 解析 gift_items
             let giftItems;

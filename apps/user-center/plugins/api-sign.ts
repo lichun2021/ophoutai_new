@@ -64,6 +64,25 @@ function buildSignBase(params: Record<string, any>) {
   return entries.map(([k, v]) => `${k}=${v}`).join('&');
 }
 
+// 🔒 需纳入签名的高危业务字段（必须与后端 apiSign.ts SIGNED_BUSINESS_FIELDS 一致）
+const SIGNED_BUSINESS_FIELDS = [
+  'server_url', 'role_id', 'uid', 'p', 'price',
+  'package_id', 'pid', 'payment_method', 'l',
+];
+
+// 从来源对象里挑出高危业务字段，合并进签名 payload
+function collectSignedFields(payload: Record<string, any>, source: any) {
+  if (!source || typeof source !== 'object') return;
+  for (const f of SIGNED_BUSINESS_FIELDS) {
+    if (typeof source.get === 'function') {
+      // FormData
+      if (source.has && source.has(f)) payload[f] = source.get(f);
+    } else if (source[f] !== undefined && source[f] !== null) {
+      payload[f] = source[f];
+    }
+  }
+}
+
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
   const apiKey = config.public?.apiSignKey || 'fasdjhkfh2348!@#$!617';
@@ -126,6 +145,9 @@ export default defineNuxtPlugin((nuxtApp) => {
       const ymd = formatYmd(dateForToken);
       const token = calcDailyToken(dateForToken, apiKey);
       const payload = { ts: String(ts), nonce } as any;
+      // 🔒 纳入高危业务字段（来源：query 参数 + body）
+      collectSignedFields(payload, extraParams);
+      collectSignedFields(payload, (options as any).body);
       const sign = md5Hex(buildSignBase(payload) + token);
 
       
@@ -135,6 +157,8 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (method2 === 'GET' || method2 === 'HEAD') {
         // GET/HEAD：将签名参数放到 query，并加 __signed 标记
         const finalParams = { ...(extraParams || {}), ts, nonce, sign, __signed: '1' } as any;
+        // ofetch/Nuxt 不同版本对 query/params 处理不完全一致，两边都写，确保最终 URL 能带上签名
+        (options as any).query = finalParams;
         (options as any).params = finalParams;
       } else {
         // 非 GET：优先写入 body
@@ -203,6 +227,28 @@ export default defineNuxtPlugin((nuxtApp) => {
         const newInit: RequestInit = { ...(init || {}) };
         newInit.credentials = 'include';
 
+        // 如果上层 $fetch 已经签名，会带 x-signed: 1；只有最终 URL 确实带签名时才直接放行
+        const hasSignedHeader = (() => {
+          const headersList = [init?.headers, (typeof input !== 'string' && input && 'headers' in (input as any)) ? (input as any).headers : undefined];
+          for (const headers of headersList) {
+            if (!headers) continue;
+            try {
+              if (headers instanceof Headers) {
+                if (headers.get('x-signed') === '1') return true;
+              } else if (Array.isArray(headers)) {
+                if (headers.some(([k, v]) => String(k).toLowerCase() === 'x-signed' && String(v) === '1')) return true;
+              } else if (typeof headers === 'object') {
+                const h: any = headers as any;
+                if (h['x-signed'] === '1' || h['X-Signed'] === '1') return true;
+              }
+            } catch {}
+          }
+          return false;
+        })();
+        if (hasSignedHeader && (url.searchParams.has('__signed') || (url.searchParams.has('ts') && url.searchParams.has('nonce') && url.searchParams.has('sign')))) {
+          return originalFetch(input as any, newInit as any);
+        }
+
         // 若 URL 已带 __signed 标记，说明已被 $fetch 签名，直接放行
         if (url.searchParams.has('__signed')) {
           return originalFetch(url.toString(), newInit);
@@ -230,7 +276,22 @@ export default defineNuxtPlugin((nuxtApp) => {
         const dateForToken = new Date(ts * 1000);
         const ymd = formatYmd(dateForToken);
         const token = calcDailyToken(dateForToken, apiKey);
-        const base = buildSignBase({ ts: String(ts), nonce });
+        // 🔒 纳入高危业务字段（来源：URL query + body）
+        const fbPayload = { ts: String(ts), nonce } as any;
+        for (const f of SIGNED_BUSINESS_FIELDS) {
+          if (url.searchParams.has(f)) fbPayload[f] = url.searchParams.get(f);
+        }
+        {
+          const b: any = init?.body;
+          if (typeof b === 'string') {
+            try { collectSignedFields(fbPayload, JSON.parse(b)); } catch {}
+          } else if (b instanceof FormData) {
+            collectSignedFields(fbPayload, b);
+          } else if (b && typeof b === 'object') {
+            collectSignedFields(fbPayload, b);
+          }
+        }
+        const base = buildSignBase(fbPayload);
     const sign = md5Hex(base + token);
 
         const existingHeaders = (init?.headers as any) || {};

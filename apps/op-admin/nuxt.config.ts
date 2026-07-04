@@ -20,8 +20,7 @@ export default defineNuxtConfig({
   
   nitro: {
     externals: {
-      inline: ["lru-cache"],
-      external: ["grammy"],
+      inline: ["lru-cache", "@quantum/shared"],
     },
     routeRules: {
       '/sdkapi/**': { headers: { 'Content-Encoding': 'identity' } }

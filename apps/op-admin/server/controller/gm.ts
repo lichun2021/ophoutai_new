@@ -1041,8 +1041,8 @@ export const deletePlayer = async (evt: H3Event) => {
       // 先获取玩家名称（用于日志）
       const playerName = await getPlayerName(server, playerId);
 
-      // 调用游戏服务器接口
-      const url = `${gameServer.webhost}/script/playerDelete?playerId=${playerId}`;
+      // 调用游戏服务器接口（命令 id 为 userDel，见游戏服 script.xml，注册的是 PlayerDeleteHandler）
+      const url = `${gameServer.webhost}/script/userDel?playerId=${playerId}`;
       const response = await fetch(url);
       const result = await response.json();
 

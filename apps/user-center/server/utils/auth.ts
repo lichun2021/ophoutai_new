@@ -114,10 +114,14 @@ const generateTotpAtCounter = (secret: string, counter: number): string => {
     return String(codeInt % mod).padStart(TOTP_DIGITS, '0');
 };
 
-// ===== 管理员会话签名/验证 =====
+// ============ 安全改进: 移除硬编码，强制使用环境变量 ============
+// 管理员会话签名/验证
 const getAdminSecret = (): string => {
-    const secret = process.env.ADMIN_SESSION_SECRET || 'q1w21124124!@!@#E@!';
-    return secret || 'PLEASE_CHANGE_ADMIN_SESSION_SECRET';
+    const secret = process.env.ADMIN_SESSION_SECRET!;
+    if (!secret) {
+        throw new Error('ADMIN_SESSION_SECRET 环境变量未配置');
+    }
+    return secret;
 }
 
 /**

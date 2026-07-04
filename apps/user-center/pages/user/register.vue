@@ -71,26 +71,23 @@
           </div>
         </div>
 
-        <!-- 图形验证码 -->
+        <!-- 滑动验证 -->
         <div class="form-field">
-          <label class="field-label">验证码</label>
-          <div class="captcha-row">
-            <div class="input-wrap captcha-input-wrap">
-              <span class="input-icon">🔑</span>
-              <input
-                v-model="formState.captchaInput"
-                class="field-input"
-                placeholder="请输入验证码"
-                maxlength="4"
-                autocomplete="off"
-                :disabled="loading || !channelValid"
-                style="text-transform: uppercase; letter-spacing: 4px;"
-              />
+          <label class="field-label">安全验证</label>
+          <div class="slider-wrap" :class="{ 'slider-passed': sliderPassed, 'slider-disabled': loading || !channelValid }">
+            <div class="slider-track">
+              <div class="slider-fill" :style="{ width: sliderFillWidth }"></div>
+              <span class="slider-text">{{ sliderPassed ? '✓ 验证通过' : '← 拖动滑块完成验证' }}</span>
             </div>
-            <div class="captcha-img-wrap" @click="fetchCaptcha" title="点击刷新验证码">
-              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" alt="验证码" />
-              <div v-else class="captcha-loading">加载中...</div>
-              <span class="captcha-refresh-hint">🔄 点击刷新</span>
+            <div
+              class="slider-btn"
+              :style="{ left: sliderBtnLeft }"
+              @mousedown="onSliderStart"
+              @touchstart.prevent="onSliderStart"
+              :class="{ 'slider-btn-passed': sliderPassed }"
+            >
+              <span v-if="!sliderPassed">›</span>
+              <span v-else>✓</span>
             </div>
           </div>
         </div>
@@ -160,22 +157,69 @@ const channelValid = ref(true);
 const channelValidating = ref(false);
 const channelError = ref('');
 
-// 验证码状态
-const captchaToken = ref('');
-const captchaImage = ref('');
+// ========== 滑块验证 ==========
+const SLIDER_WIDTH = 280;  // 滑块轨道宽度(px)
+const BTN_SIZE = 44;       // 滑块按钮宽度(px)
+const PASS_THRESHOLD = SLIDER_WIDTH - BTN_SIZE - 4; // 需要拖动的距离
 
-async function fetchCaptcha() {
-  captchaImage.value = '';
-  formState.captchaInput = '';
-  try {
-    const res = await fetch('/api/user/captcha');
-    const data = await res.json();
-    captchaToken.value = data.token || '';
-    captchaImage.value = data.image || '';
-  } catch {
-    captchaImage.value = '';
+const sliderPassed = ref(false);
+const sliderX = ref(0);  // 当前位移
+const captchaToken = ref('');  // 滑块验证通过后的标记（后端不强校验，仅前端流程使用）
+let isDragging = false;
+let startX = 0;
+let startSliderX = 0;
+
+const sliderBtnLeft = computed(() => `${sliderX.value}px`);
+const sliderFillWidth = computed(() => `${sliderX.value + BTN_SIZE}px`);
+
+function onSliderStart(e: MouseEvent | TouchEvent) {
+  if (sliderPassed.value || loading.value || !channelValid.value) return;
+  isDragging = true;
+  startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+  startSliderX = sliderX.value;
+  document.addEventListener('mousemove', onSliderMove);
+  document.addEventListener('touchmove', onSliderMove, { passive: false });
+  document.addEventListener('mouseup', onSliderEnd);
+  document.addEventListener('touchend', onSliderEnd);
+}
+
+function onSliderMove(e: MouseEvent | TouchEvent) {
+  if (!isDragging) return;
+  if (e.cancelable) e.preventDefault();
+  const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+  const delta = clientX - startX;
+  const newX = Math.max(0, Math.min(PASS_THRESHOLD, startSliderX + delta));
+  sliderX.value = newX;
+}
+
+function onSliderEnd() {
+  if (!isDragging) return;
+  isDragging = false;
+  document.removeEventListener('mousemove', onSliderMove);
+  document.removeEventListener('touchmove', onSliderMove);
+  document.removeEventListener('mouseup', onSliderEnd);
+  document.removeEventListener('touchend', onSliderEnd);
+
+  if (sliderX.value >= PASS_THRESHOLD) {
+    sliderX.value = PASS_THRESHOLD;
+    sliderPassed.value = true;
+    // 生成本地 token，提交注册时使用
+    captchaToken.value = 'slider_' + Date.now();
+    formState.captchaInput = '__SLIDER_PASSED__';
+  } else {
+    // 未到终点，弹回
+    sliderX.value = 0;
   }
 }
+
+function resetSlider() {
+  sliderPassed.value = false;
+  sliderX.value = 0;
+  captchaToken.value = '';
+  formState.captchaInput = '';
+}
+// ========== END 滑块验证 ==========
+
 
 // 表单验证
 const isFormValid = computed(() => {
@@ -184,7 +228,7 @@ const isFormValid = computed(() => {
          formState.password.trim() !== '' &&
          formState.confirmPassword.trim() !== '' &&
          formState.password === formState.confirmPassword &&
-         formState.captchaInput.trim().length === 4;
+         sliderPassed.value;
 });
 
 // 验证代理账号状态
@@ -252,8 +296,7 @@ onMounted(async () => {
     channelError.value = '缺少渠道代码参数';
   }
 
-  // 加载验证码
-  await fetchCaptcha();
+  // 不再需要加载图形验证码
 });
 
 // 处理注册
@@ -308,8 +351,8 @@ const handleRegister = async () => {
     if (response.ok && result.status === 'success') {
       showSuccess('注册成功！即将跳转到登录页面...');
     } else {
-      // 验证码错误或其他错误，刷新验证码
-      await fetchCaptcha();
+      // 验证码错误或其他错误，重置滑块
+      resetSlider();
       if (!response.ok) {
         showError(result.message || result.statusMessage || '注册失败，请检查参数是否正确');
       } else if (result.message && result.message.includes('Duplicate')) {
@@ -401,10 +444,16 @@ const handleModalClose = () => {
 .btn-gray { background: var(--surface-container); color: var(--on-surface); }
 .btn-gray:hover { background: var(--surface-container-highest); }
 @media (max-width: 480px) { .register-box { padding: 32px 24px; border-radius: 20px; } }
-.captcha-row { display: flex; gap: 10px; align-items: stretch; }
-.captcha-input-wrap { flex: 1; }
-.captcha-img-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; user-select: none; }
-.captcha-img { width: 120px; height: 42px; border-radius: 6px; display: block; border: 1px solid rgba(127,230,219,0.2); }
-.captcha-loading { width: 120px; height: 42px; background: var(--surface-container); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--on-surface-variant); }
-.captcha-refresh-hint { font-size: 10px; color: var(--on-surface-variant); opacity: 0.6; }
+
+/* 滑块验证 */
+.slider-wrap { position: relative; height: 44px; border-radius: var(--radius-sm); overflow: visible; user-select: none; }
+.slider-wrap.slider-disabled { opacity: 0.4; pointer-events: none; }
+.slider-track { position: absolute; inset: 0; background: var(--surface-container); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid rgba(127,230,219,0.2); }
+.slider-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(127,230,219,0.3), rgba(127,230,219,0.15)); transition: background 0.3s; pointer-events: none; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.slider-passed .slider-fill { background: linear-gradient(90deg, rgba(127,230,219,0.5), rgba(100,200,180,0.3)); }
+.slider-text { position: relative; font-size: 13px; color: var(--on-surface-variant); pointer-events: none; z-index: 1; transition: color 0.3s; letter-spacing: 0.5px; }
+.slider-passed .slider-text { color: var(--secondary); font-weight: 600; }
+.slider-btn { position: absolute; top: 1px; width: 44px; height: 42px; border-radius: calc(var(--radius-sm) - 2px); background: linear-gradient(135deg, var(--primary), var(--primary-container)); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--on-primary); cursor: grab; z-index: 2; box-shadow: 0 2px 8px rgba(168,50,6,0.3); transition: background 0.3s, box-shadow 0.3s; touch-action: none; }
+.slider-btn:active { cursor: grabbing; }
+.slider-btn-passed { background: linear-gradient(135deg, #4caf6e, #38a169) !important; box-shadow: 0 2px 12px rgba(76,175,110,0.4) !important; cursor: default !important; }
 </style>

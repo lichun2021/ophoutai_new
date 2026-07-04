@@ -2840,6 +2840,22 @@ async function processGiftOrder(localOrder: Payment, requestId: string, tradeNo?
             return true;
         }
 
+        // 🔒 安全校验：收货角色必须属于付款账号
+        const ownerCheck = await sql({
+            query: `SELECT gc.uuid FROM GameCharacters gc
+                    INNER JOIN SubUsers su ON gc.subuser_id = su.id
+                    WHERE su.parent_user_id = ? AND gc.uuid = ? AND gc.server_id = ?
+                    LIMIT 1`,
+            values: [localOrder.user_id, characterUuid, Number(serverId)],
+        }) as any[];
+        if (ownerCheck.length === 0) {
+            console.error(`[${requestId}] 角色归属校验失败: user=${localOrder.user_id}, role=${characterUuid}, server=${serverId}`);
+            await PaymentModel.updateByTransactionId(localOrder.transaction_id || '', {
+                msg: 'GIFT_ERROR:收货角色不属于当前账号或不存在'
+            });
+            return true;
+        }
+
         // 检查用户是否可以购买该礼包（使用角色UUID进行限购检查）
         const checkResult = await ExternalGiftPackageModel.checkUserCanPurchase(characterUuid, packageId, quantity);
         if (!checkResult.canPurchase) {
@@ -3678,6 +3694,19 @@ async function processSuccessfulPayment(orderDetail: any, queryResult: any) {
             }
 
             const pkg = packageInfo[0];
+
+            // 🔒 安全校验：收货角色必须属于付款账号
+            const ownerCheck = await sql({
+                query: `SELECT gc.uuid FROM GameCharacters gc
+                        INNER JOIN SubUsers su ON gc.subuser_id = su.id
+                        WHERE su.parent_user_id = ? AND gc.uuid = ? AND gc.server_id = ?
+                        LIMIT 1`,
+                values: [orderDetail.user_id, characterUuid, Number(serverId)],
+            }) as any[];
+            if (ownerCheck.length === 0) {
+                console.error(`[PaymentQuery] 角色归属校验失败: user=${orderDetail.user_id}, role=${characterUuid}, server=${serverId}`);
+                throw new Error('收货角色不属于当前账号或不存在');
+            }
 
             // 解析 gift_items
             let giftItems;

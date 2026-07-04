@@ -1132,7 +1132,11 @@ router.get('/client/packages', withLogging(UserClientCtrl.getAvailableGiftPackag
  * @body {amount: number, channel_id: number, uid: number}
  * @returns {Object} 充值链接信息
  */
-router.post('/rechargeurl/get', withLogging(PaymentCtrl.paymentNewReps, '获取充值链接'));
+router.post('/rechargeurl/get', defineEventHandler(() => ({
+  code: 410,
+  msg: '接口已停用',
+  data: null
+})));
 
 /**
  * 检查订单状态

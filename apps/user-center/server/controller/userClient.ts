@@ -7,6 +7,7 @@ import {H3Event} from 'h3';
 import {sql} from '../db';
 import { getSystemConfig } from '../utils/systemConfig';
 import { executePaymentBySystemParam } from '../utils/paymentGateways';
+import { requireAuth } from '@quantum/shared/server/utils/jwt';
 
 // 权限验证辅助函数
 function normalizeClientIp(ip: string): string {
@@ -251,20 +252,25 @@ export const getGiftPackageCategories = defineEventHandler(async (event) => {
 // 用户购买礼包（用户端使用，基于用户ID）
 export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 正在购买礼包`);
+        // ========================================================
+
         const body = await readBody(event);
-        const { user_id, package_id, character_uuid } = body;
+        const { package_id, character_uuid } = body;  // ⚠️ 不再从 body 获取 user_id
         console.log(body);
-        
+
         // 🔒 安全限制：强制购买数量为1，防止刷单
         const quantity = 1;
-        
-        if (!user_id || !package_id) {
+
+        if (!package_id) {
             return {
                 code: 400,
                 message: '缺少必要参数'
             };
         }
-        
+
         // 验证角色参数
         if (!character_uuid) {
             return {
@@ -277,7 +283,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         try {
             const { getRedisCluster } = await import('../utils/redis-cluster');
             const redis = getRedisCluster();
-            const rateLimitKey = `purchase_cooldown:${user_id}`;
+            const rateLimitKey = `purchase_cooldown:${userId}`;  // ✅ 使用 JWT 中的 userId
             // SET key 1 NX EX 5 —— 只有 key 不存在时才设置成功
             const acquired = await redis.set(rateLimitKey, '1', 'EX', 5, 'NX');
             if (!acquired) {
@@ -292,35 +298,35 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             console.warn('[userPurchaseGiftPackage] Redis 限速检查失败:', redisErr);
         }
 
-        
+
         // 检查用户是否存在
-        const user = await UserModel.findById(user_id);
+        const user = await UserModel.findById(userId);  // ✅ 使用 JWT 中的 userId
         if (!user) {
             return {
                 code: 404,
                 message: '用户不存在'
             };
         }
-        
+
         // 验证角色是否属于该用户（通过子账号关联）
         const character = await sql({
-            query: `SELECT gc.* FROM GameCharacters gc 
-                   INNER JOIN SubUsers su ON gc.subuser_id = su.id 
+            query: `SELECT gc.* FROM GameCharacters gc
+                   INNER JOIN SubUsers su ON gc.subuser_id = su.id
                    WHERE su.parent_user_id = ? AND gc.uuid = ?`,
-            values: [user_id, character_uuid],
+            values: [userId, character_uuid],  // ✅ 使用 JWT 中的 userId
         }) as any[];
-        
+
         if (character.length === 0) {
             return {
                 code: 400,
                 message: '角色不存在或不属于该用户'
             };
         }
-        
+
         const selectedCharacter = character[0];
-        
+
         console.log(`========== 用户购买礼包开始 ==========`);
-        console.log(`用户ID: ${user_id}, 角色UUID: ${selectedCharacter.uuid}, 角色名: ${selectedCharacter.character_name}`);
+        console.log(`用户ID: ${userId}, 角色UUID: ${selectedCharacter.uuid}, 角色名: ${selectedCharacter.character_name}`);
         console.log(`礼包ID: ${package_id}, 数量: ${quantity}`);
         console.log(`========================================`);
         
@@ -344,21 +350,44 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 message: '礼包不存在'
             };
         }
-        
+
+        // 🔒 安全校验1：礼包必须已上架
+        if (!giftPackage.is_active) {
+            return {
+                code: 400,
+                message: '礼包未上架'
+            };
+        }
+
+        // 🔒 安全校验2：有效期校验
+        const now = new Date();
+        if (giftPackage.start_time && new Date(giftPackage.start_time) > now) {
+            return {
+                code: 400,
+                message: '礼包未开始'
+            };
+        }
+        if (giftPackage.end_time && new Date(giftPackage.end_time) < now) {
+            return {
+                code: 400,
+                message: '礼包已结束'
+            };
+        }
+
         // 计算总价
         const totalAmount = giftPackage.price_platform_coins * quantity;
-        
+
         // 检查用户平台币余额
-        const currentBalance = await UserModel.getPlatformCoins(user_id);
+        const currentBalance = await UserModel.getPlatformCoins(userId);  // ✅ 使用 JWT 中的 userId
         if (currentBalance < totalAmount) {
             return {
                 code: 400,
                 message: '平台币余额不足'
             };
         }
-        
+
         // 扣除平台币并创建购买记录（使用统一方法，标志位1表示游戏内购扣款，这里用于礼包购买）
-        const deductResult = await UserModel.updatePlatformCoinsUnified(user_id, -totalAmount, 1);
+        const deductResult = await UserModel.updatePlatformCoinsUnified(userId, -totalAmount, 1);  // ✅ 使用 JWT 中的 userId
         if (!deductResult.success) {
             return {
                 code: 400,
@@ -428,7 +457,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             remark: `平台币购买 - 服务器${selectedCharacter.server_id || 1}`
         };
         
-        console.log(`[userPurchaseGiftPackage] 创建购买记录, 用户ID: ${user_id}, 礼包ID: ${package_id}, 角色: ${selectedCharacter.uuid}`);
+        console.log(`[userPurchaseGiftPackage] 创建购买记录, 用户ID: ${userId}, 礼包ID: ${package_id}, 角色: ${selectedCharacter.uuid}`);
         const createResult = await ExternalGiftPackageModel.createPurchaseRecord(purchaseRecord);
         
         // 获取购买记录ID用于发放
@@ -492,7 +521,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
 
                 if (refundEnabled) {
                     // 退还平台币（使用统一方法）
-                    const refundResult = await UserModel.updatePlatformCoinsUnified(user_id, totalAmount, 6);
+                    const refundResult = await UserModel.updatePlatformCoinsUnified(userId, totalAmount, 6);  // ✅ 使用 JWT 中的 userId
                     if (!refundResult.success) {
                         console.error(`[userPurchaseGiftPackage] ⚠️ 退款失败:`, refundResult.message);
                     }
@@ -548,7 +577,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
 
             if (refundEnabled) {
                 // 退还平台币（使用统一方法）
-                const refundResult = await UserModel.updatePlatformCoinsUnified(user_id, totalAmount, 7);
+                const refundResult = await UserModel.updatePlatformCoinsUnified(userId, totalAmount, 7);  // ✅ 使用 JWT 中的 userId
                 if (!refundResult.success) {
                     console.error(`[userPurchaseGiftPackage] ⚠️ 退款失败:`, refundResult.message);
                 }
@@ -605,31 +634,28 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
 // 获取用户购买记录（用户端使用）
 export const getUserPurchaseHistory = defineEventHandler(async (event) => {
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询购买记录`);
+        // ========================================================
+
         const query = getQuery(event);
-        const user_id = parseInt(query.user_id as string);
         const page = parseInt(query.page as string) || 1;
         const pageSize = parseInt(query.pageSize as string) || 10;
-        
-        if (!user_id || isNaN(user_id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
-        
+
         // 检查用户是否存在
-        const user = await UserModel.findById(user_id);
+        const user = await UserModel.findById(userId);  // ✅ 使用 JWT 中的 userId
         if (!user) {
             return {
                 code: 404,
                 message: '用户不存在'
             };
         }
-        
+
         // 获取购买记录
         const records = await ExternalGiftPackageModel.getUserPurchaseRecords(user.thirdparty_uid!, page, pageSize);
         const total = await ExternalGiftPackageModel.getUserPurchaseRecordsCount(user.thirdparty_uid!);
-        
+
         return {
             code: 200,
             data: {
@@ -655,29 +681,26 @@ export const getUserPurchaseHistory = defineEventHandler(async (event) => {
 // 获取用户充值记录（从PaymentRecords表）
 export const getUserRechargeHistory = defineEventHandler(async (event) => {
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询充值记录`);
+        // ========================================================
+
         const query = getQuery(event);
-        const user_id = parseInt(query.user_id as string);
         const page = parseInt(query.page as string) || 1;
         const pageSize = parseInt(query.pageSize as string) || 10;
-        
-        if (!user_id || isNaN(user_id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
-        
+
         // 检查用户是否存在
-        const user = await UserModel.findById(user_id);
+        const user = await UserModel.findById(userId);  // ✅ 使用 JWT 中的 userId
         if (!user) {
             return {
                 code: 404,
                 message: '用户不存在'
             };
         }
-        
+
         const offset = (page - 1) * pageSize;
-        
+
         // 从PaymentRecords表获取真实充值记录（排除平台币消费，关联 GameCharacters 表获取角色名字）
         const records = await sql({
             query: `SELECT pr.*, gc.character_name as role_name
@@ -685,21 +708,21 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
                    LEFT JOIN GameCharacters gc ON pr.role_id = gc.uuid
                    WHERE pr.user_id = ? AND pr.payment_status = 3
                    AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
-                   ORDER BY pr.created_at DESC 
+                   ORDER BY pr.created_at DESC
                    LIMIT ?, ?`,
-            values: [user_id, offset, pageSize],
+            values: [userId, offset, pageSize],  // ✅ 使用 JWT 中的 userId
         });
-        
+
         // 获取总数
         const countResult = await sql({
-            query: `SELECT COUNT(*) as total FROM PaymentRecords 
+            query: `SELECT COUNT(*) as total FROM PaymentRecords
                    WHERE user_id = ? AND payment_status = 3
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
-            values: [user_id],
+            values: [userId],  // ✅ 使用 JWT 中的 userId
         }) as any[];
-        
+
         const total = countResult[0]?.total || 0;
-        
+
         return {
             code: 200,
             data: {
@@ -725,20 +748,17 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
 // 获取用户平台币消费记录（从PaymentRecords表）
 export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) => {
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询getUserPlatformCoinSpendHistory`);
+        // ========================================================
+
         const query = getQuery(event);
-        const user_id = parseInt(query.user_id as string);
         const page = parseInt(query.page as string) || 1;
         const pageSize = parseInt(query.pageSize as string) || 10;
-        
-        if (!user_id || isNaN(user_id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
-        
+
         // 检查用户是否存在
-        const user = await UserModel.findById(user_id);
+        const user = await UserModel.findById(userId);  // ✅ 使用 JWT 中的 userId
         if (!user) {
             return {
                 code: 404,
@@ -755,7 +775,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
             'pr.role_id IS NOT NULL',
             "TRIM(pr.role_id) <> ''"
         ];
-        const whereValues: any[] = [user_id];
+        const whereValues: any[] = [userId];  // ✅ 使用 JWT 中的 userId
         
         if (statusFilter === 'success') {
             baseWhereClauses.push('pr.payment_status = 3');
@@ -792,7 +812,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                      AND payment_status = 3
                      AND role_id IS NOT NULL
                      AND TRIM(role_id) <> ''`,
-            values: [user_id],
+            values: [userId],  // ✅ 修复: user_id → userId
         }) as any[];
         
         const totalSpentResult = await sql({
@@ -803,7 +823,7 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                      AND payment_status = 3
                      AND role_id IS NOT NULL
                      AND TRIM(role_id) <> ''`,
-            values: [user_id],
+            values: [userId],  // ✅ 修复: user_id → userId
         }) as any[];
         
         const totalSpent = Number(totalSpentResult[0]?.total_spent || 0);
@@ -838,18 +858,15 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
 // 获取用户首页统计数据（从PaymentRecords表）
 export const getUserHomeStats = defineEventHandler(async (event) => {
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询getUserHomeStats`);
+        // ========================================================
+
         const query = getQuery(event);
-        const user_id = parseInt(query.user_id as string);
-        
-        if (!user_id || isNaN(user_id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
-        
+
         // 检查用户是否存在
-        const user = await UserModel.findById(user_id);
+        const user = await UserModel.findById(userId);  // ✅ 使用 JWT 中的 userId
         if (!user) {
             return {
                 code: 404,
@@ -859,30 +876,30 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
         
         // 获取累计充值金额（真实充值：排除平台币支付，只统计支付宝、微信等现金充值）
         const totalRechargeResult = await sql({
-            query: `SELECT SUM(amount) as total FROM PaymentRecords 
+            query: `SELECT SUM(amount) as total FROM PaymentRecords
                    WHERE user_id = ? AND payment_status = 3
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
-            values: [user_id],
+            values: [userId],  // ✅ 使用 JWT 中的 userId
         }) as any[];
-        
+
         const totalRecharge = totalRechargeResult[0]?.total || 0;
-        
+
         // 获取购买次数（payment_way是"平台币"且已完成的记录）
         const purchaseCountResult = await sql({
-            query: `SELECT COUNT(*) as count FROM PaymentRecords 
+            query: `SELECT COUNT(*) as count FROM PaymentRecords
                    WHERE user_id = ? AND payment_way = '平台币' AND payment_status = 3`,
-            values: [user_id],
+            values: [userId],
         }) as any[];
-        
+
         const purchaseCount = purchaseCountResult[0]?.count || 0;
-        
+
         // 获取最近3次购买记录（payment_way是"平台币"的记录）
         const recentOrdersResult = await sql({
-            query: `SELECT * FROM PaymentRecords 
+            query: `SELECT * FROM PaymentRecords
                    WHERE user_id = ? AND payment_way = '平台币'
-                   ORDER BY created_at DESC 
+                   ORDER BY created_at DESC
                    LIMIT 3`,
-            values: [user_id],
+            values: [userId],
         });
         
         return {
@@ -906,39 +923,35 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
 // 获取用户个人资料统计数据（专为个人资料页面设计）
 export const getUserStats = defineEventHandler(async (event) => {
     try {
-        const user_id = parseInt(event.context.params?.id ?? '');
-        
-        if (!user_id || isNaN(user_id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
-        
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询统计数据`);
+        // ========================================================
+
         // 检查用户是否存在
-        const user = await UserModel.findById(user_id);
+        const user = await UserModel.findById(userId);  // ✅ 使用 JWT 中的 userId
         if (!user) {
             return {
                 code: 404,
                 message: '用户不存在'
             };
         }
-        
+
         // 获取累计充值金额（真实充值：排除平台币支付）
         const totalRechargeResult = await sql({
-            query: `SELECT SUM(amount) as total FROM PaymentRecords 
+            query: `SELECT SUM(amount) as total FROM PaymentRecords
                    WHERE user_id = ? AND payment_status = 3
                    AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`,
-            values: [user_id],
+            values: [userId],  // ✅ 使用 JWT 中的 userId
         }) as any[];
-        
+
         const totalRecharge = totalRechargeResult[0]?.total || 0;
-        
+
         // 获取购买次数（使用平台币的消费次数）
         const purchaseCountResult = await sql({
             query: `SELECT COUNT(*) as count FROM PaymentRecords 
                    WHERE user_id = ? AND payment_way = '平台币' AND payment_status = 3`,
-            values: [user_id],
+            values: [userId],  // ✅ 修复: user_id → userId
         }) as any[];
         
         const purchaseCount = purchaseCountResult[0]?.count || 0;
@@ -960,18 +973,39 @@ export const getUserStats = defineEventHandler(async (event) => {
     }
 });
 
+// 获取当前登录用户信息（Cookie JWT 会话校验）
+export const getCurrentUser = defineEventHandler(async (event) => {
+    try {
+        const { userId } = await requireAuth(event);
+        const user = await UserModel.findById(userId);
+        if (!user) {
+            return { code: 404, message: '用户不存在', data: null };
+        }
+
+        const platformCoins = await UserModel.getPlatformCoins(userId);
+        const { password, ...safeUser } = user as any;
+        return {
+            code: 200,
+            message: '会话有效',
+            data: {
+                user: {
+                    ...safeUser,
+                    platform_coins: platformCoins,
+                }
+            }
+        };
+    } catch (error) {
+        console.error('[会话校验] 异常:', error);
+        return { code: 401, message: '未授权，请先登录', data: null };
+    }
+});
+
 // 获取当前用户的平台币余额
 export const getUserBalance = defineEventHandler(async (event) => {
     try {
-        const authorizationHeader = getHeader(event, 'authorization');
-        const userId = authorizationHeader ? parseInt(authorizationHeader) : null;
-        
-        if (!userId || isNaN(userId)) {
-            return {
-                code: 401,
-                message: '未授权，请先登录'
-            };
-        }
+        // Cookie JWT 优先：从 HttpOnly Cookie / Bearer token 获取真实用户ID，不再信任前端 user_id 或数字 Authorization
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询余额`);
         
         // 验证用户是否存在
         const user = await UserModel.findById(userId);
@@ -995,8 +1029,8 @@ export const getUserBalance = defineEventHandler(async (event) => {
     } catch (error) {
         console.error('[余额查询] 异常:', error);
         return {
-            code: 500,
-            message: '获取余额失败'
+            code: 401,
+            message: '未授权，请先登录'
         };
     }
 });
@@ -1004,18 +1038,15 @@ export const getUserBalance = defineEventHandler(async (event) => {
 // 获取用户角色信息（不分子账号，直接返回所有角色）
 export const getUserCharacters = defineEventHandler(async (event) => {
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询getUserCharacters`);
+        // ========================================================
+
         const query = getQuery(event);
-        const user_id = parseInt(query.user_id as string);
-        
-        if (!user_id || isNaN(user_id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
-        
+
         // 检查用户是否存在
-        const user = await UserModel.findById(user_id);
+        const user = await UserModel.findById(userId);  // ✅ 使用 JWT 中的 userId
         if (!user) {
             return {
                 code: 404,
@@ -1025,8 +1056,8 @@ export const getUserCharacters = defineEventHandler(async (event) => {
         
         // 获取用户的所有角色（不分子账号）
         const GameCharactersModel = await import('../model/gameCharacters');
-        const characters = await GameCharactersModel.findByUserId(user_id);
-        
+        const characters = await GameCharactersModel.findByUserId(userId);
+
         // 批量查 gameservers 真实名称（用 server_id 对应）
         const GameServersModel = await import('../model/gameServers');
         const uniqueServerIds = [...new Set(characters.map(c => c.server_id).filter(Boolean))];
@@ -1039,7 +1070,7 @@ export const getUserCharacters = defineEventHandler(async (event) => {
         return {
             code: 200,
             data: {
-                user_id: user_id,
+                user_id: userId,
                 characters: characters.map(char => ({
                     id: char.id,
                     uuid: char.uuid,
@@ -1067,36 +1098,33 @@ export const getUserCharacters = defineEventHandler(async (event) => {
 // 根据用户ID查询礼包购买记录（支持日期和类型过滤）
 export const getPlayerGiftPackageRecords = defineEventHandler(async (event) => {
     try {
+        // ============ JWT 认证: 从 token 获取真实用户ID ============
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询礼包记录`);
+        // ========================================================
+
         const query = getQuery(event);
-        const user_id = parseInt(query.user_id as string);
         const page = parseInt(query.page as string) || 1;
         const pageSize = parseInt(query.pageSize as string) || 10;
         const startDate = query.startDate as string;
         const endDate = query.endDate as string;
         const packageType = query.packageType as string || 'all'; // all, purchased, daily, cumulative
-        
-        if (!user_id || isNaN(user_id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
-        
+
         // 获取礼包购买记录
         const records = await ExternalGiftPackageModel.getPlayerGiftPackageRecords(
-            user_id, 
-            page, 
-            pageSize, 
-            startDate, 
-            endDate, 
+            userId,  // ✅ 使用 JWT 中的 userId
+            page,
+            pageSize,
+            startDate,
+            endDate,
             packageType
         );
-        
+
         // 获取总数
         const total = await ExternalGiftPackageModel.getPlayerGiftPackageRecordsCount(
-            user_id, 
-            startDate, 
-            endDate, 
+            userId,  // ✅ 使用 JWT 中的 userId
+            startDate,
+            endDate,
             packageType
         );
         

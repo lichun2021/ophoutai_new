@@ -1,12 +1,13 @@
 import Redis from 'ioredis';
 
-// 单机 Redis（默认 127.0.0.1:6379，无密码）
+// ============ 安全改进: 移除硬编码，强制使用环境变量 ============
+// Redis 配置 - 必须从环境变量读取
 let redisClient: Redis | null = null;
 
 export const getRedisCluster = (): Redis => {
   if (!redisClient) {
-    const host = process.env.REDIS_HOST || '127.0.0.1';
-    const port = Number(process.env.REDIS_PORT || 6379);
+    const host = process.env.REDIS_HOST!;
+    const port = Number(process.env.REDIS_PORT!);
     const password = process.env.REDIS_PASSWORD || undefined; // 无密码时为 undefined
 
     redisClient = new Redis({ host, port, password, connectTimeout: 10000 });
@@ -14,12 +15,12 @@ export const getRedisCluster = (): Redis => {
     redisClient.on('error', (err: Error) => {
       console.error('Redis Error:', err);
     });
-    
+
     redisClient.on('connect', () => {
       console.log('Redis Connected');
     });
   }
-  
+
   return redisClient;
 };
 
