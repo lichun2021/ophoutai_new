@@ -91,6 +91,34 @@ export function calcSign(params: Record<string, any>, token: string): string {
   return md5(base + token);
 }
 
+// 🔒 需纳入签名的高危业务字段（防篡改：改了这些字段签名就失效）
+// 前后端必须保持一致
+export const SIGNED_BUSINESS_FIELDS = [
+  'server_url', // 礼包元数据 gift://{pid,cid,sid}
+  'role_id',    // 收货角色
+  'uid',        // 外部用户ID
+  'p',          // 金额（充值/购买）
+  'price',      // 金额（另一命名）
+  'package_id', // 礼包ID
+  'pid',        // 礼包ID（简写）
+  'payment_method', // 支付方式
+  'l',          // 操作类型 buy 等
+];
+
+// 从完整参数中挑出参与签名的字段：ts + nonce + 出现的高危业务字段
+export function pickSignParams(allParams: Record<string, any>): Record<string, any> {
+  const picked: Record<string, any> = {
+    ts: allParams.ts,
+    nonce: allParams.nonce,
+  };
+  for (const f of SIGNED_BUSINESS_FIELDS) {
+    if (allParams[f] !== undefined && allParams[f] !== null) {
+      picked[f] = allParams[f];
+    }
+  }
+  return picked;
+}
+
 export function shouldBypass(pathname: string): boolean {
   // 第三方回调等无法携带签名的接口，放行
   const bypassList = [
@@ -146,8 +174,9 @@ export async function verifyApiSignature(
   const ymdForLog = formatYmd(dateForToken);
   const token = calcDailyToken(dateForToken, salt);
   const baseForLog = buildSignBase({ ts, nonce });
-  // 仅使用固定参数参与签名：ts 与 nonce
-  const expected = calcSign({ ts, nonce }, token);
+  // 🔒 签名纳入 ts + nonce + 出现的高危业务字段（防篡改 server_url/price/uid 等）
+  const signParams = pickSignParams(params);
+  const expected = calcSign(signParams, token);
 
   if (expected !== providedSign) {
     const base = buildSignBase({ ts, nonce });
