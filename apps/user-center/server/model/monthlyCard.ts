@@ -37,6 +37,13 @@ export interface MonthlyCardClaim {
     created_at: string;
 }
 
+const MONTHLY_CARD_DAILY_COINS = 648;
+
+function normalizeCardDailyCoins(card: MonthlyCard): MonthlyCard {
+    if (card.card_type !== 'monthly') return card;
+    return { ...card, daily_coins: MONTHLY_CARD_DAILY_COINS };
+}
+
 /**
  * 获取用户当前有效的月卡列表（含到期当天）
  */
@@ -50,7 +57,7 @@ export const getActiveCardsByUserId = async (userId: number): Promise<MonthlyCar
                 ORDER BY created_at ASC`,
         values: [userId, today],
     }) as MonthlyCard[];
-    return result;
+    return result.map(normalizeCardDailyCoins);
 };
 
 /**
@@ -109,6 +116,8 @@ export const activateCard = async (params: {
     purchaseAmount: number;
     transactionId: string;
 }): Promise<number> => {
+    const dailyCoins = params.cardType === 'monthly' ? MONTHLY_CARD_DAILY_COINS : params.dailyCoins;
+
     const result = await sql({
         query: `INSERT INTO MonthlyCards
                     (user_id, card_type, daily_coins, start_date, expire_date, is_active, purchase_amount, transaction_id)
@@ -116,7 +125,7 @@ export const activateCard = async (params: {
         values: [
             params.userId,
             params.cardType,
-            params.dailyCoins,
+            dailyCoins,
             params.startDate,
             params.expireDate,
             params.purchaseAmount,
