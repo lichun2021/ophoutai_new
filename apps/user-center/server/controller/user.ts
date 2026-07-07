@@ -39,6 +39,35 @@ function logError(prefix: string, e?: any): void {
     console.error(`${RED}✗ ${prefix}${msg ? ': ' + msg : ''}${RESET}`);
 }
 
+function getClientIpFromHeaders(headers: ReturnType<typeof getHeaders>): string {
+    const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
+    const xForwardedFor = headers['x-forwarded-for'] as string;
+    const xRealIp = headers['x-real-ip'] as string;
+    return aliCdnRealIp
+        || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
+        || xRealIp
+        || 'unknown';
+}
+
+async function assertRegisterIpAllowed(clientIp: string) {
+    if (!clientIp || clientIp === 'unknown') return;
+
+    await UserModel.ensureRegisterIpColumn();
+
+    const maxPerIp = parseInt(process.env.USER_REGISTER_IP_MAX || '3', 10);
+    const rows = await sql({
+        query: 'SELECT COUNT(*) AS cnt FROM Users WHERE register_ip = ?',
+        values: [clientIp],
+    }) as any[];
+    const count = Number(rows[0]?.cnt || 0);
+    if (count >= maxPerIp) {
+        throw createError({
+            status: 429,
+            message: `该IP注册账号数量已达上限(${maxPerIp})`,
+        });
+    }
+}
+
 function getGameIp(amount?: number): string {
     const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
     return selectGameIpByAmount(value);
@@ -126,6 +155,8 @@ export const checkChannelStatus = async (evt: H3Event) => {
 
 export const quickreg = defineEventHandler(async (event) => {
     const query = getQuery(event);
+    const headers = getHeaders(event);
+    const clientIp = getClientIpFromHeaders(headers);
     try {
         // return {
         //     status: "ok",
@@ -159,11 +190,14 @@ export const quickreg = defineEventHandler(async (event) => {
             await ApisModel.updateApiUrl(String(apiUrl));
         }
 
+        await assertRegisterIpAllowed(clientIp);
+
         const result = await UserModel.upsertUserByThirdparty(
             String(userid),
             String(token),
             String(sign),
-            String(channel)
+            String(channel),
+            clientIp
         );
 
         return {
@@ -1878,6 +1912,8 @@ export const register = async (evt: H3Event) => {
 
         console.log(`[用户注册] IP: ${clientIp} | 用户名: ${body.username} | 渠道: ${body.channel_code} | 游戏: ${body.game_code}`);
 
+        await assertRegisterIpAllowed(clientIp);
+
         // 参数验证
         if (!body.username || !body.password) {
             return {
@@ -1959,7 +1995,8 @@ export const register = async (evt: H3Event) => {
             channel_code: body.channel_code,
             game_code: body.game_code,
             thirdparty_uid: thirdpartyUid,
-            platform_coins: 0.00
+            platform_coins: 0.00,
+            register_ip: clientIp !== 'unknown' ? clientIp : undefined
         };
 
         // 插入用户到 Users 表（同时会自动创建一个默认的 SubUser）

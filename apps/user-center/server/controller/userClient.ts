@@ -79,20 +79,14 @@ const checkPermission = async (event: H3Event, userChannelCode: string): Promise
 
 // ========== 用户个人信息相关API ==========
 
-// 获取用户个人信息
+// 获取当前用户个人信息
 export const getUserProfile = defineEventHandler(async (event) => {
     try {
-        const id = parseInt(event.context.params?.id ?? '');
-        
-        if (!id || isNaN(id)) {
-            return {
-                code: 400,
-                message: '缺少用户ID参数'
-            };
-        }
+        const { userId } = await requireAuth(event);
+        console.log(`[JWT认证] 用户ID: ${userId} 查询个人信息`);
         
         // 获取用户基本信息
-        const user = await UserModel.findById(id);
+        const user = await UserModel.findById(userId);
         if (!user) {
             return {
                 code: 404,
@@ -100,24 +94,15 @@ export const getUserProfile = defineEventHandler(async (event) => {
             };
         }
         
-        // 权限验证：检查管理员是否有权限访问该用户数据
-        const permissionCheck = await checkPermission(event, user.channel_code || '');
-        if (!permissionCheck.hasPermission) {
-            return {
-                code: 403,
-                message: '没有权限访问该用户信息'
-            };
-        }
-        
         // 获取平台币余额
-        const platformCoins = await UserModel.getPlatformCoins(id);
+        const platformCoins = await UserModel.getPlatformCoins(userId);
         
         // 获取充值统计
-        const totalRechargeAmount = await PlatformCoinRechargeModel.getTotalRechargeAmountByUserId(id);
-        const rechargeStats = await PlatformCoinRechargeModel.getRechargeStatsByTypeByUserId(id);
+        const totalRechargeAmount = await PlatformCoinRechargeModel.getTotalRechargeAmountByUserId(userId);
+        const rechargeStats = await PlatformCoinRechargeModel.getRechargeStatsByTypeByUserId(userId);
         
         // 获取购买统计
-        const totalPurchases = await ExternalGiftPackageModel.getUserPurchaseRecordsCountByUserId(id);
+        const totalPurchases = await ExternalGiftPackageModel.getUserPurchaseRecordsCountByUserId(userId);
         
         return {
             code: 200,
@@ -137,8 +122,8 @@ export const getUserProfile = defineEventHandler(async (event) => {
     } catch (error) {
         console.error('获取用户信息出错:', error);
         throw createError({
-            status: 500,
-            message: '获取用户信息时发生错误'
+            status: 401,
+            message: '未授权，请先登录'
         });
     }
 });
@@ -1054,9 +1039,15 @@ export const getUserCharacters = defineEventHandler(async (event) => {
             };
         }
         
-        // 获取用户的所有角色（不分子账号）
-        const GameCharactersModel = await import('../model/gameCharacters');
-        const characters = await GameCharactersModel.findByUserId(userId);
+        // 获取用户的所有角色：主账号与子账号双重归属校验
+        const characters = await sql({
+            query: `SELECT gc.*
+                   FROM GameCharacters gc
+                   INNER JOIN SubUsers su ON su.id = gc.subuser_id
+                   WHERE gc.user_id = ? AND su.parent_user_id = ?
+                   ORDER BY gc.created_at DESC`,
+            values: [userId, userId],
+        }) as any[];
 
         // 批量查 gameservers 真实名称（用 server_id 对应）
         const GameServersModel = await import('../model/gameServers');

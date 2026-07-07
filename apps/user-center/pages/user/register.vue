@@ -71,24 +71,39 @@
           </div>
         </div>
 
-        <!-- 滑动验证 -->
+        <!-- 图形滑动验证 -->
         <div class="form-field">
           <label class="field-label">安全验证</label>
-          <div class="slider-wrap" :class="{ 'slider-passed': sliderPassed, 'slider-disabled': loading || !channelValid }">
-            <div class="slider-track">
-              <div class="slider-fill" :style="{ width: sliderFillWidth }"></div>
-              <span class="slider-text">{{ sliderPassed ? '✓ 验证通过' : '← 拖动滑块完成验证' }}</span>
+          <div class="captcha-box" :class="{ 'captcha-disabled': loading || !channelValid || captchaLoading }">
+            <div class="captcha-image-wrap">
+              <img v-if="captchaBackground" class="captcha-bg" :src="captchaBackground" alt="安全验证背景" draggable="false" />
+              <div v-else class="captcha-placeholder">正在加载验证图...</div>
+              <img
+                v-if="captchaPiece"
+                class="captcha-piece"
+                :src="captchaPiece"
+                alt="滑块"
+                draggable="false"
+                :style="captchaPieceStyle"
+              />
             </div>
-            <div
-              class="slider-btn"
-              :style="{ left: sliderBtnLeft }"
-              @mousedown="onSliderStart"
-              @touchstart.prevent="onSliderStart"
-              :class="{ 'slider-btn-passed': sliderPassed }"
-            >
-              <span v-if="!sliderPassed">›</span>
-              <span v-else>✓</span>
+            <div class="slider-wrap" :class="{ 'slider-passed': sliderPassed }">
+              <div class="slider-track">
+                <div class="slider-fill" :style="{ width: sliderFillWidth }"></div>
+                <span class="slider-text">{{ sliderPassed ? '松手后点击注册' : '拖动滑块对齐缺口' }}</span>
+              </div>
+              <div
+                class="slider-btn"
+                :style="{ left: sliderBtnLeft }"
+                @mousedown="onSliderStart"
+                @touchstart.prevent="onSliderStart"
+                :class="{ 'slider-btn-passed': sliderPassed }"
+              >
+                <span v-if="!sliderPassed">›</span>
+                <span v-else>✓</span>
+              </div>
             </div>
+            <button type="button" class="captcha-refresh" :disabled="loading || captchaLoading" @click="loadCaptcha">换一张</button>
           </div>
         </div>
 
@@ -157,24 +172,58 @@ const channelValid = ref(true);
 const channelValidating = ref(false);
 const channelError = ref('');
 
-// ========== 滑块验证 ==========
-const SLIDER_WIDTH = 280;  // 滑块轨道宽度(px)
+// ========== 图形滑动验证 ==========
+const SLIDER_WIDTH = 350;  // 滑块轨道宽度(px)，与验证码图片同宽
 const BTN_SIZE = 44;       // 滑块按钮宽度(px)
-const PASS_THRESHOLD = SLIDER_WIDTH - BTN_SIZE - 4; // 需要拖动的距离
 
 const sliderPassed = ref(false);
 const sliderX = ref(0);  // 当前位移
-const captchaToken = ref('');  // 滑块验证通过后的标记（后端不强校验，仅前端流程使用）
+const captchaToken = ref('');
+const captchaBackground = ref('');
+const captchaPiece = ref('');
+const captchaY = ref(0);
+const pieceSize = ref(42);
+const captchaLoading = ref(false);
 let isDragging = false;
 let startX = 0;
 let startSliderX = 0;
 
 const sliderBtnLeft = computed(() => `${sliderX.value}px`);
 const sliderFillWidth = computed(() => `${sliderX.value + BTN_SIZE}px`);
+const displayMaxX = () => Math.max(0, SLIDER_WIDTH - pieceSize.value);
+const captchaSubmitX = () => Math.round(sliderX.value);
+const captchaPieceStyle = computed(() => ({
+  left: `${sliderX.value}px`,
+  top: `${captchaY.value}px`,
+  width: `${pieceSize.value}px`,
+  height: `${pieceSize.value}px`,
+}));
+
+async function loadCaptcha() {
+  captchaLoading.value = true;
+  resetSlider(false);
+  try {
+    const response = await fetch('/api/user/captcha');
+    const result = await response.json();
+    captchaToken.value = result.token || '';
+    captchaBackground.value = result.background || '';
+    captchaPiece.value = result.piece || '';
+    captchaY.value = Number(result.y || 0);
+    pieceSize.value = Number(result.pieceSize || 42);
+  } catch (error) {
+    console.error('加载滑动验证码失败:', error);
+    captchaToken.value = '';
+    captchaBackground.value = '';
+    captchaPiece.value = '';
+  } finally {
+    captchaLoading.value = false;
+  }
+}
 
 function onSliderStart(e: MouseEvent | TouchEvent) {
-  if (sliderPassed.value || loading.value || !channelValid.value) return;
+  if (loading.value || !channelValid.value || captchaLoading.value || !captchaToken.value) return;
   isDragging = true;
+  sliderPassed.value = false;
   startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
   startSliderX = sliderX.value;
   document.addEventListener('mousemove', onSliderMove);
@@ -188,7 +237,7 @@ function onSliderMove(e: MouseEvent | TouchEvent) {
   if (e.cancelable) e.preventDefault();
   const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
   const delta = clientX - startX;
-  const newX = Math.max(0, Math.min(PASS_THRESHOLD, startSliderX + delta));
+  const newX = Math.max(0, Math.min(displayMaxX(), startSliderX + delta));
   sliderX.value = newX;
 }
 
@@ -200,25 +249,18 @@ function onSliderEnd() {
   document.removeEventListener('mouseup', onSliderEnd);
   document.removeEventListener('touchend', onSliderEnd);
 
-  if (sliderX.value >= PASS_THRESHOLD) {
-    sliderX.value = PASS_THRESHOLD;
-    sliderPassed.value = true;
-    // 生成本地 token，提交注册时使用
-    captchaToken.value = 'slider_' + Date.now();
-    formState.captchaInput = '__SLIDER_PASSED__';
-  } else {
-    // 未到终点，弹回
-    sliderX.value = 0;
-  }
+  // 前端只记录拖动位置，最终是否正确由后端判断
+  sliderPassed.value = sliderX.value > 8;
+  formState.captchaInput = String(captchaSubmitX());
 }
 
-function resetSlider() {
+function resetSlider(clearToken = true) {
   sliderPassed.value = false;
   sliderX.value = 0;
-  captchaToken.value = '';
   formState.captchaInput = '';
+  if (clearToken) captchaToken.value = '';
 }
-// ========== END 滑块验证 ==========
+// ========== END 图形滑动验证 ==========
 
 
 // 表单验证
@@ -296,7 +338,8 @@ onMounted(async () => {
     channelError.value = '缺少渠道代码参数';
   }
 
-  // 不再需要加载图形验证码
+  // 加载图形滑动验证码
+  await loadCaptcha();
 });
 
 // 处理注册
@@ -330,7 +373,7 @@ const handleRegister = async () => {
       iphone: '',
       uid: '',
       captcha_token: captchaToken.value,
-      captcha_input: formState.captchaInput.trim(),
+      captcha_x: captchaSubmitX(),
       ...urlParams.extra_params
     };
     
@@ -351,8 +394,8 @@ const handleRegister = async () => {
     if (response.ok && result.status === 'success') {
       showSuccess('注册成功！即将跳转到登录页面...');
     } else {
-      // 验证码错误或其他错误，重置滑块
-      resetSlider();
+      // 验证码错误或其他错误，刷新滑块
+      await loadCaptcha();
       if (!response.ok) {
         showError(result.message || result.statusMessage || '注册失败，请检查参数是否正确');
       } else if (result.message && result.message.includes('Duplicate')) {
@@ -445,15 +488,22 @@ const handleModalClose = () => {
 .btn-gray:hover { background: var(--surface-container-highest); }
 @media (max-width: 480px) { .register-box { padding: 32px 24px; border-radius: 20px; } }
 
-/* 滑块验证 */
-.slider-wrap { position: relative; height: 44px; border-radius: var(--radius-sm); overflow: visible; user-select: none; }
-.slider-wrap.slider-disabled { opacity: 0.4; pointer-events: none; }
+/* 图形滑动验证 */
+.captcha-box { display: flex; flex-direction: column; align-items: center; gap: 8px; user-select: none; }
+.captcha-disabled { opacity: 0.5; pointer-events: none; }
+.captcha-image-wrap { position: relative; width: 350px; height: 150px; max-width: 100%; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-container); border: 1px solid rgba(127,230,219,0.35); }
+.captcha-bg { display: block; width: 350px; height: 150px; max-width: 100%; }
+.captcha-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--on-surface-variant); font-size: 13px; }
+.captcha-piece { position: absolute; z-index: 2; pointer-events: none; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25)); }
+.slider-wrap { position: relative; width: 350px; max-width: 100%; height: 44px; border-radius: var(--radius-sm); overflow: visible; }
 .slider-track { position: absolute; inset: 0; background: var(--surface-container); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid rgba(127,230,219,0.2); }
 .slider-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(127,230,219,0.3), rgba(127,230,219,0.15)); transition: background 0.3s; pointer-events: none; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .slider-passed .slider-fill { background: linear-gradient(90deg, rgba(127,230,219,0.5), rgba(100,200,180,0.3)); }
 .slider-text { position: relative; font-size: 13px; color: var(--on-surface-variant); pointer-events: none; z-index: 1; transition: color 0.3s; letter-spacing: 0.5px; }
 .slider-passed .slider-text { color: var(--secondary); font-weight: 600; }
-.slider-btn { position: absolute; top: 1px; width: 44px; height: 42px; border-radius: calc(var(--radius-sm) - 2px); background: linear-gradient(135deg, var(--primary), var(--primary-container)); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--on-primary); cursor: grab; z-index: 2; box-shadow: 0 2px 8px rgba(168,50,6,0.3); transition: background 0.3s, box-shadow 0.3s; touch-action: none; }
+.slider-btn { position: absolute; top: 1px; width: 44px; height: 42px; border-radius: calc(var(--radius-sm) - 2px); background: linear-gradient(135deg, var(--primary), var(--primary-container)); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--on-primary); cursor: grab; z-index: 3; box-shadow: 0 2px 8px rgba(168,50,6,0.3); transition: background 0.3s, box-shadow 0.3s; touch-action: none; }
 .slider-btn:active { cursor: grabbing; }
-.slider-btn-passed { background: linear-gradient(135deg, #4caf6e, #38a169) !important; box-shadow: 0 2px 12px rgba(76,175,110,0.4) !important; cursor: default !important; }
+.slider-btn-passed { background: linear-gradient(135deg, #4caf6e, #38a169) !important; box-shadow: 0 2px 12px rgba(76,175,110,0.4) !important; }
+.captcha-refresh { align-self: flex-end; border: none; background: transparent; color: var(--primary); font-size: 12px; cursor: pointer; padding: 2px 4px; font-family: var(--font-family); }
+.captcha-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

@@ -13,7 +13,7 @@
 # ============ 服务器配置（按需修改）============
 SERVER_IP="27.124.40.42"
 USERNAME="root"
-SSH_PORT="22"
+SSH_PORT="52022"
 
 # 各应用在服务器上的路径和重启脚本
 USER_REMOTE_PATH="/data/user-center"

@@ -765,6 +765,7 @@ CREATE TABLE `users` (
   `thirdparty_uid` varchar(100) NOT NULL COMMENT '第三方平台用户ID,必填',
   `channel_code` varchar(100) DEFAULT '' COMMENT '渠道代码,标识用户来源,默认空字符串',
   `game_code` varchar(50) DEFAULT '' COMMENT '游戏代码,标识用户所属游戏',
+  `register_ip` varchar(45) DEFAULT '' COMMENT '注册IP地址,支持IPv4/IPv6',
   `platform_coins` decimal(15,2) DEFAULT '0.00' COMMENT '平台币余额,精确到2位小数,默认0.00',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间,默认当前时间',
   `status` int DEFAULT '0' COMMENT '用户状态：0=正常,1=封号',
@@ -775,7 +776,8 @@ CREATE TABLE `users` (
   KEY `idx_users_created_game` (`created_at`,`game_code`),
   KEY `idx_users_channel_game` (`channel_code`,`game_code`),
   KEY `idx_users_created_channel_game` (`created_at`,`channel_code`,`game_code`),
-  KEY `idx_users_status` (`status`)
+  KEY `idx_users_status` (`status`),
+  KEY `idx_users_register_ip` (`register_ip`)
 ) ENGINE=InnoDB AUTO_INCREMENT=10010 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='主用户表,存储主账号信息';
 /*!40101 SET character_set_client = @saved_cs_client */;
 

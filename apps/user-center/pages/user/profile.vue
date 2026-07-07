@@ -101,9 +101,7 @@ const userInitial = computed(() => (authStore.userInfo?.username || authStore.na
 const fetchUserStats = async () => {
   loading.value = true;
   try {
-    const userId = authStore.userInfo?.id || authStore.id;
-    if (!userId) return;
-    const response = await fetch(`/api/client/user/stats/${userId}`, { headers: { 'Authorization': userId.toString() } });
+    const response = await fetch('/api/client/user/stats');
     if (response.ok) {
       const result = await response.json();
       if (result.code === 200 && result.data) {

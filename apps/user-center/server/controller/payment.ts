@@ -1192,18 +1192,32 @@ function rsaVerifySHA256(publicKey: string, content: string, signatureBase64: st
 }
 
 export const getPaymentByTransId = defineEventHandler(async (event) => {
-    // 逻辑处理
     const transaction_id = event.context.params?.transaction_id ?? '';
     try {
+        const { userId } = await requireAuth(event);
         const result = await PaymentModel.detailByTransId(transaction_id);
 
+        if (!result) {
+            return {
+                code: 404,
+                data: null,
+            };
+        }
+
+        if (Number(result.user_id) !== Number(userId)) {
+            throw createError({
+                status: 403,
+                message: '无权查看该订单',
+            });
+        }
+
         return {
-            code: result === null ? 404 : 200,
+            code: 200,
             data: result,
         };
     } catch (e: any) {
         throw createError({
-            status: 500,
+            status: e.status || e.statusCode || 500,
             message: e.message,
         });
     }
@@ -1295,11 +1309,9 @@ export const getGameOrder = defineEventHandler(async (event) => {
 });
 
 export const getPaymentByUserID = defineEventHandler(async (event) => {
-    // 逻辑处理
-    var user_id = event.context.params?.user_id ?? 0;
-
     try {
-        const result = await PaymentModel.detailByUserId(user_id);
+        const { userId } = await requireAuth(event);
+        const result = await PaymentModel.detailByUserId(userId);
 
         return {
             code: result === null ? 404 : 200,
@@ -1307,7 +1319,7 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
         };
     } catch (e: any) {
         throw createError({
-            status: 500,
+            status: e.status || e.statusCode || 500,
             message: e.message,
         });
     }

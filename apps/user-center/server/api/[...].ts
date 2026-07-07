@@ -8,7 +8,7 @@ import * as BenefitsCtrl from '../controller/benefits';
 import { listActive, listCdkRedeemable } from '../model/gameServers';
 import * as SystemParamsCtrl from '../controller/systemParams';
 import * as PaymentSettingsCtrl from '../controller/paymentSettings';
-import { generateCaptcha, verifyCaptcha } from '../utils/captcha';
+import { generateSliderCaptcha, verifySliderCaptcha } from '../utils/captcha';
 
 const router = createRouter();
 
@@ -152,7 +152,7 @@ router.post('/user/login', defineEventHandler(async (event) => {
  * @route GET /api/user/captcha
  */
 router.get('/user/captcha', defineEventHandler(async () => {
-  return generateCaptcha();
+  return generateSliderCaptcha();
 }));
 
 /**
@@ -163,14 +163,23 @@ router.post('/user/register', withLogging(async (event: H3Event) => {
   const headers = getHeaders(event);
   const clientIp = getRealIp(headers);
 
+  // 安全验证（滑动拼图验证码，答案只在后端保存，一次性使用）
+  const body = await readBody(event);
+  const captchaX = Number(body?.captcha_x);
+  const captchaOk = await verifySliderCaptcha(String(body?.captcha_token || ''), captchaX);
+  if (!captchaOk) {
+    throw createError({ statusCode: 400, statusMessage: '安全验证失败，请重试' });
+  }
+
   // ---- IP 注册频率限制：同一IP 8小时内只允许注册一次 ----
   const REGISTER_IP_LIMIT_TTL = 8 * 60 * 60; // 28800 秒
   const ipLimitKey = `reg_ip_limit:${clientIp}`;
+  let ipLocked = false;
   if (clientIp && clientIp !== 'unknown') {
     const { getRedisCluster } = await import('../utils/redis-cluster');
     const redis = getRedisCluster();
-    const existing = await redis.get(ipLimitKey);
-    if (existing) {
+    const locked = await redis.set(ipLimitKey, '1', 'EX', REGISTER_IP_LIMIT_TTL, 'NX');
+    if (!locked) {
       const ttl = await redis.ttl(ipLimitKey);
       const remainHours = Math.floor(ttl / 3600);
       const remainMins = Math.ceil((ttl % 3600) / 60);
@@ -180,24 +189,20 @@ router.post('/user/register', withLogging(async (event: H3Event) => {
       console.warn(`[${nowStr()}] [注册拒绝] IP ${clientIp} 限制期内重复注册，剩余 ${ttl}s`);
       return { status: 'fail', message: `该IP注册过于频繁，请 ${waitMsg} 后再试` };
     }
+    ipLocked = true;
   }
   // ---- END IP 限制 ----
 
-  // 安全验证（滑块验证）
-  const body = await readBody(event);
-  const { captcha_token, captcha_input } = body || {};
-  const isSliderVerify = String(captcha_token || '').startsWith('slider_') && captcha_input === '__SLIDER_PASSED__';
-  if (!isSliderVerify) {
-    throw createError({ statusCode: 400, statusMessage: '请完成安全验证' });
-  }
-
-
-  // 调用注册逻辑，成功后写入IP限制
+  // 调用注册逻辑；如果业务校验失败，释放本次IP锁，避免输错参数锁8小时
   const result: any = await UserCtrl.register(event);
-  if (result?.status === 'success' && clientIp && clientIp !== 'unknown') {
-    const { getRedisCluster } = await import('../utils/redis-cluster');
-    const redis = getRedisCluster();
-    await redis.set(ipLimitKey, '1', 'EX', REGISTER_IP_LIMIT_TTL);
+  if (ipLocked && result?.status !== 'success') {
+    try {
+      const { getRedisCluster } = await import('../utils/redis-cluster');
+      const redis = getRedisCluster();
+      await redis.del(ipLimitKey);
+    } catch { }
+  }
+  if (result?.status === 'success' && ipLocked) {
     console.log(`[${nowStr()}] [注册] IP ${clientIp} 已锁定，8小时内不可再注册`);
   }
   return result;
@@ -278,10 +283,10 @@ router.post('/user/payment/query', defineEventHandler(PaymentCtrl.queryPaymentOr
 
 // ========== 客户端用户接口 ==========
 
-router.get('/client/user/profile/:id', withLogging(UserClientCtrl.getUserProfile, '客户端-获取用户个人信息'));
+router.get('/client/user/profile', withLogging(UserClientCtrl.getUserProfile, '客户端-获取当前用户个人信息'));
 router.get('/client/user/home-stats', withLogging(UserClientCtrl.getUserHomeStats, '客户端-获取首页统计'));
 router.get('/client/me', withLogging(UserClientCtrl.getCurrentUser, '客户端-当前用户会话校验'));
-router.get('/client/user/stats/:id', withLogging(UserClientCtrl.getUserStats, '客户端-获取个人资料统计'));
+router.get('/client/user/stats', withLogging(UserClientCtrl.getUserStats, '客户端-获取个人资料统计'));
 
 // ========== 余额接口 ==========
 
@@ -345,7 +350,7 @@ router.post('/rechargeurl/get', defineEventHandler(() => ({
 
 router.get('/payment/check/:tranId', withLogging(PaymentCtrl.checkOrder, '检查订单状态'));
 router.get('/payment/trans/:transaction_id', defineEventHandler(PaymentCtrl.getPaymentByTransId));
-router.get('/payment/user/:user_id', defineEventHandler(PaymentCtrl.getPaymentByUserID));
+router.get('/payment/user', defineEventHandler(PaymentCtrl.getPaymentByUserID));
 
 // ========== 支付回调（第三方通知）==========
 // 众合支付等第三方使用 POST JSON 回调，同时注册 GET 和 POST

@@ -40,3 +40,4 @@ ecosystem.config.local.js
 # 密钥备份
 *.backup.*
 *.zip
+scripts/id_ed25519*

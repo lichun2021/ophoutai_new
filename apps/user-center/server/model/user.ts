@@ -2,6 +2,24 @@ import { sql } from '../db';
 import { RowDataPacket } from 'mysql2';
 import * as SubUsersModel from './subUsers';
 
+let registerIpColumnReady = false;
+
+export const ensureRegisterIpColumn = async () => {
+    if (registerIpColumnReady) return;
+    try {
+        await sql({
+            query: 'ALTER TABLE Users ADD COLUMN register_ip VARCHAR(64) NULL DEFAULT NULL AFTER status',
+            values: [],
+        });
+    } catch (error: any) {
+        const msg = String(error?.message || error || '');
+        if (!msg.includes('Duplicate column') && !msg.includes('ER_DUP_FIELDNAME')) {
+            throw error;
+        }
+    }
+    registerIpColumnReady = true;
+};
+
 export type User = {
     id?: number;
     username?: string;
@@ -12,6 +30,7 @@ export type User = {
     game_code?: string;
     platform_coins?: number;
     status?: number;
+    register_ip?: string;
     created_at?: string;
 };
 
@@ -50,7 +69,7 @@ export const login = async (username: string, password: string) => {
 };
 
 // 添加 upsertUserByThirdparty 方法
-export const upsertUserByThirdparty = async (thirdparty_uid: string, access_token: string, sign: string, channel: string) => {
+export const upsertUserByThirdparty = async (thirdparty_uid: string, access_token: string, sign: string, channel: string, registerIp?: string) => {
     // 首先查找是否存在该第三方用户
 
 
@@ -64,11 +83,13 @@ export const upsertUserByThirdparty = async (thirdparty_uid: string, access_toke
         });
         return { ...existingUser, access_token };
     } else {
+        await ensureRegisterIpColumn();
+
         // 用户不存在，插入新用户，其他字段使用默认值
         const result = await sql({
             query: `INSERT INTO Users 
-                (username, iphone, password, channel_code, thirdparty_uid, platform_coins, status, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                (username, iphone, password, channel_code, thirdparty_uid, platform_coins, status, register_ip, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             values: [
                 `user_${thirdparty_uid.substring(0, 8)}`, // 生成默认用户名
                 '', // 默认空手机号
@@ -77,6 +98,8 @@ export const upsertUserByThirdparty = async (thirdparty_uid: string, access_toke
                 thirdparty_uid,
                 0.00, // 默认平台币余额
                 0, // 默认状态：0=正常
+                registerIp || null,
+                new Date(),
             ],
         });
 
@@ -305,10 +328,13 @@ export const insert = async (userData: Omit<User, 'id' | 'created_at'>) => {
             values: [],
         });
 
+        // 确保 register_ip 字段存在（兼容已部署数据库）
+        await ensureRegisterIpColumn();
+
         // 插入用户数据
         const userResult = await sql({
-            query: 'INSERT INTO Users (username, iphone, password, channel_code, game_code, thirdparty_uid, platform_coins, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            values: [userData.username, userData.iphone, userData.password, userData.channel_code, userData.game_code, userData.thirdparty_uid, userData.platform_coins || 0.00, userData.status || 0],
+            query: 'INSERT INTO Users (username, iphone, password, channel_code, game_code, thirdparty_uid, platform_coins, status, register_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            values: [userData.username, userData.iphone, userData.password, userData.channel_code, userData.game_code, userData.thirdparty_uid, userData.platform_coins || 0.00, userData.status || 0, userData.register_ip || null],
         }) as any;
 
         const userId = userResult.insertId;
