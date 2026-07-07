@@ -13,7 +13,11 @@
 # ============ 服务器配置（按需修改）============
 SERVER_IP="134.122.128.17"
 USERNAME="root"
-SSH_PORT="22"
+SSH_PORT="52022"
+SSH_KEY="$HOME/.ssh/id_ed25519"
+
+# SSH/SCP 公共参数
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
 
 # 各应用在服务器上的路径和重启脚本
 USER_REMOTE_PATH="/data/user-center"
@@ -75,6 +79,17 @@ ensure_dependencies() {
 
 # 记录总耗时
 START_TIME=$(date +%s)
+
+# =====================================================
+# SSH 连通性预检（端口/密钥不对时提前失败，避免构建完才发现传不上去）
+# =====================================================
+log_info "检测 SSH 连接 $USERNAME@$SERVER_IP:$SSH_PORT ..."
+if ! ssh $SSH_OPTS -p $SSH_PORT $USERNAME@$SERVER_IP "echo ok" >/dev/null 2>&1; then
+  log_error "SSH 连接失败，请检查 SERVER_IP/SSH_PORT/SSH_KEY（当前 SSH_KEY=$SSH_KEY）"
+  log_warn  "你可用于手动验证的命令：ssh -i $SSH_KEY -p $SSH_PORT $USERNAME@$SERVER_IP"
+  exit 1
+fi
+log_success "SSH 连接正常"
 
 # =====================================================
 # 解析参数 → 确定要部署哪些应用 mV88VU3dpFf47uF
@@ -191,8 +206,8 @@ deploy_app() {
   # --- 步骤4: 上传 ---
   log_info "[3/6] 上传 $ZIP_NAME 到服务器..."
   # 先确保远程目录存在
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP "mkdir -p $REMOTE_PATH"
-  scp -P $SSH_PORT "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
+  ssh $SSH_OPTS -p $SSH_PORT $USERNAME@$SERVER_IP "mkdir -p $REMOTE_PATH"
+  scp -P $SSH_PORT $SSH_OPTS "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
   if [ $? -ne 0 ]; then
     log_error "上传失败"
     cd - > /dev/null
@@ -201,7 +216,7 @@ deploy_app() {
   log_success "上传完成"
 
   # --- 步骤5: 服务器上解压 ---
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
+  ssh $SSH_OPTS -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
     set -e
     cd $REMOTE_PATH
     find . -maxdepth 1 -mindepth 1 ! -name 'node_modules' ! -name '$ZIP_NAME' -exec rm -rf {} + 2>/dev/null || true
@@ -217,18 +232,18 @@ ENDSSH
   # 安装运行时依赖：
   #   - node_modules 不存在时自动安装（首次部署 / 手动清理后）
   #   - 传入 --install 时强制重装（新增 npm 包时用）
-  if ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/package.json ]"; then
+  if ssh $SSH_OPTS -p $SSH_PORT $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/package.json ]"; then
     NEED_INSTALL=false
     if [ "$INSTALL_DEPS" = true ]; then
       NEED_INSTALL=true
       log_info "[4.5/6] --install 强制重装依赖..."
-    elif ssh -p $SSH_PORT $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/node_modules ]"; then
+    elif ssh $SSH_OPTS -p $SSH_PORT $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/node_modules ]"; then
       NEED_INSTALL=true
       log_info "[4.5/6] node_modules 不存在，自动安装依赖..."
     fi
 
     if [ "$NEED_INSTALL" = true ]; then
-      ssh -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
+      ssh $SSH_OPTS -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
         cd $REMOTE_PATH
         npm install --omit=dev --ignore-scripts 2>&1 | tail -5
 ENDSSH
@@ -242,7 +257,7 @@ ENDSSH
 
   # --- 步骤6: 重启服务 ---
   log_info "[5/6] 重启 PM2 服务 ($PM2_NAME)..."
-  ssh -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
+  ssh $SSH_OPTS -p $SSH_PORT $USERNAME@$SERVER_IP bash << ENDSSH
     if command -v pm2 &>/dev/null; then
       if pm2 list | grep -q '$PM2_NAME'; then
         pm2 restart $PM2_NAME
@@ -302,7 +317,7 @@ fi
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 MINUTES=$((ELAPSED / 60))
-SECONDS=$((ELAPSED % 60))
+REMAIN_SEC=$((ELAPSED % 60))
 
 echo ""
 echo -e "${BOLD}======================================${NC}"
@@ -314,6 +329,6 @@ else
     echo -e "  ${RED}✗ $f${NC}"
   done
 fi
-echo -e "  总耗时: ${MINUTES}m ${SECONDS}s"
+echo -e "  总耗时: ${MINUTES}m ${REMAIN_SEC}s"
 echo -e "${BOLD}======================================${NC}"
 echo ""

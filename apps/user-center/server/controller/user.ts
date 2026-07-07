@@ -1512,6 +1512,15 @@ export const reportRole = async(evt: H3Event) => {
             gameIdNum = 1; // 无法解析时使用0占位，不影响后续逻辑
         }
 
+        // 兼容 SDK 上报短区服ID：4 -> 10004；已是 10004 则保持不变
+        let serverIdNum = parseInt(serverId as any, 10);
+        if (!Number.isFinite(serverIdNum) || serverIdNum <= 0) {
+            serverIdNum = 1;
+        }
+        if (serverIdNum < 10000) {
+            serverIdNum += 10000;
+        }
+
         // 准备角色数据（使用传入的characterUuid作为唯一标识）
         const characterData = {
             user_id: userId,
@@ -1521,7 +1530,7 @@ export const reportRole = async(evt: H3Event) => {
             character_name: roleName.toString(),
             character_level: parseInt(roleLevel) || 1,
             server_name: serverName.toString(),
-            server_id: parseInt(serverId) || 1,
+            server_id: serverIdNum,
             ext: extData || null
         };
         

@@ -68,7 +68,10 @@
           </p>
         </div>
 
-        <div class="ml-auto">
+        <div class="ml-auto flex items-center gap-2">
+          <UButton v-if="activeServer" size="xs" color="orange" variant="solid" icon="i-heroicons-globe-asia-australia" @click="openGlobalMail">
+            全服发送物资
+          </UButton>
           <UButton size="xs" variant="ghost" color="gray" icon="i-heroicons-arrow-path" @click="loadServers">刷新</UButton>
         </div>
       </div>
@@ -365,6 +368,92 @@
       </UCard>
     </UModal>
 
+    <!-- 全服发送物资对话框 -->
+    <UModal v-model="globalMailModal.show" :ui="{width:'sm:max-w-2xl'}" :prevent-close="globalMailModal.loading">
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-globe-asia-australia" class="text-orange-500" />
+            <h3 class="text-base font-semibold">全服发送物资</h3>
+            <UBadge v-if="activeServer" :label="activeServer.name" color="orange" variant="soft" size="sm" />
+          </div>
+        </template>
+        <div class="space-y-4">
+          <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div class="flex items-start gap-2">
+              <UIcon name="i-heroicons-exclamation-triangle" class="text-amber-500 mt-0.5" />
+              <div>
+                <p class="font-semibold text-amber-900">全服发送警告</p>
+                <p class="text-sm text-amber-800">将向当前服务器（{{ activeServer?.name || '-' }}）的全部玩家发送物资，请谨慎操作！</p>
+                <p v-if="globalMailModal.totalPlayers >= 0" class="text-xs text-amber-700 mt-1">该服预计玩家数：{{ globalMailModal.totalPlayers }} 人，将自动分批发送（每批 50 人）。</p>
+              </div>
+            </div>
+          </div>
+
+          <UFormGroup label="平台">
+            <USelectMenu v-model="globalMailModal.platform" :options="platformOptions" value-attribute="value" option-attribute="label" class="w-40" />
+          </UFormGroup>
+
+          <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div class="flex items-center gap-2 mb-2">
+              <UIcon name="i-heroicons-gift" class="text-blue-600" />
+              <label class="text-sm font-medium text-blue-900">快速选择礼包（可选）</label>
+            </div>
+            <div class="flex gap-2">
+              <USelectMenu v-model="globalSelectedPkg" :options="pkgOptions" value-attribute="value" option-attribute="label" :searchable="searchPkgs" searchable-placeholder="搜索礼包" placeholder="选择礼包" class="flex-1" @click="loadPkgs" />
+              <UButton @click="applyPkg(globalMailModal)" :disabled="!globalSelectedPkg" size="sm" color="blue" variant="soft">应用</UButton>
+            </div>
+          </div>
+
+          <UFormGroup label="邮件标题" required>
+            <UInput v-model="globalMailModal.title" placeholder="输入邮件标题" />
+          </UFormGroup>
+          <UFormGroup label="邮件内容" required>
+            <UTextarea v-model="globalMailModal.content" placeholder="输入邮件内容" :rows="3" />
+          </UFormGroup>
+
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <label class="text-sm font-medium">道具列表</label>
+              <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="globalMailModal.items.push({ ItemId:'', ItemNum:1 })">添加道具</UButton>
+            </div>
+            <div class="space-y-2">
+              <div v-for="(item,i) in globalMailModal.items" :key="i" class="flex gap-2 items-center">
+                <USelectMenu v-model="item.ItemId" :options="itemOptions" value-attribute="value" option-attribute="label" :searchable="searchItems" searchable-placeholder="搜索道具" placeholder="选择道具" class="flex-1" />
+                <UInput v-model.number="item.ItemNum" type="number" placeholder="数量" class="w-20" min="1" />
+                <UButton color="red" variant="ghost" size="xs" icon="i-heroicons-trash" @click="globalMailModal.items.splice(i,1)" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 发送进度 -->
+          <div v-if="globalMailModal.loading || globalMailModal.progress.total > 0" class="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-semibold text-blue-900">发送进度</span>
+              <span class="text-sm text-blue-700">
+                {{ globalMailModal.progress.done }} / {{ globalMailModal.progress.total }} 批
+                · 成功 {{ globalMailModal.progress.success }} · 失败 {{ globalMailModal.progress.failed }}
+              </span>
+            </div>
+            <div class="w-full h-2 bg-blue-100 rounded-full overflow-hidden">
+              <div class="h-full bg-blue-500 transition-all" :style="{ width: progressPercent + '%' }"></div>
+            </div>
+            <p v-if="globalMailModal.loading" class="text-sm text-blue-700 mt-2">
+              <UIcon name="i-heroicons-arrow-path" class="animate-spin inline mr-1" />正在发送中，请勿关闭页面...
+            </p>
+          </div>
+        </div>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton variant="ghost" @click="globalMailModal.show=false" :disabled="globalMailModal.loading">取消</UButton>
+            <UButton color="orange" icon="i-heroicons-paper-airplane" @click="confirmGlobalMail" :loading="globalMailModal.loading" :disabled="!globalMailModal.title||!globalMailModal.content || !globalMailModal.items.length">
+              确认全服发送
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
+
     <UNotifications />
   </div>
 </template>
@@ -544,7 +633,9 @@ const parsePkgItems = (items) => {
   } catch { return []; }
 };
 const applyPkg = (modal) => {
-  const pkgId = modal === mailModal.value ? selectedPkg.value : batchSelectedPkg.value;
+  const pkgId = modal === mailModal.value ? selectedPkg.value
+              : modal === batchMailModal.value ? batchSelectedPkg.value
+              : globalSelectedPkg.value;
   const pkg   = allPkgs.value.find(p=>p.id===pkgId);
   if (!pkg) return;
   const items = parsePkgItems(pkg.gift_items);
@@ -553,7 +644,8 @@ const applyPkg = (modal) => {
     if (!modal.title)   modal.title   = `GM发放-${pkg.package_name}`;
     if (!modal.content) modal.content = pkg.description || `请查收${pkg.package_name}`;
     if (modal === mailModal.value) selectedPkg.value = undefined;
-    else batchSelectedPkg.value = undefined;
+    else if (modal === batchMailModal.value) batchSelectedPkg.value = undefined;
+    else globalSelectedPkg.value = undefined;
     toast.add({ title:'已应用礼包', description:`${items.length}个道具`, color:'green' });
   }
 };
@@ -668,6 +760,112 @@ const confirmBatchMail = async () => {
       toast.add({ title:`批量发送部分失败`, description:`成功 ${totalSuccess} 人，失败 ${totalFail} 人。${errors[0]||''}`, color:'yellow' });
     }
   } finally { batchMailModal.value.loading = false; }
+};
+
+// ===== 全服发送物资 =====
+const globalMailModal = ref({ show:false, loading:false, title:'', content:'', platform:'android', items:[], totalPlayers:-1, progress:{ total:0, done:0, success:0, failed:0 } });
+const globalSelectedPkg = ref(undefined);
+const progressPercent = computed(() => {
+  const p = globalMailModal.value.progress;
+  if (!p.total) return 0;
+  return Math.min(100, Math.round((p.done / p.total) * 100));
+});
+
+const openGlobalMail = async () => {
+  if (!activeServer.value) {
+    toast.add({ title:'请先选择服务器', color:'yellow' });
+    return;
+  }
+  globalSelectedPkg.value = undefined;
+  globalMailModal.value = {
+    show:true, loading:false,
+    title:'全服-GM物资',
+    content:'亲爱的全体玩家，这是GM为大家发放的全服物资，感谢您的支持，请查收！',
+    platform:'android',
+    items:[{ ItemId:'', ItemNum:1 }],
+    totalPlayers:-1,
+    progress:{ total:0, done:0, success:0, failed:0 }
+  };
+  // 预估该服玩家数（用角色列表接口统计）
+  try {
+    const p = new URLSearchParams({ page:1, pageSize:1, server_id: activeServer.value.server_id ?? '' });
+    const res = await $fetch(`/api/admin/characters?${p}`, { headers: authH() });
+    globalMailModal.value.totalPlayers = res?.data?.pagination?.total ?? -1;
+  } catch { globalMailModal.value.totalPlayers = -1; }
+};
+
+// 拉取指定服务器的全部角色（自动分页）
+const fetchAllServerPlayers = async (serverId) => {
+  const pageSize = 200;
+  const players = [];
+  let page = 1, total = 0;
+  do {
+    const p = new URLSearchParams({ page:String(page), pageSize:String(pageSize), server_id:String(serverId) });
+    const res = await $fetch(`/api/admin/characters?${p}`, { headers: authH() });
+    if (!res?.success) break;
+    const list = res.data?.characters || [];
+    players.push(...list);
+    total = res.data?.pagination?.total || players.length;
+    page++;
+  } while (players.length < total);
+  return players;
+};
+
+const confirmGlobalMail = async () => {
+  const m = globalMailModal.value;
+  const { title, content, platform, items } = m;
+  if (!title.trim() || !content.trim() || !activeServer.value) return;
+  const validItems = items.filter(it=>!!it.ItemId&&it.ItemNum>0).map(it=>({ ItemId:it.ItemId, ItemNum:it.ItemNum }));
+  if (validItems.length === 0) {
+    toast.add({ title:'请至少添加一个道具', color:'yellow' });
+    return;
+  }
+  m.loading = true;
+  m.progress = { total:0, done:0, success:0, failed:0 };
+  try {
+    const players = await fetchAllServerPlayers(activeServer.value.server_id);
+    if (players.length === 0) {
+      toast.add({ title:'该服暂无玩家', color:'yellow' });
+      m.loading = false;
+      return;
+    }
+    const server = getBname({ server_id: activeServer.value.server_id });
+    const MAX_PER_BATCH = 50;
+    const batches = [];
+    for (let i = 0; i < players.length; i += MAX_PER_BATCH) {
+      batches.push(players.slice(i, i + MAX_PER_BATCH));
+    }
+    m.progress.total = batches.length;
+
+    let totalSuccess = 0, totalFail = 0;
+    const errors = [];
+    for (const batch of batches) {
+      const targets = batch.map(r => ({ playerId:r.uuid, openId:r.subuser_id, roleId:r.uuid, platform }));
+      try {
+        const res = await $fetch('/api/gm/send-items-batch', {
+          method:'POST', headers:authH(),
+          body:{ server, title, content, items: validItems, targets }
+        });
+        if (res?.summary) { totalSuccess += res.summary.success||0; totalFail += res.summary.failed||0; }
+        if (res?.results) res.results.filter(r=>!r.success).forEach(r=>errors.push(`${r.playerId}: ${r.message||'失败'}`));
+      } catch(e) {
+        totalFail += targets.length;
+        errors.push(`批次错误: ${e.message||'未知错误'}`);
+      }
+      m.progress.done++;
+      m.progress.success = totalSuccess;
+      m.progress.failed = totalFail;
+    }
+
+    if (totalFail === 0) {
+      toast.add({ title:'全服发送完成', description:`已向 ${activeServer.value.name} 的 ${totalSuccess} 名玩家发送物资`, color:'green' });
+      m.show = false;
+    } else {
+      toast.add({ title:'全服发送部分失败', description:`成功 ${totalSuccess} 人，失败 ${totalFail} 人。${errors[0]||''}`, color:'yellow' });
+    }
+  } catch(e) {
+    toast.add({ title:'全服发送失败', description:e.message||'请稍后重试', color:'red' });
+  } finally { m.loading = false; }
 };
 </script>
 
