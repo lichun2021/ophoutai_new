@@ -83,12 +83,17 @@ export const upsertUserByThirdparty = async (thirdparty_uid: string, access_toke
         });
         return { ...existingUser, access_token };
     } else {
+        // 严格要求：创建新用户必须有合法的 IP
+        if (!registerIp || registerIp === 'unknown') {
+            throw new Error('Valid IP address is required for user registration');
+        }
+
         await ensureRegisterIpColumn();
 
         // 用户不存在，插入新用户，其他字段使用默认值
         const result = await sql({
-            query: `INSERT INTO Users 
-                (username, iphone, password, channel_code, thirdparty_uid, platform_coins, status, register_ip, created_at) 
+            query: `INSERT INTO Users
+                (username, iphone, password, channel_code, thirdparty_uid, platform_coins, status, register_ip, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             values: [
                 `user_${thirdparty_uid.substring(0, 8)}`, // 生成默认用户名
@@ -98,7 +103,7 @@ export const upsertUserByThirdparty = async (thirdparty_uid: string, access_toke
                 thirdparty_uid,
                 0.00, // 默认平台币余额
                 0, // 默认状态：0=正常
-                registerIp || null,
+                registerIp,
                 new Date(),
             ],
         });
@@ -322,6 +327,11 @@ export const remove = async (id: number) => {
 
 export const insert = async (userData: Omit<User, 'id' | 'created_at'>) => {
     try {
+        // 严格要求：必须有 register_ip
+        if (!userData.register_ip || userData.register_ip === 'unknown') {
+            throw new Error('register_ip is required and cannot be unknown');
+        }
+
         // 开始事务
         await sql({
             query: 'START TRANSACTION',
@@ -334,7 +344,7 @@ export const insert = async (userData: Omit<User, 'id' | 'created_at'>) => {
         // 插入用户数据
         const userResult = await sql({
             query: 'INSERT INTO Users (username, iphone, password, channel_code, game_code, thirdparty_uid, platform_coins, status, register_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            values: [userData.username, userData.iphone, userData.password, userData.channel_code, userData.game_code, userData.thirdparty_uid, userData.platform_coins || 0.00, userData.status || 0, userData.register_ip || null],
+            values: [userData.username, userData.iphone, userData.password, userData.channel_code, userData.game_code, userData.thirdparty_uid, userData.platform_coins || 0.00, userData.status || 0, userData.register_ip],
         }) as any;
 
         const userId = userResult.insertId;

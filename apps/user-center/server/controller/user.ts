@@ -50,7 +50,13 @@ function getClientIpFromHeaders(headers: ReturnType<typeof getHeaders>): string 
 }
 
 async function assertRegisterIpAllowed(clientIp: string) {
-    if (!clientIp || clientIp === 'unknown') return;
+    // 严格要求：必须有合法的 IP 地址才能注册
+    if (!clientIp || clientIp === 'unknown') {
+        throw createError({
+            status: 403,
+            message: '无法获取客户端IP地址，注册失败',
+        });
+    }
 
     await UserModel.ensureRegisterIpColumn();
 
@@ -1987,7 +1993,7 @@ export const register = async (evt: H3Event) => {
             };
         }
 
-        // 准备用户数据
+        // 准备用户数据（register_ip 必填，前面已经验证了）
         const userData = {
             username: body.username.trim(),
             password: body.password,
@@ -1996,7 +2002,7 @@ export const register = async (evt: H3Event) => {
             game_code: body.game_code,
             thirdparty_uid: thirdpartyUid,
             platform_coins: 0.00,
-            register_ip: clientIp !== 'unknown' ? clientIp : undefined
+            register_ip: clientIp  // 必填字段，不会是 undefined 或 unknown
         };
 
         // 插入用户到 Users 表（同时会自动创建一个默认的 SubUser）

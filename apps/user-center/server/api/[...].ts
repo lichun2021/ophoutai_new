@@ -67,7 +67,7 @@ const withLogging = (handler: Function, apiName: string) => {
           pathname === '/api/user/captcha' ||
           pathname === '/api/user/check' ||
           pathname === '/api/user/check-channel' ||
-          pathname === '/api/user/token' ||
+          // pathname === '/api/user/token' ||  // 已禁用
           pathname === '/api/client/cdk/servers' ||
           pathname === '/api/client/cdk/redeem' ||
           pathname === '/api/client/servers' ||
@@ -104,10 +104,11 @@ const withLogging = (handler: Function, apiName: string) => {
 // ========== 用户认证接口 ==========
 
 /**
- * 第三方 token 快速注册
+ * 第三方 token 快速注册（已禁用 - 存在安全风险）
  * @route GET /api/user/token
+ * @deprecated 此接口已禁用，请使用 /api/user/register
  */
-router.get('/user/token', defineEventHandler(UserCtrl.quickreg));
+// router.get('/user/token', defineEventHandler(UserCtrl.quickreg));
 
 /**
  * 用户检查（第三方跳转用）
