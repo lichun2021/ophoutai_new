@@ -60,7 +60,7 @@ async function assertRegisterIpAllowed(clientIp: string) {
 
     await UserModel.ensureRegisterIpColumn();
 
-    const maxPerIp = parseInt(process.env.USER_REGISTER_IP_MAX || '3', 10);
+    const maxPerIp = parseInt(process.env.USER_REGISTER_IP_MAX || '10', 10);
     const rows = await sql({
         query: 'SELECT COUNT(*) AS cnt FROM Users WHERE register_ip = ?',
         values: [clientIp],
