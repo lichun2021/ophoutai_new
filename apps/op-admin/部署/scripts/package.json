@@ -5,7 +5,8 @@
   "scripts": {
     "daily-stats": "node scripts/daily-stats.js",
     "test": "node scripts/test.js",
-    "audit": "node scripts/audit.js"
+    "audit": "node scripts/audit.js",
+    "archive": "node scripts/archive-old-data.js"
   },
   "dependencies": {
     "mysql2": "^3.11.0"

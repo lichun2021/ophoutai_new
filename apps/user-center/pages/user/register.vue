@@ -87,7 +87,7 @@
                 :style="captchaPieceStyle"
               />
             </div>
-            <div class="slider-wrap" :class="{ 'slider-passed': sliderPassed }">
+            <div ref="sliderWrapEl" class="slider-wrap" :class="{ 'slider-passed': sliderPassed }">
               <div class="slider-track">
                 <div class="slider-fill" :style="{ width: sliderFillWidth }"></div>
                 <span class="slider-text">{{ sliderPassed ? '松手后点击注册' : '拖动滑块对齐缺口' }}</span>
@@ -173,11 +173,11 @@ const channelValidating = ref(false);
 const channelError = ref('');
 
 // ========== 图形滑动验证 ==========
-const SLIDER_WIDTH = 350;  // 滑块轨道宽度(px)，与验证码图片同宽
+const SLIDER_WIDTH = 350;  // 滑块轨道设计宽度(px)，与服务端/验证码图片同宽
 const BTN_SIZE = 44;       // 滑块按钮宽度(px)
 
 const sliderPassed = ref(false);
-const sliderX = ref(0);  // 当前位移
+const sliderX = ref(0);  // 当前位移（屏幕像素，与渲染宽度一致）
 const captchaToken = ref('');
 const captchaBackground = ref('');
 const captchaPiece = ref('');
@@ -188,10 +188,27 @@ let isDragging = false;
 let startX = 0;
 let startSliderX = 0;
 
+// 渲染宽度（窄屏被 CSS max-width:100% 缩小），用于换算回设计坐标系
+const sliderWrapEl = ref<HTMLElement | null>(null);
+const renderedWidth = () => {
+  const el = sliderWrapEl.value;
+  if (!el) return SLIDER_WIDTH;
+  const w = el.getBoundingClientRect().width;
+  // 防御：取不到或异常时退化为设计宽度
+  return w > 0 ? w : SLIDER_WIDTH;
+};
+// 屏幕像素 → 设计坐标（350px）的缩放系数（≥1，桌面为 1）
+const scaleFactor = () => SLIDER_WIDTH / renderedWidth();
+// 设计坐标系下的拼图块尺寸（用于 clamp 上界）
+const designPieceSize = () => pieceSize.value * scaleFactor();
+const designMaxX = () => Math.max(0, SLIDER_WIDTH - designPieceSize());
+// 屏幕坐标系下的可拖动上界（驱动滑块位置）
+const displayMaxX = () => Math.max(0, renderedWidth() - pieceSize.value);
+
 const sliderBtnLeft = computed(() => `${sliderX.value}px`);
 const sliderFillWidth = computed(() => `${sliderX.value + BTN_SIZE}px`);
-const displayMaxX = () => Math.max(0, SLIDER_WIDTH - pieceSize.value);
-const captchaSubmitX = () => Math.round(sliderX.value);
+// 提交时换算回服务端 350px 坐标系
+const captchaSubmitX = () => Math.round(sliderX.value * scaleFactor());
 const captchaPieceStyle = computed(() => ({
   left: `${sliderX.value}px`,
   top: `${captchaY.value}px`,
