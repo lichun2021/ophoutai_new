@@ -64,6 +64,25 @@ function buildSignBase(params: Record<string, any>) {
   return entries.map(([k, v]) => `${k}=${v}`).join('&');
 }
 
+// 🔒 与后端 SIGNED_BUSINESS_FIELDS 必须完全一致（防篡改高危字段）
+const SIGNED_BUSINESS_FIELDS = [
+  'server_url', 'role_id', 'uid', 'p', 'price',
+  'package_id', 'pid', 'payment_method', 'l',
+];
+// 从完整请求参数中挑出参与签名的字段：ts + nonce + 出现的高危业务字段
+function pickSignParams(allParams: Record<string, any>): Record<string, any> {
+  const picked: Record<string, any> = {
+    ts: allParams.ts,
+    nonce: allParams.nonce,
+  };
+  for (const f of SIGNED_BUSINESS_FIELDS) {
+    if (allParams[f] !== undefined && allParams[f] !== null && allParams[f] !== '') {
+      picked[f] = allParams[f];
+    }
+  }
+  return picked;
+}
+
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
   const apiKey = config.public?.apiSignKey || 'fasdjhkfh2348!@#$!617';
@@ -123,7 +142,24 @@ export default defineNuxtPlugin((nuxtApp) => {
       const dateForToken = new Date(ts * 1000);
       const ymd = formatYmd(dateForToken);
       const token = calcDailyToken(dateForToken, apiKey);
-      const payload = { ts: String(ts), nonce } as any;
+
+      // 🔒 收集本次请求全部参数（URL query + options.params + body），挑出高危业务字段纳入签名，与后端 pickSignParams 一致
+      const allReqParams: Record<string, any> = { ...(extraParams || {}) };
+      // 关键：URL 字符串里已有的 query 参数也要纳入（例如 $fetch('/api/admin/payments?payment_method=...')）
+      try {
+        url.searchParams.forEach((v, k) => {
+          if (k !== 'ts' && k !== 'nonce' && k !== 'sign' && k !== '__signed') {
+            allReqParams[k] = v;
+          }
+        });
+      } catch {}
+      try {
+        const rawBody = (options as any).body;
+        if (rawBody && typeof rawBody === 'object' && !(rawBody instanceof FormData)) {
+          Object.assign(allReqParams, rawBody);
+        }
+      } catch {}
+      const payload = pickSignParams({ ...allReqParams, ts: String(ts), nonce });
       const sign = md5Hex(buildSignBase(payload) + token);
 
       // 【调试】打印签名计算过程
@@ -249,7 +285,15 @@ export default defineNuxtPlugin((nuxtApp) => {
         const dateForToken = new Date(ts * 1000);
         const ymd = formatYmd(dateForToken);
         const token = calcDailyToken(dateForToken, apiKey);
-        const base = buildSignBase({ ts: String(ts), nonce });
+        // 🔒 原生 fetch 兜底：把 query + body 里的高危字段纳入签名
+        const fallbackAllParams: Record<string, any> = {};
+        try { url.searchParams.forEach((v, k) => { fallbackAllParams[k] = v; }); } catch {}
+        try {
+          const b: any = init?.body;
+          if (typeof b === 'string') Object.assign(fallbackAllParams, JSON.parse(b));
+          else if (b && typeof b === 'object' && !(b instanceof FormData)) Object.assign(fallbackAllParams, b);
+        } catch {}
+        const base = buildSignBase(pickSignParams({ ...fallbackAllParams, ts: String(ts), nonce }));
     const sign = md5Hex(base + token);
 
         const existingHeaders = (init?.headers as any) || {};

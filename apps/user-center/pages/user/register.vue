@@ -74,10 +74,17 @@
         <!-- 图形滑动验证 -->
         <div class="form-field">
           <label class="field-label">安全验证</label>
-          <div class="captcha-box" :class="{ 'captcha-disabled': loading || !channelValid || captchaLoading }">
+          <div class="captcha-box">
             <div class="captcha-image-wrap">
               <img v-if="captchaBackground" class="captcha-bg" :src="captchaBackground" alt="安全验证背景" draggable="false" />
-              <div v-else class="captcha-placeholder">正在加载验证图...</div>
+              <div v-else-if="captchaError" class="captcha-placeholder captcha-placeholder-error" @click="loadCaptcha()">
+                <span class="captcha-retry-icon">↻</span>
+                <span>加载失败，点击重试</span>
+              </div>
+              <div v-else class="captcha-placeholder">
+                <span class="captcha-spinner"></span>
+                <span>正在加载验证图...</span>
+              </div>
               <img
                 v-if="captchaPiece"
                 class="captcha-piece"
@@ -87,7 +94,7 @@
                 :style="captchaPieceStyle"
               />
             </div>
-            <div ref="sliderWrapEl" class="slider-wrap" :class="{ 'slider-passed': sliderPassed }">
+            <div class="slider-wrap" :class="{ 'slider-passed': sliderPassed }">
               <div class="slider-track">
                 <div class="slider-fill" :style="{ width: sliderFillWidth }"></div>
                 <span class="slider-text">{{ sliderPassed ? '松手后点击注册' : '拖动滑块对齐缺口' }}</span>
@@ -173,11 +180,11 @@ const channelValidating = ref(false);
 const channelError = ref('');
 
 // ========== 图形滑动验证 ==========
-const SLIDER_WIDTH = 350;  // 滑块轨道设计宽度(px)，与服务端/验证码图片同宽
+const SLIDER_WIDTH = 350;  // 滑块轨道宽度(px)，与验证码图片同宽
 const BTN_SIZE = 44;       // 滑块按钮宽度(px)
 
 const sliderPassed = ref(false);
-const sliderX = ref(0);  // 当前位移（屏幕像素，与渲染宽度一致）
+const sliderX = ref(0);  // 当前位移
 const captchaToken = ref('');
 const captchaBackground = ref('');
 const captchaPiece = ref('');
@@ -188,27 +195,11 @@ let isDragging = false;
 let startX = 0;
 let startSliderX = 0;
 
-// 渲染宽度（窄屏被 CSS max-width:100% 缩小），用于换算回设计坐标系
-const sliderWrapEl = ref<HTMLElement | null>(null);
-const renderedWidth = () => {
-  const el = sliderWrapEl.value;
-  if (!el) return SLIDER_WIDTH;
-  const w = el.getBoundingClientRect().width;
-  // 防御：取不到或异常时退化为设计宽度
-  return w > 0 ? w : SLIDER_WIDTH;
-};
-// 屏幕像素 → 设计坐标（350px）的缩放系数（≥1，桌面为 1）
-const scaleFactor = () => SLIDER_WIDTH / renderedWidth();
-// 设计坐标系下的拼图块尺寸（用于 clamp 上界）
-const designPieceSize = () => pieceSize.value * scaleFactor();
-const designMaxX = () => Math.max(0, SLIDER_WIDTH - designPieceSize());
-// 屏幕坐标系下的可拖动上界（驱动滑块位置）
-const displayMaxX = () => Math.max(0, renderedWidth() - pieceSize.value);
-
 const sliderBtnLeft = computed(() => `${sliderX.value}px`);
 const sliderFillWidth = computed(() => `${sliderX.value + BTN_SIZE}px`);
-// 提交时换算回服务端 350px 坐标系
-const captchaSubmitX = () => Math.round(sliderX.value * scaleFactor());
+const displayMaxX = () => Math.max(0, SLIDER_WIDTH - pieceSize.value);
+// 提交的 X 使用经归一化的值（存在 formState.captchaInput 中）
+const captchaSubmitX = () => parseInt(formState.captchaInput) || Math.round(sliderX.value);
 const captchaPieceStyle = computed(() => ({
   left: `${sliderX.value}px`,
   top: `${captchaY.value}px`,
@@ -216,22 +207,47 @@ const captchaPieceStyle = computed(() => ({
   height: `${pieceSize.value}px`,
 }));
 
-async function loadCaptcha() {
-  captchaLoading.value = true;
-  resetSlider(false);
+const captchaError = ref(false);
+
+async function fetchCaptchaOnce(timeoutMs = 4000): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch('/api/user/captcha');
-    const result = await response.json();
-    captchaToken.value = result.token || '';
-    captchaBackground.value = result.background || '';
-    captchaPiece.value = result.piece || '';
-    captchaY.value = Number(result.y || 0);
-    pieceSize.value = Number(result.pieceSize || 42);
-  } catch (error) {
-    console.error('加载滑动验证码失败:', error);
+    const response = await fetch('/api/user/captcha', { signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadCaptcha(retries = 2) {
+  captchaLoading.value = true;
+  captchaError.value = false;
+  resetSlider(false);
+  let lastError: any = null;
+  try {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const result = await fetchCaptchaOnce(3000);
+        if (!result || !result.token || !result.background) throw new Error('验证码数据异常');
+        captchaToken.value = result.token;
+        captchaBackground.value = result.background;
+        captchaPiece.value = result.piece || '';
+        captchaY.value = Number(result.y || 0);
+        pieceSize.value = Number(result.pieceSize || 42);
+        return; // 成功
+      } catch (error) {
+        lastError = error;
+        // 非最后一次失败，短暂等待后重试
+        if (attempt < retries - 1) await new Promise(r => setTimeout(r, 300));
+      }
+    }
+    console.error('加载滑动验证码失败:', lastError);
     captchaToken.value = '';
     captchaBackground.value = '';
     captchaPiece.value = '';
+    captchaError.value = true;
   } finally {
     captchaLoading.value = false;
   }
@@ -268,7 +284,15 @@ function onSliderEnd() {
 
   // 前端只记录拖动位置，最终是否正确由后端判断
   sliderPassed.value = sliderX.value > 8;
-  formState.captchaInput = String(captchaSubmitX());
+
+  // ⚠️ 手机端修复：图片受 max-width:100% 缩放后，视觉像素 != 服务端坐标系像素。
+  // 读取 img 实际渲染宽度，将 sliderX 折算回服务端生成图片的 350px 坐标系。
+  const imgEl = document.querySelector('.captcha-bg') as HTMLImageElement | null;
+  const displayedWidth = imgEl ? imgEl.clientWidth : SLIDER_WIDTH;
+  const scale = displayedWidth > 0 ? SLIDER_WIDTH / displayedWidth : 1;
+  const normalizedX = Math.round(sliderX.value * scale);
+
+  formState.captchaInput = String(normalizedX);
 }
 
 function resetSlider(clearToken = true) {
@@ -510,7 +534,12 @@ const handleModalClose = () => {
 .captcha-disabled { opacity: 0.5; pointer-events: none; }
 .captcha-image-wrap { position: relative; width: 350px; height: 150px; max-width: 100%; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-container); border: 1px solid rgba(127,230,219,0.35); }
 .captcha-bg { display: block; width: 350px; height: 150px; max-width: 100%; }
-.captcha-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--on-surface-variant); font-size: 13px; }
+.captcha-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--on-surface-variant); font-size: 13px; }
+.captcha-placeholder-error { color: var(--error); cursor: pointer; gap: 6px; }
+.captcha-placeholder-error:hover { background: var(--error-container); }
+.captcha-spinner { width: 14px; height: 14px; border: 2px solid var(--on-surface-variant); border-top-color: transparent; border-radius: 50%; animation: captcha-spin 0.8s linear infinite; opacity: 0.5; }
+.captcha-retry-icon { font-size: 18px; line-height: 1; }
+@keyframes captcha-spin { to { transform: rotate(360deg); } }
 .captcha-piece { position: absolute; z-index: 2; pointer-events: none; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25)); }
 .slider-wrap { position: relative; width: 350px; max-width: 100%; height: 44px; border-radius: var(--radius-sm); overflow: visible; }
 .slider-track { position: absolute; inset: 0; background: var(--surface-container); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid rgba(127,230,219,0.2); }
