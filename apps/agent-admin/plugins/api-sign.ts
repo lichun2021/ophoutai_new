@@ -150,7 +150,10 @@ export default defineNuxtPlugin((nuxtApp) => {
       const ymd = formatYmd(dateForToken);
       const token = calcDailyToken(dateForToken, apiKey);
       const payload = { ts: String(ts), nonce } as any;
-      // 🔒 纳入高危业务字段（来源：query 参数 + body）
+      // 🔒 纳入高危业务字段（来源：URL query + options.params + body）
+      // 关键：URL 字符串里直接拼的 query 也要纳入（如 $fetch('/api/agent/payments?payment_method=微信')），
+      //       必须与后端 apiSign.ts pickSignParams 行为一致，否则验签失败
+      collectSignedFields(payload, url.searchParams);
       collectSignedFields(payload, extraParams);
       collectSignedFields(payload, (options as any).body);
       const sign = md5Hex(buildSignBase(payload) + token);
