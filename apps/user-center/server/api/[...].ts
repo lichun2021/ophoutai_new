@@ -8,7 +8,7 @@ import * as BenefitsCtrl from '../controller/benefits';
 import { listActive, listCdkRedeemable } from '../model/gameServers';
 import * as SystemParamsCtrl from '../controller/systemParams';
 import * as PaymentSettingsCtrl from '../controller/paymentSettings';
-import { generateSliderCaptcha, verifySliderCaptcha } from '../utils/captcha';
+import { generateCaptcha, verifyCaptcha } from '../utils/captcha';
 
 const router = createRouter();
 
@@ -153,7 +153,7 @@ router.post('/user/login', defineEventHandler(async (event) => {
  * @route GET /api/user/captcha
  */
 router.get('/user/captcha', defineEventHandler(async () => {
-  return generateSliderCaptcha();
+  return generateCaptcha();
 }));
 
 /**
@@ -164,12 +164,12 @@ router.post('/user/register', withLogging(async (event: H3Event) => {
   const headers = getHeaders(event);
   const clientIp = getRealIp(headers);
 
-  // 安全验证（滑动拼图验证码，答案只在后端保存，一次性使用）
+  // 安全验证（图形验证码，答案只在后端保存，一次性使用）
   const body = await readBody(event);
-  const captchaX = Number(body?.captcha_x);
-  const captchaOk = await verifySliderCaptcha(String(body?.captcha_token || ''), captchaX);
+  const captchaInput = String(body?.captcha_input || '').trim();
+  const captchaOk = await verifyCaptcha(String(body?.captcha_token || ''), captchaInput);
   if (!captchaOk) {
-    throw createError({ statusCode: 400, statusMessage: '安全验证失败，请重试' });
+    throw createError({ statusCode: 400, statusMessage: '验证码错误，请重试' });
   }
 
   // ---- IP 注册频率限制：同一IP 8小时内只允许注册一次 ----

@@ -71,46 +71,29 @@
           </div>
         </div>
 
-        <!-- 图形滑动验证 -->
+        <!-- 图形验证码 -->
         <div class="form-field">
-          <label class="field-label">安全验证</label>
-          <div class="captcha-box">
-            <div class="captcha-image-wrap">
-              <img v-if="captchaBackground" class="captcha-bg" :src="captchaBackground" alt="安全验证背景" draggable="false" />
-              <div v-else-if="captchaError" class="captcha-placeholder captcha-placeholder-error" @click="loadCaptcha()">
-                <span class="captcha-retry-icon">↻</span>
-                <span>加载失败，点击重试</span>
-              </div>
-              <div v-else class="captcha-placeholder">
-                <span class="captcha-spinner"></span>
-                <span>正在加载验证图...</span>
-              </div>
-              <img
-                v-if="captchaPiece"
-                class="captcha-piece"
-                :src="captchaPiece"
-                alt="滑块"
-                draggable="false"
-                :style="captchaPieceStyle"
+          <label class="field-label">验证码</label>
+          <div class="captcha-row">
+            <div class="input-wrap captcha-input-wrap">
+              <span class="input-icon">🔑</span>
+              <input
+                v-model="formState.captchaInput"
+                class="field-input"
+                placeholder="请输入验证码"
+                maxlength="4"
+                :disabled="loading || !channelValid || captchaLoading"
+                style="text-transform: uppercase; letter-spacing: 4px;"
               />
             </div>
-            <div class="slider-wrap" :class="{ 'slider-passed': sliderPassed }">
-              <div class="slider-track">
-                <div class="slider-fill" :style="{ width: sliderFillWidth }"></div>
-                <span class="slider-text">{{ sliderPassed ? '松手后点击注册' : '拖动滑块对齐缺口' }}</span>
+            <div class="captcha-img-wrap" :title="captchaError ? '点击重试' : '点击刷新验证码'" @click="fetchCaptcha">
+              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" alt="验证码" draggable="false" />
+              <div v-else class="captcha-loading">
+                <span v-if="captchaError" class="captcha-retry-text">点击重试</span>
+                <span v-else>加载中...</span>
               </div>
-              <div
-                class="slider-btn"
-                :style="{ left: sliderBtnLeft }"
-                @mousedown="onSliderStart"
-                @touchstart.prevent="onSliderStart"
-                :class="{ 'slider-btn-passed': sliderPassed }"
-              >
-                <span v-if="!sliderPassed">›</span>
-                <span v-else>✓</span>
-              </div>
+              <span class="captcha-refresh-hint">🔄 点击刷新</span>
             </div>
-            <button type="button" class="captcha-refresh" :disabled="loading || captchaLoading" @click="loadCaptcha">换一张</button>
           </div>
         </div>
 
@@ -179,129 +162,34 @@ const channelValid = ref(true);
 const channelValidating = ref(false);
 const channelError = ref('');
 
-// ========== 图形滑动验证 ==========
-const SLIDER_WIDTH = 350;  // 滑块轨道宽度(px)，与验证码图片同宽
-const BTN_SIZE = 44;       // 滑块按钮宽度(px)
-
-const sliderPassed = ref(false);
-const sliderX = ref(0);  // 当前位移
+// ========== 图形验证码 ==========
 const captchaToken = ref('');
-const captchaBackground = ref('');
-const captchaPiece = ref('');
-const captchaY = ref(0);
-const pieceSize = ref(42);
+const captchaImage = ref('');
 const captchaLoading = ref(false);
-let isDragging = false;
-let startX = 0;
-let startSliderX = 0;
-
-const sliderBtnLeft = computed(() => `${sliderX.value}px`);
-const sliderFillWidth = computed(() => `${sliderX.value + BTN_SIZE}px`);
-const displayMaxX = () => Math.max(0, SLIDER_WIDTH - pieceSize.value);
-// 提交的 X 使用经归一化的值（存在 formState.captchaInput 中）
-const captchaSubmitX = () => parseInt(formState.captchaInput) || Math.round(sliderX.value);
-const captchaPieceStyle = computed(() => ({
-  left: `${sliderX.value}px`,
-  top: `${captchaY.value}px`,
-  width: `${pieceSize.value}px`,
-  height: `${pieceSize.value}px`,
-}));
-
 const captchaError = ref(false);
 
-async function fetchCaptchaOnce(timeoutMs = 4000): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch('/api/user/captcha', { signal: controller.signal });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function loadCaptcha(retries = 2) {
+async function fetchCaptcha() {
   captchaLoading.value = true;
   captchaError.value = false;
-  resetSlider(false);
-  let lastError: any = null;
+  captchaImage.value = '';
+  formState.captchaInput = '';
   try {
-    for (let attempt = 0; attempt < retries; attempt++) {
-      try {
-        const result = await fetchCaptchaOnce(3000);
-        if (!result || !result.token || !result.background) throw new Error('验证码数据异常');
-        captchaToken.value = result.token;
-        captchaBackground.value = result.background;
-        captchaPiece.value = result.piece || '';
-        captchaY.value = Number(result.y || 0);
-        pieceSize.value = Number(result.pieceSize || 42);
-        return; // 成功
-      } catch (error) {
-        lastError = error;
-        // 非最后一次失败，短暂等待后重试
-        if (attempt < retries - 1) await new Promise(r => setTimeout(r, 300));
-      }
-    }
-    console.error('加载滑动验证码失败:', lastError);
+    const res = await fetch('/api/user/captcha');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data || !data.token || !data.image) throw new Error('验证码数据异常');
+    captchaToken.value = data.token;
+    captchaImage.value = data.image;
+  } catch (e) {
+    console.error('加载验证码失败:', e);
     captchaToken.value = '';
-    captchaBackground.value = '';
-    captchaPiece.value = '';
+    captchaImage.value = '';
     captchaError.value = true;
   } finally {
     captchaLoading.value = false;
   }
 }
-
-function onSliderStart(e: MouseEvent | TouchEvent) {
-  if (loading.value || !channelValid.value || captchaLoading.value || !captchaToken.value) return;
-  isDragging = true;
-  sliderPassed.value = false;
-  startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-  startSliderX = sliderX.value;
-  document.addEventListener('mousemove', onSliderMove);
-  document.addEventListener('touchmove', onSliderMove, { passive: false });
-  document.addEventListener('mouseup', onSliderEnd);
-  document.addEventListener('touchend', onSliderEnd);
-}
-
-function onSliderMove(e: MouseEvent | TouchEvent) {
-  if (!isDragging) return;
-  if (e.cancelable) e.preventDefault();
-  const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-  const delta = clientX - startX;
-  const newX = Math.max(0, Math.min(displayMaxX(), startSliderX + delta));
-  sliderX.value = newX;
-}
-
-function onSliderEnd() {
-  if (!isDragging) return;
-  isDragging = false;
-  document.removeEventListener('mousemove', onSliderMove);
-  document.removeEventListener('touchmove', onSliderMove);
-  document.removeEventListener('mouseup', onSliderEnd);
-  document.removeEventListener('touchend', onSliderEnd);
-
-  // 前端只记录拖动位置，最终是否正确由后端判断
-  sliderPassed.value = sliderX.value > 8;
-
-  // ⚠️ 手机端修复：图片受 max-width:100% 缩放后，视觉像素 != 服务端坐标系像素。
-  // 读取 img 实际渲染宽度，将 sliderX 折算回服务端生成图片的 350px 坐标系。
-  const imgEl = document.querySelector('.captcha-bg') as HTMLImageElement | null;
-  const displayedWidth = imgEl ? imgEl.clientWidth : SLIDER_WIDTH;
-  const scale = displayedWidth > 0 ? SLIDER_WIDTH / displayedWidth : 1;
-  const normalizedX = Math.round(sliderX.value * scale);
-
-  formState.captchaInput = String(normalizedX);
-}
-
-function resetSlider(clearToken = true) {
-  sliderPassed.value = false;
-  sliderX.value = 0;
-  formState.captchaInput = '';
-  if (clearToken) captchaToken.value = '';
-}
-// ========== END 图形滑动验证 ==========
+// ========== END 图形验证码 ==========
 
 
 // 表单验证
@@ -311,7 +199,7 @@ const isFormValid = computed(() => {
          formState.password.trim() !== '' &&
          formState.confirmPassword.trim() !== '' &&
          formState.password === formState.confirmPassword &&
-         sliderPassed.value;
+         formState.captchaInput.trim().length === 4;
 });
 
 // 验证代理账号状态
@@ -379,8 +267,8 @@ onMounted(async () => {
     channelError.value = '缺少渠道代码参数';
   }
 
-  // 加载图形滑动验证码
-  await loadCaptcha();
+  // 加载图形验证码
+  fetchCaptcha();
 });
 
 // 处理注册
@@ -414,7 +302,7 @@ const handleRegister = async () => {
       iphone: '',
       uid: '',
       captcha_token: captchaToken.value,
-      captcha_x: captchaSubmitX(),
+      captcha_input: formState.captchaInput.trim(),
       ...urlParams.extra_params
     };
     
@@ -435,8 +323,8 @@ const handleRegister = async () => {
     if (response.ok && result.status === 'success') {
       showSuccess('注册成功！即将跳转到登录页面...');
     } else {
-      // 验证码错误或其他错误，刷新滑块
-      await loadCaptcha();
+      // 验证码错误或其他错误，刷新验证码
+      fetchCaptcha();
       if (!response.ok) {
         showError(result.message || result.statusMessage || '注册失败，请检查参数是否正确');
       } else if (result.message && result.message.includes('Duplicate')) {
@@ -529,27 +417,42 @@ const handleModalClose = () => {
 .btn-gray:hover { background: var(--surface-container-highest); }
 @media (max-width: 480px) { .register-box { padding: 32px 24px; border-radius: 20px; } }
 
-/* 图形滑动验证 */
-.captcha-box { display: flex; flex-direction: column; align-items: center; gap: 8px; user-select: none; }
-.captcha-disabled { opacity: 0.5; pointer-events: none; }
-.captcha-image-wrap { position: relative; width: 350px; height: 150px; max-width: 100%; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-container); border: 1px solid rgba(127,230,219,0.35); }
-.captcha-bg { display: block; width: 350px; height: 150px; max-width: 100%; }
-.captcha-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--on-surface-variant); font-size: 13px; }
-.captcha-placeholder-error { color: var(--error); cursor: pointer; gap: 6px; }
-.captcha-placeholder-error:hover { background: var(--error-container); }
-.captcha-spinner { width: 14px; height: 14px; border: 2px solid var(--on-surface-variant); border-top-color: transparent; border-radius: 50%; animation: captcha-spin 0.8s linear infinite; opacity: 0.5; }
-.captcha-retry-icon { font-size: 18px; line-height: 1; }
-@keyframes captcha-spin { to { transform: rotate(360deg); } }
-.captcha-piece { position: absolute; z-index: 2; pointer-events: none; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25)); }
-.slider-wrap { position: relative; width: 350px; max-width: 100%; height: 44px; border-radius: var(--radius-sm); overflow: visible; }
-.slider-track { position: absolute; inset: 0; background: var(--surface-container); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid rgba(127,230,219,0.2); }
-.slider-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(127,230,219,0.3), rgba(127,230,219,0.15)); transition: background 0.3s; pointer-events: none; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-.slider-passed .slider-fill { background: linear-gradient(90deg, rgba(127,230,219,0.5), rgba(100,200,180,0.3)); }
-.slider-text { position: relative; font-size: 13px; color: var(--on-surface-variant); pointer-events: none; z-index: 1; transition: color 0.3s; letter-spacing: 0.5px; }
-.slider-passed .slider-text { color: var(--secondary); font-weight: 600; }
-.slider-btn { position: absolute; top: 1px; width: 44px; height: 42px; border-radius: calc(var(--radius-sm) - 2px); background: linear-gradient(135deg, var(--primary), var(--primary-container)); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--on-primary); cursor: grab; z-index: 3; box-shadow: 0 2px 8px rgba(168,50,6,0.3); transition: background 0.3s, box-shadow 0.3s; touch-action: none; }
-.slider-btn:active { cursor: grabbing; }
-.slider-btn-passed { background: linear-gradient(135deg, #4caf6e, #38a169) !important; box-shadow: 0 2px 12px rgba(76,175,110,0.4) !important; }
-.captcha-refresh { align-self: flex-end; border: none; background: transparent; color: var(--primary); font-size: 12px; cursor: pointer; padding: 2px 4px; font-family: var(--font-family); }
-.captcha-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+/* 图形验证码 */
+.captcha-row { display: flex; gap: 10px; align-items: stretch; }
+.captcha-input-wrap { flex: 1; }
+.captcha-img-wrap {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  background: var(--surface-container);
+  min-width: 130px;
+}
+.captcha-img { height: 48px; width: auto; display: block; border-radius: var(--radius-sm); }
+.captcha-loading {
+  height: 48px;
+  width: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+.captcha-retry-text { color: var(--error); }
+.captcha-refresh-hint {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 10px;
+  text-align: center;
+  padding: 2px 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.captcha-img-wrap:hover .captcha-refresh-hint { opacity: 1; }
 </style>
