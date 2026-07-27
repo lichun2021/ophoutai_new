@@ -12,6 +12,22 @@ import * as BenefitsCtrl from '../controller/benefits';
 
 const router = createRouter();
 
+// 获取真实客户端IP（阿里云CDN架构）
+function getRealIp(headers: ReturnType<typeof getHeaders>): string {
+  const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
+  const xForwardedFor = headers['x-forwarded-for'] as string;
+  const xRealIp = headers['x-real-ip'] as string;
+  return aliCdnRealIp
+    || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
+    || xRealIp
+    || 'unknown';
+}
+
+// 获取当前时间字符串（北京时间）
+function nowStr(): string {
+  return new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+}
+
 // 日志包装函数
 const withLogging = (handler: Function, apiName: string) => {
   return defineEventHandler(async (event: H3Event) => {
@@ -132,10 +148,14 @@ router.get('/user/captcha', defineEventHandler(() => {
 }));
 
 /**
- * 用户注册（带图形验证码 + IP 限流）
+ * 用户注册（带图形验证码 + IP 频率限制）
  * @route POST /api/user/register
  */
 router.post('/user/register', withLogging(async (event: H3Event) => {
+  const headers = getHeaders(event);
+  const clientIp = getRealIp(headers);
+
+  // 安全验证（图形验证码，答案只在后端保存，一次性使用）
   const body = await readBody(event);
   const { captcha_token, captcha_input } = body || {};
   if (!captcha_token || !captcha_input) {
@@ -145,7 +165,42 @@ router.post('/user/register', withLogging(async (event: H3Event) => {
   if (!captchaOk) {
     throw createError({ statusCode: 400, statusMessage: '验证码错误或已过期，请刷新重试' });
   }
-  return UserCtrl.register(event);
+
+  // ---- IP 注册频率限制：同一IP 8小时内只允许注册一次 ----
+  const REGISTER_IP_LIMIT_TTL = 8 * 60 * 60; // 28800 秒
+  const ipLimitKey = `reg_ip_limit:${clientIp}`;
+  let ipLocked = false;
+  if (clientIp && clientIp !== 'unknown') {
+    const { getRedisCluster } = await import('../utils/redis-cluster');
+    const redis = getRedisCluster();
+    const locked = await redis.set(ipLimitKey, '1', 'EX', REGISTER_IP_LIMIT_TTL, 'NX');
+    if (!locked) {
+      const ttl = await redis.ttl(ipLimitKey);
+      const remainHours = Math.floor(ttl / 3600);
+      const remainMins = Math.ceil((ttl % 3600) / 60);
+      const waitMsg = remainHours > 0
+        ? `${remainHours} 小时 ${remainMins} 分钟`
+        : `${remainMins} 分钟`;
+      console.warn(`[${nowStr()}] [注册拒绝] IP ${clientIp} 限制期内重复注册，剩余 ${ttl}s`);
+      return { status: 'fail', message: `该IP注册过于频繁，请 ${waitMsg} 后再试` };
+    }
+    ipLocked = true;
+  }
+  // ---- END IP 限制 ----
+
+  // 调用注册逻辑；如果业务校验失败，释放本次IP锁，避免输错参数锁8小时
+  const result: any = await UserCtrl.register(event);
+  if (ipLocked && result?.status !== 'success') {
+    try {
+      const { getRedisCluster } = await import('../utils/redis-cluster');
+      const redis = getRedisCluster();
+      await redis.del(ipLimitKey);
+    } catch { }
+  }
+  if (result?.status === 'success' && ipLocked) {
+    console.log(`[${nowStr()}] [注册] IP ${clientIp} 已锁定，8小时内不可再注册`);
+  }
+  return result;
 }, '用户注册接口'));
 
 /**
