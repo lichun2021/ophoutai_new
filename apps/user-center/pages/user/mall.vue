@@ -2,8 +2,15 @@
   <div class="mall-container">
     <!-- 页面标题 -->
     <div class="page-header">
-      <h1>商城</h1>
-      <p>精选礼包，助力游戏体验</p>
+      <div class="page-header-text">
+        <h1>商城</h1>
+        <p>精选礼包，助力游戏体验</p>
+      </div>
+      <!-- 购物车入口（右上角图标 + 数量角标） -->
+      <button class="cart-entry" @click="cartStore.openDrawer()" :title="`购物车（${cartStore.totalCount}）`">
+        <UIcon name="i-heroicons-shopping-cart" />
+        <span v-if="cartStore.totalCount > 0" class="cart-badge">{{ cartStore.totalCount > 99 ? '99+' : cartStore.totalCount }}</span>
+      </button>
     </div>
 
     <!-- 统计卡片 -->
@@ -66,22 +73,20 @@
         <p>当前分类暂时没有商品</p>
       </div>
 
-      <div v-else class="products-grid">
-        <div 
-          v-for="product in products" 
-          :key="product.id" 
-          class="product-card"
-          @click="toggleProductScroll(product.id)"
+      <div v-else class="products-list">
+        <div
+          v-for="product in products"
+          :key="product.id"
+          class="product-row"
         >
-          <!-- 商品图片 -->
+          <!-- 左：商品图片 -->
           <div class="product-image">
-            <img 
-              :src="product.icon_url || '/default-gift.svg'" 
+            <img
+              :src="product.icon_url || '/default-gift.svg'"
               :alt="product.package_name"
               @error="handleImageError"
             />
-            
-            <!-- 限时/限期标签（保持在图片上） -->
+            <!-- 限时/限期标签 -->
             <div v-if="product.category === 'limited' && product.end_time" class="time-badge limited-badge">
               <UIcon name="i-heroicons-clock" class="badge-icon" />
               <span>{{ getTimeRemaining(product.end_time) }}</span>
@@ -92,65 +97,70 @@
             </div>
           </div>
 
-          <!-- 商品信息 -->
+          <!-- 中：商品信息 -->
           <div class="product-info">
             <h3 class="product-name">{{ product.package_name }}</h3>
             <div class="description-container">
-              <p 
+              <p
                 :class="{ 'scrolling': scrollingProducts[product.id] }"
                 class="product-description"
                 :style="getScrollStyle(product)"
+                @click="toggleProductScroll(product.id)"
               >
                 {{ product.description || '暂无描述' }}
               </p>
             </div>
-            
             <!-- 限购提示（排除自动发放礼包） -->
             <div v-if="product.max_per_user && product.max_per_user > 0 && !isAutoGrantCategory(product.category)" class="purchase-limit-badge">
               <UIcon name="i-heroicons-shopping-cart" class="limit-icon" />
               <span v-if="product.category === 'daily_recharge'">限购 {{ product.max_per_user }} 次/日</span>
               <span v-else>限购 {{ product.max_per_user }} 个</span>
             </div>
+            <!-- 自动发放礼包提示 -->
+            <div v-if="isAutoGrantCategory(product.category)" class="auto-gift-notice-inline">
+              <UIcon name="i-heroicons-gift" />
+              <span v-if="product.category === 'daily'">每日消费自动发放</span>
+              <span v-else>累计消费自动发放</span>
+            </div>
+          </div>
 
-            <!-- 购买按钮（包含价格） -->
-            <div class="product-actions">
-              <!-- 自动发放礼包显示提示信息，不显示购买按钮 -->
-              <div v-if="isAutoGrantCategory(product.category)" class="auto-gift-group">
-                <div class="auto-gift-price">
-                  <img src="/logo-warm.svg" alt="平台币" class="coin-icon-auto" />
+          <!-- 右：价格 + 加购/购买 -->
+          <div class="product-actions">
+            <!-- 自动发放礼包：只显示价格，无按钮 -->
+            <div v-if="isAutoGrantCategory(product.category)" class="auto-gift-price">
+              <img src="/logo-warm.svg" alt="平台币" class="coin-icon-auto" />
+              <span>{{ formatCoins(product.price_platform_coins) }}</span>
+            </div>
+            <!-- 普通礼包：价格 + 立即购买/加入购物车 -->
+            <div v-else class="row-actions">
+              <div class="row-price">
+                <template v-if="product.price_platform_coins > 0">
+                  <img src="/logo-warm.svg" alt="平台币" class="coin-icon-button" />
                   <span>{{ formatCoins(product.price_platform_coins) }}</span>
-                </div>
-                <div class="auto-gift-notice">
-                  <UIcon name="i-heroicons-gift" />
-                  <span v-if="product.category === 'daily'">每日消费自动发放</span>
-                  <span v-else>累计消费自动发放</span>
-                </div>
+                </template>
+                <template v-else-if="product.price_real_money > 0">
+                  <span class="money-symbol">¥</span>
+                  <span>{{ formatMoney(product.price_real_money) }}</span>
+                </template>
               </div>
-              <!-- 普通礼包显示购买按钮 -->
-              <div v-else>
-                
-                <UButton 
-                  @click.stop="buyProduct(product)" 
+              <div class="row-buttons">
+                <UButton
+                  @click.stop="buyProduct(product)"
                   :loading="purchaseLoading[product.id]"
-                  color="primary" 
-                  size="lg" 
-                  block
-                  class="price-buy-button"
+                  color="primary"
+                  size="md"
+                  class="row-buy-btn"
+                >立即购买</UButton>
+                <UButton
+                  @click.stop="addToCart(product)"
+                  color="orange"
+                  variant="soft"
+                  size="md"
+                  class="row-cart-btn"
                 >
-                <div class="button-content">
-                  <div class="button-price">
-                    <template v-if="product.price_platform_coins > 0">
-                      <img src="/logo-warm.svg" alt="平台币" class="coin-icon-button" />
-                      <span>{{ formatCoins(product.price_platform_coins) }}</span>
-                    </template>
-                    <template v-else-if="product.price_real_money > 0">
-                      <span class="money-symbol">¥</span>
-                      <span>{{ formatMoney(product.price_real_money) }}</span>
-                    </template>
-                  </div>
-                  <span class="button-text">立即购买</span>
-                </div>
-              </UButton>
+                  <UIcon name="i-heroicons-shopping-cart" />
+                  <span>加入购物车</span>
+                </UButton>
               </div>
             </div>
           </div>
@@ -282,6 +292,119 @@
         </template>
       </UCard>
     </UModal>
+
+    <!-- 购物车抽屉面板（右侧滑出） -->
+    <Teleport to="body">
+      <Transition name="cart-fade">
+        <div v-if="cartStore.drawerOpen" class="cart-overlay" @click="cartStore.closeDrawer()"></div>
+      </Transition>
+      <Transition name="cart-slide">
+        <aside v-if="cartStore.drawerOpen" class="cart-drawer">
+          <header class="cart-header">
+            <h3>
+              <UIcon name="i-heroicons-shopping-cart" />
+              购物车
+              <span v-if="cartStore.kindCount > 0" class="cart-header-count">{{ cartStore.kindCount }} 种 / {{ cartStore.totalCount }} 件</span>
+            </h3>
+            <button class="cart-close" @click="cartStore.closeDrawer()">
+              <UIcon name="i-heroicons-x-mark" />
+            </button>
+          </header>
+
+          <!-- 购物车为空 -->
+          <div v-if="cartStore.items.length === 0" class="cart-empty">
+            <UIcon name="i-heroicons-shopping-bag" class="cart-empty-icon" />
+            <p>购物车空空如也</p>
+            <span>从商品列表加入礼包吧</span>
+          </div>
+
+          <!-- 购物车商品列表 -->
+          <div v-else class="cart-items">
+            <div v-for="item in cartStore.items" :key="item.key" class="cart-item">
+              <img :src="item.icon_url || '/default-gift.svg'" :alt="item.package_name" class="cart-item-img" @error="handleImageError" />
+              <div class="cart-item-info">
+                <h4>{{ item.package_name }}</h4>
+                <div class="cart-item-price">
+                  <template v-if="item.price_platform_coins > 0">
+                    <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
+                    <span>{{ formatCoins(item.price_platform_coins) }}</span>
+                  </template>
+                  <template v-else-if="item.price_real_money > 0">
+                    <span class="money-symbol">¥</span>
+                    <span>{{ formatMoney(item.price_real_money) }}</span>
+                  </template>
+                </div>
+              </div>
+              <div class="cart-item-controls">
+                <div class="qty-control">
+                  <button @click="cartStore.decrement(item.key)" :disabled="false" title="减少">−</button>
+                  <span class="qty-value">{{ item.quantity }}</span>
+                  <button
+                    @click="cartStore.increment(item.key)"
+                    :disabled="item.max_per_user > 0 && item.quantity >= item.max_per_user"
+                    title="增加"
+                  >+</button>
+                </div>
+                <button class="cart-item-remove" @click="removeCartItem(item.key)" title="移除">
+                  <UIcon name="i-heroicons-trash" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部合计 + 选角色 + 去结算（同一界面） -->
+          <footer v-if="cartStore.items.length > 0" class="cart-footer">
+            <div class="cart-total">
+              <span class="cart-total-label">合计</span>
+              <div class="cart-total-price">
+                <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
+                <span>{{ formatCoins(cartStore.totalPlatformCoins) }}</span>
+              </div>
+            </div>
+
+            <!-- 当前余额 -->
+            <div class="cart-balance-row" :class="{ insufficient: !balanceSufficient }">
+              <span class="cart-balance-label">当前余额</span>
+              <span class="cart-balance-value">
+                <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
+                {{ formatCoins(authStore.userInfo?.platform_coins || 0) }}
+              </span>
+            </div>
+            <!-- 余额不足提示 -->
+            <div v-if="!balanceSufficient" class="cart-balance-warn">
+              <UIcon name="i-heroicons-exclamation-triangle" />
+              <span>余额不足，请先<a @click="goToRecharge" class="cart-recharge-link">充值</a></span>
+            </div>
+
+            <!-- 抽屉内直接选角色 -->
+            <div class="cart-character-row">
+              <USelectMenu
+                v-model="cartCharacterUuid"
+                :options="characterSelectOptions"
+                value-attribute="value"
+                option-attribute="label"
+                placeholder="选择接收礼包的角色"
+                class="cart-character-select"
+                @click="ensureCharactersLoaded"
+              />
+            </div>
+            <div v-if="characterSelectOptions.length === 0" class="cart-character-empty">
+              暂无可用角色，请先创建游戏角色
+            </div>
+
+            <UButton
+              @click="checkoutCart"
+              :loading="checkoutLoading"
+              color="primary"
+              size="lg"
+              block
+              class="checkout-btn"
+              :disabled="!canCheckout"
+            >去结算（{{ cartStore.totalCount }} 件）</UButton>
+          </footer>
+        </aside>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -290,6 +413,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useCookie } from '#app';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
+import { useCartStore } from '@/store/cart';
 import { useTips } from '@/composables/useTips';
 
 // 页面元数据
@@ -301,6 +425,7 @@ definePageMeta({
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const cartStore = useCartStore();
 
 // 记录上次选择的角色索引（使用cookie）
 const lastCharacterIndexCookie = useCookie('mall_last_character_index', {
@@ -335,6 +460,39 @@ const selectedCharacterUuid = ref(null);
 const selectedCharacter = computed(() =>
   characterList.value.find(c => c.uuid === selectedCharacterUuid.value)
 );
+
+// ========== 购物车结算相关 ==========
+const cartCharacterUuid = ref(null);
+const checkoutCharacter = computed(() =>
+  characterList.value.find(c => c.uuid === cartCharacterUuid.value)
+);
+const checkoutLoading = ref(false);
+const charactersLoaded = ref(false);
+
+// 余额是否足够支付购物车合计（平台币）
+const balanceSufficient = computed(() => {
+  const balance = Number(authStore.userInfo?.platform_coins || 0);
+  return balance >= cartStore.totalPlatformCoins;
+});
+// 结算按钮是否可点：有商品 + 选了角色 + 余额足够 + 未在结算中
+const canCheckout = computed(() =>
+  cartStore.items.length > 0 &&
+  !!cartCharacterUuid.value &&
+  !!checkoutCharacter.value &&
+  balanceSufficient.value &&
+  !checkoutLoading.value
+);
+
+// 抽屉内首次点选角色时加载角色列表
+const ensureCharactersLoaded = async () => {
+  if (charactersLoaded.value) return;
+  await loadUserCharacters();
+  // 沿用上次单买选择的角色
+  if (selectedCharacterUuid.value && characterSelectOptions.value.some(o => o.value === selectedCharacterUuid.value)) {
+    cartCharacterUuid.value = selectedCharacterUuid.value;
+  }
+  charactersLoaded.value = true;
+};
 
 const hotProductsCount = computed(() => {
   // 假设价格超过500平台币的为热门商品
@@ -466,6 +624,130 @@ const buyProduct = async (product) => {
   await ensureItemNameCache();
 };
 
+// ========== 购物车方法 ==========
+// 加入购物车（带动画反馈）
+const addToCart = (product) => {
+  if (!product) return;
+  // 自动发放类礼包不支持加入购物车
+  if (isAutoGrantCategory(product.category)) {
+    tips.error('该礼包为自动发放，无需购买');
+    return;
+  }
+  cartStore.add(product, 1);
+  tips.success(`已加入购物车：${product.package_name}`);
+};
+
+// 移除购物车项（带提示）
+const removeCartItem = (key) => {
+  cartStore.remove(key);
+};
+
+// 去结算：直接在抽屉内用已选角色逐个下单（不再单独弹选角色窗）
+const checkoutCart = async () => {
+  if (cartStore.items.length === 0) {
+    tips.error('购物车为空');
+    return;
+  }
+  if (!cartCharacterUuid.value || !checkoutCharacter.value) {
+    tips.error('请先选择要接收物品的角色！');
+    return;
+  }
+  // 余额校验：合计平台币必须 ≤ 当前余额
+  if (!balanceSufficient.value) {
+    tips.error('平台币余额不足，请先充值');
+    return;
+  }
+  if (checkoutLoading.value) return;
+
+  checkoutLoading.value = true;
+  const userId = authStore.userInfo?.id || authStore.id;
+  if (!userId) {
+    tips.error('用户信息获取失败');
+    checkoutLoading.value = false;
+    return;
+  }
+  const character = checkoutCharacter.value;
+
+  // 复制一份当前购物车项，结算过程中清空 UI 但保留本次清单用于结果汇总
+  const itemsToBuy = cartStore.items.map(i => ({ ...i }));
+  let successCount = 0;
+  let failCount = 0;
+  let lastBalance = authStore.userInfo?.platform_coins || 0;
+  const failures = [];
+
+  for (const item of itemsToBuy) {
+    for (let n = 0; n < item.quantity; n++) {
+      try {
+        const response = await $fetch('/api/client/gift-packages/purchase', {
+          method: 'POST',
+          body: {
+            user_id: userId,
+            package_id: item.package_id,
+            character_uuid: character.uuid,
+            server_id: character.server_id,
+          },
+        });
+        if (response.code === 200) {
+          successCount++;
+          if (response.data?.new_balance !== undefined) {
+            lastBalance = response.data.new_balance;
+          }
+        } else {
+          failCount++;
+          failures.push({ name: item.package_name, msg: response.message || '失败' });
+          // 平台币余额不足时停止后续，避免无效请求
+          if (response.code === 400 && response.message && response.message.includes('平台币余额不足')) {
+            break;
+          }
+        }
+      } catch (e) {
+        failCount++;
+        failures.push({ name: item.package_name, msg: e?.data?.message || e?.message || '网络错误' });
+      }
+    }
+    // 若中途余额不足已 break 出内层，外层也停
+    if (failures.some(f => f.msg.includes('平台币余额不足'))) break;
+  }
+
+  // 更新余额
+  if (lastBalance !== (authStore.userInfo?.platform_coins || 0)) {
+    authStore.platformCoins = lastBalance;
+    if (authStore.userInfo) {
+      authStore.userInfo = { ...authStore.userInfo, platform_coins: lastBalance };
+      localStorage.setItem('auth_userInfo', JSON.stringify(authStore.userInfo));
+    }
+  }
+
+  // 已成功的从购物车移除；失败的全部保留（按剩余数量重置）
+  // 简化策略：成功的整项移除；若某项部分成功，保留失败数量
+  for (const item of itemsToBuy) {
+    // 统计该项失败数
+    const itemFailures = failures.filter(f => f.name === item.package_name).length;
+    if (itemFailures === 0) {
+      // 全部成功，从购物车移除
+      cartStore.remove(item.key);
+    } else if (itemFailures < item.quantity) {
+      // 部分成功，保留剩余数量
+      cartStore.setQuantity(item.key, itemFailures);
+    } else {
+      // 全部失败，保留原数量
+    }
+  }
+
+  // 结果汇总
+  let summary = `成功 ${successCount} 件`;
+  if (failCount > 0) summary += `，失败 ${failCount} 件`;
+  if (failCount > 0 && failures[0]) summary += `（${failures[0].msg}）`;
+  if (successCount > 0) tips.success(summary);
+  else tips.error(summary);
+
+  // 全部成功则关闭抽屉
+  if (failCount === 0) {
+    cartStore.closeDrawer();
+  }
+  checkoutLoading.value = false;
+};
+
 const parseGiftItems = (giftItems) => {
   try {
     if (typeof giftItems === 'string') {
@@ -534,6 +816,7 @@ const getDefaultIcon = (method) => {
 
 const goToRecharge = () => {
   showPurchaseModal.value = false;
+  cartStore.closeDrawer();
   router.push('/user/cashier');
 };
 
@@ -855,6 +1138,7 @@ onMounted(() => {
   ensurePaymentMethods();
   ensureItemNameCache();
   loadUserCharacters();
+  cartStore.init(); // 初始化购物车（从 localStorage 恢复）
   startTimeUpdate(); // 启动倒计时更新
 });
 
@@ -876,8 +1160,15 @@ onUnmounted(() => {
 }
 
 .page-header {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 24px;
+}
+
+.page-header-text {
+  text-align: center;
+  flex: 1;
 }
 
 .page-header h1 {
@@ -891,6 +1182,44 @@ onUnmounted(() => {
   margin: 0;
   color: var(--on-surface-variant);
   font-size: 16px;
+}
+
+/* 购物车入口图标 */
+.cart-entry {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(127, 230, 219, 0.4);
+  background: var(--surface-container);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.cart-entry:hover {
+  background: var(--secondary-container, rgba(127, 230, 219, 0.15));
+  transform: scale(1.05);
+}
+.cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #e76f51;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--surface-container-low, #fff);
 }
 
 /* 统计卡片 */
@@ -1034,36 +1363,50 @@ onUnmounted(() => {
   color: var(--on-surface-variant);
 }
 
-.products-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
+.products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.product-card {
+.product-row {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
   background: var(--surface-container-low);
   border-radius: var(--radius-sm);
-  overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 0.3s;
-}
-
-.product-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.product-image {
-  position: relative;
-  width: 100%;
-  height: 200px;
+  padding: 16px;
   overflow: hidden;
 }
+.product-row:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
 
-.product-image img {
+/* 左：商品图片（横向行内小图） */
+.product-row .product-image {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.product-row .product-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.product-row .time-badge {
+  top: 6px;
+  right: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.product-row .badge-icon {
+  font-size: 11px;
 }
 
 /* 时间标签样式 */
@@ -1113,7 +1456,11 @@ onUnmounted(() => {
 }
 
 .product-info {
-  padding: 20px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .product-name {
@@ -1126,7 +1473,7 @@ onUnmounted(() => {
 .description-container {
   height: 3.6em; /* 固定3行高度 */
   overflow: hidden;
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   position: relative;
   cursor: pointer;
   border-radius: 4px;
@@ -1314,7 +1661,48 @@ onUnmounted(() => {
 }
 
 .product-actions {
-  margin-top: 16px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  min-width: 180px;
+  gap: 10px;
+}
+
+/* 横向行右侧操作区 */
+.row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.row-price {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.row-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.row-buy-btn { width: 100%; }
+.row-cart-btn { width: 100%; }
+.row-cart-btn :deep(span) { display: inline-flex; align-items: center; gap: 4px; }
+
+/* 自动发放礼包行内提示 */
+.auto-gift-notice-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  margin-top: 4px;
 }
 
 .price-buy-button {
@@ -1350,6 +1738,249 @@ onUnmounted(() => {
 .button-text {
   font-weight: 600;
 }
+
+/* ========== 购物车抽屉 ========== */
+.cart-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+}
+.cart-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 90vw;
+  background: var(--surface-container-low, #fff);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+}
+.cart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.cart-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--on-surface);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cart-header-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-surface-variant);
+}
+.cart-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--on-surface-variant);
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.cart-close:hover { background: rgba(0, 0, 0, 0.06); }
+
+.cart-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--on-surface-variant);
+  padding: 40px;
+  text-align: center;
+}
+.cart-empty-icon { font-size: 56px; opacity: 0.4; }
+.cart-empty p { margin: 0; font-size: 16px; color: var(--on-surface); }
+.cart-empty span { font-size: 13px; }
+
+.cart-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px;
+}
+.cart-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.cart-item-img {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.cart-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.cart-item-info h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cart-item-price {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.cart-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.qty-control {
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.qty-control button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--surface-container, #f5f5f5);
+  color: var(--on-surface);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.qty-control button:hover:not(:disabled) { background: rgba(127, 230, 219, 0.2); }
+.qty-control button:disabled { opacity: 0.4; cursor: not-allowed; }
+.qty-value {
+  min-width: 32px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+.cart-item-remove {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--error, #e76f51);
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.cart-item-remove:hover { background: rgba(231, 111, 81, 0.12); }
+
+.cart-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--surface-container, #fafafa);
+}
+.cart-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.cart-total-label { font-size: 15px; color: var(--on-surface-variant); }
+.cart-total-price {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.price-plus { margin: 0 2px; color: var(--on-surface-variant); }
+
+/* 余额显示 */
+.cart-balance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.cart-balance-label { color: var(--on-surface-variant); }
+.cart-balance-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+.cart-balance-row.insufficient .cart-balance-value { color: var(--error, #e76f51); }
+
+/* 余额不足提示 */
+.cart-balance-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(231, 111, 81, 0.1);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--error, #e76f51);
+}
+.cart-recharge-link {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-left: 2px;
+}
+
+/* 抽屉底部角色选择 */
+.cart-character-row {
+  margin: 10px 0 8px;
+}
+.cart-character-select { width: 100%; }
+.cart-character-empty {
+  font-size: 12px;
+  color: var(--error, #e76f51);
+  margin-bottom: 8px;
+  text-align: center;
+}
+.checkout-btn { width: 100%; }
+
+/* 抽屉过渡动画 */
+.cart-fade-enter-active, .cart-fade-leave-active { transition: opacity 0.25s; }
+.cart-fade-enter-from, .cart-fade-leave-to { opacity: 0; }
+.cart-slide-enter-active, .cart-slide-leave-active { transition: transform 0.3s ease; }
+.cart-slide-enter-from, .cart-slide-leave-to { transform: translateX(100%); }
+
+/* 结算弹窗内容 */
+.checkout-modal-content { padding: 4px 0; }
+.checkout-summary { margin: 0 0 16px; font-size: 14px; color: var(--on-surface-variant); }
 
 .auto-gift-notice {
   display: flex;
@@ -1689,40 +2320,46 @@ onUnmounted(() => {
   }
   
   /* 商品网格移动端优化 */
-  .products-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .products-list {
+    gap: 10px;
+  }
+
+  .product-row {
     gap: 12px;
-  }
-
-  .product-card {
-    border-radius: 8px;
-  }
-
-  .product-image {
-    height: 120px;
-  }
-  
-  /* 移动端时间标签适配 */
-  .time-badge {
-    top: 8px;
-    right: 8px;
-    padding: 4px 8px;
-    font-size: 11px;
-    gap: 4px;
-  }
-  
-  .badge-icon {
-    font-size: 12px;
-  }
-
-  .product-info {
     padding: 12px;
   }
 
-  .product-name {
-    font-size: 14px;
-    margin-bottom: 6px;
+  .product-row .product-image {
+    width: 84px;
+    height: 84px;
   }
+
+  /* 移动端时间标签适配 */
+  .time-badge {
+    top: 6px;
+    right: 6px;
+    padding: 3px 6px;
+    font-size: 10px;
+    gap: 3px;
+  }
+
+  .badge-icon {
+    font-size: 11px;
+  }
+
+  .product-info {
+    padding: 0;
+  }
+
+  .product-name {
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+
+  .product-actions {
+    min-width: 140px;
+  }
+  .row-price { font-size: 16px; }
 
   .description-container {
     height: 2.4em;
@@ -1769,13 +2406,17 @@ onUnmounted(() => {
   }
 
   .product-actions {
-    margin-top: 12px;
+    min-width: 130px;
   }
 
   .product-actions :deep(.btn) {
     height: 36px;
     font-size: 13px;
   }
+  .row-buttons {
+    gap: 6px;
+  }
+  .row-buy-btn, .row-cart-btn { font-size: 13px; }
   
   .product-summary {
     flex-direction: column;
@@ -1855,48 +2496,62 @@ onUnmounted(() => {
     border-radius: 16px;
   }
 
-  /* 商品网格更紧凑 */
-  .products-grid {
+  /* 超小屏：保持横向行紧凑布局，缩小图片和操作区 */
+  .products-list {
     gap: 8px;
   }
 
-  .product-card {
-    border-radius: 6px;
+  .product-row {
+    gap: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    align-items: flex-start;
   }
 
-  .product-image {
-    height: 100px;
+  .product-row .product-image {
+    width: 64px;
+    height: 64px;
+    border-radius: 6px;
+    align-self: center;
+    flex-shrink: 0;
   }
-  
+
   /* 小屏幕时间标签适配 */
   .time-badge {
-    top: 6px;
-    right: 6px;
-    padding: 3px 6px;
-    font-size: 10px;
-    gap: 3px;
+    top: 4px;
+    right: 4px;
+    padding: 2px 5px;
+    font-size: 9px;
+    gap: 2px;
   }
-  
+
   .badge-icon {
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .product-info {
-    padding: 10px;
+    padding: 0;
+    min-width: 0;
+    flex: 1;
   }
 
   .product-name {
-    font-size: 13px;
+    font-size: 14px;
     margin-bottom: 4px;
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
   .description-container {
-    height: 2.2em;
+    height: 3.2em;
     margin-bottom: 6px;
   }
 
   .product-description {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .current-price {
@@ -1913,12 +2568,25 @@ onUnmounted(() => {
   }
 
   .product-actions {
-    margin-top: 8px;
+    min-width: 84px;
+    gap: 4px;
   }
 
   .product-actions :deep(.btn) {
-    height: 32px;
-    font-size: 12px;
+    height: 28px;
+    font-size: 11px;
+    padding: 0 6px;
+    line-height: 1;
+  }
+  .row-price { font-size: 13px; margin-bottom: 2px; }
+  /* 超小屏两个按钮上下排列，给中间商品信息多留空间 */
+  .row-buttons { flex-direction: column; gap: 5px; }
+  .row-buy-btn, .row-cart-btn { width: 100%; }
+  .row-cart-btn :deep(span) { gap: 3px; font-size: 11px; justify-content: center; }
+
+  /* 超小屏购物车抽屉全宽 */
+  .cart-drawer {
+    width: 100vw;
   }
   
   /* 超小屏幕警告提示进一步优化 */
