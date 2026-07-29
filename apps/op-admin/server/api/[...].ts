@@ -1277,6 +1277,18 @@ router.post('/gm/ban', adminWrap(GMCtrl.banPlayer, 'GM封号'));
 router.post('/gm/unban', adminWrap(GMCtrl.unbanPlayer, 'GM解封'));
 
 /**
+ * 禁言
+ * @route POST /api/gm/mute
+ */
+router.post('/gm/mute', adminWrap(GMCtrl.mutePlayer, 'GM禁言'));
+
+/**
+ * 解禁言
+ * @route POST /api/gm/unmute
+ */
+router.post('/gm/unmute', adminWrap(GMCtrl.unmutePlayer, 'GM解禁言'));
+
+/**
  * 发放物资
  * @route POST /api/gm/send-items
  */

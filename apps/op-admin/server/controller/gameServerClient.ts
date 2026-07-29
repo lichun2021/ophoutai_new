@@ -55,6 +55,22 @@ export interface UnbanPlayerParams {
   platform: Platform;
 }
 
+export interface MutePlayerParams {
+  openId: string;
+  serverId: string;
+  platform: Platform;
+  /** 禁言时长（秒），0=永禁 */
+  duration: number;
+  /** 禁言原因 */
+  reason: string;
+}
+
+export interface UnmutePlayerParams {
+  openId: string;
+  serverId: string;
+  platform: Platform;
+}
+
 export interface SendItemMailParams {
   openId: string;
   serverId: string;
@@ -130,6 +146,8 @@ export interface DeletePlayerParams {
 const REST_ENDPOINTS = {
   banPlayer: '/open_api/player/ban',
   unbanPlayer: '/open_api/player/unban',
+  mutePlayer: '/open_api/player/mute',
+  unmutePlayer: '/open_api/player/unmute',
   sendItemMail: '/open_api/mail/send-with-items',
   sendTextMail: '/open_api/mail/send-text',
   platformTransfer: '/open_api/player/platform-transfer',
@@ -144,6 +162,9 @@ const REST_ENDPOINTS = {
 const IDIP_ENDPOINTS = {
   banPlayer: '/script/idip/4147',
   unbanPlayer: '/script/idip/4107',
+  // IDIP 协议无禁言端点，禁言仅走 REST 协议
+  mutePlayer: '',
+  unmutePlayer: '',
   sendItemMail: '/script/idip/4283',
   sendTextMail: '/script/idip/4321',
   platformTransfer: '/script/idip/4493',
@@ -352,6 +373,30 @@ export class GameServerClient {
       };
 
     return this.request('unbanPlayer', body);
+  }
+
+  /** 禁言（仅 REST 协议支持，IDIP 协议无此接口） */
+  async mutePlayer(params: MutePlayerParams): Promise<GameServerResponse> {
+    const body = {
+      openId: params.openId,
+      serverId: params.serverId,
+      platform: params.platform,
+      duration: params.duration,
+      reason: params.reason,
+    };
+
+    return this.request('mutePlayer', body);
+  }
+
+  /** 解禁言（仅 REST 协议支持，IDIP 协议无此接口） */
+  async unmutePlayer(params: UnmutePlayerParams): Promise<GameServerResponse> {
+    const body = {
+      openId: params.openId,
+      serverId: params.serverId,
+      platform: params.platform,
+    };
+
+    return this.request('unmutePlayer', body);
   }
 
   /** 发物资邮件（带物品附件） */

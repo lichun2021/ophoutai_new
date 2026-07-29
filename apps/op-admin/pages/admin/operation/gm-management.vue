@@ -246,6 +246,36 @@
       </UCard>
     </UModal>
 
+    <!-- 禁言对话框 -->
+    <UModal v-model="muteModal.show">
+      <UCard>
+        <template #header><h3 class="text-base font-semibold">禁言操作</h3></template>
+        <div class="space-y-4">
+          <div class="p-3 bg-gray-50 rounded-lg text-sm grid grid-cols-2 gap-2">
+            <div>角色名: {{ muteModal.row?.character_name }}</div>
+            <div>UUID: {{ muteModal.row?.uuid?.slice(0,12) }}...</div>
+            <div>小号ID: {{ muteModal.row?.subuser_id }}</div>
+            <div>服务器: {{ resolveServerName(muteModal.row?.server_id) }}</div>
+          </div>
+          <UFormGroup label="禁言时长" required>
+            <USelectMenu v-model="muteModal.duration" :options="muteDurations" value-attribute="value" option-attribute="label" placeholder="选择时长" />
+          </UFormGroup>
+          <UFormGroup label="平台" required>
+            <USelectMenu v-model="muteModal.platform" :options="platformOptions" value-attribute="value" option-attribute="label" />
+          </UFormGroup>
+          <UFormGroup label="禁言原因" required>
+            <UTextarea v-model="muteModal.reason" placeholder="请输入禁言原因" :rows="3" />
+          </UFormGroup>
+        </div>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton variant="ghost" @click="muteModal.show=false">取消</UButton>
+            <UButton color="orange" @click="confirmMute" :loading="muteModal.loading" :disabled="!muteModal.duration||!muteModal.reason">确认禁言</UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
+
     <!-- 单个发邮件对话框 -->
     <UModal v-model="mailModal.show" :ui="{width:'sm:max-w-2xl'}" :prevent-close="mailModal.loading">
       <UCard>
@@ -657,7 +687,10 @@ const platformOptions = [
 ];
 const getActions = (row) => [
   [{ label:'发邮件（含道具）', icon:'i-heroicons-envelope', click:()=>openMail(row) }],
-  [{ label:'封号', icon:'i-heroicons-lock-closed', click:()=>openBan(row) }]
+  [{ label:'封号', icon:'i-heroicons-lock-closed', click:()=>openBan(row) }],
+  [{ label:'解封', icon:'i-heroicons-lock-open', click:()=>openUnban(row) }],
+  [{ label:'禁言', icon:'i-heroicons-chat-bubble-left-ellipsis', click:()=>openMute(row) }],
+  [{ label:'解禁言', icon:'i-heroicons-chat-bubble-left-right', click:()=>openUnmute(row) }]
 ];
 // 按 server_id 找到对应区服的 bname 用于 GM 接口
 const getBname = (row) => row.server_id ? String(row.server_id) : '';
@@ -685,6 +718,60 @@ const confirmBan = async () => {
   } catch(e) {
     toast.add({ title:'封号失败', description:e.message, color:'red' });
   } finally { banModal.value.loading = false; }
+};
+
+// ===== 解封 =====
+const openUnban = async (row) => {
+  if (!confirm(`确认解封角色「${row.character_name}」吗？`)) return;
+  try {
+    await $fetch('/api/gm/unban', {
+      method:'POST', headers:authH(),
+      body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform:row.platform || 'android' }
+    });
+    toast.add({ title:'解封成功', description:`角色 ${row.character_name} 已解封`, color:'green' });
+  } catch(e) {
+    toast.add({ title:'解封失败', description:e.message, color:'red' });
+  }
+};
+
+// ===== 禁言 =====
+const muteModal = ref({ show:false, loading:false, row:null, duration:'', platform:'android', reason:'' });
+// 禁言时长：0 = 永久禁言（与文档一致）
+const muteDurations = [
+  { label:'10分钟', value:600 }, { label:'1小时', value:3600 },
+  { label:'6小时', value:21600 }, { label:'1天', value:86400 },
+  { label:'7天', value:604800 }, { label:'30天', value:2592000 },
+  { label:'永久', value:0 }
+];
+const openMute = (row) => { muteModal.value = { show:true, loading:false, row, duration:'', platform:'android', reason:'' }; };
+const confirmMute = async () => {
+  const { row, duration, platform, reason } = muteModal.value;
+  if (!row) return;
+  muteModal.value.loading = true;
+  try {
+    await $fetch('/api/gm/mute', {
+      method:'POST', headers:authH(),
+      body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform, duration, reason }
+    });
+    toast.add({ title:'禁言成功', description:`角色 ${row.character_name} 已禁言`, color:'green' });
+    muteModal.value.show = false;
+  } catch(e) {
+    toast.add({ title:'禁言失败', description:e.message, color:'red' });
+  } finally { muteModal.value.loading = false; }
+};
+
+// ===== 解禁言 =====
+const openUnmute = async (row) => {
+  if (!confirm(`确认解禁言角色「${row.character_name}」吗？`)) return;
+  try {
+    await $fetch('/api/gm/unmute', {
+      method:'POST', headers:authH(),
+      body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform:row.platform || 'android' }
+    });
+    toast.add({ title:'解禁言成功', description:`角色 ${row.character_name} 已解禁言`, color:'green' });
+  } catch(e) {
+    toast.add({ title:'解禁言失败', description:e.message, color:'red' });
+  }
 };
 
 // ===== 单个发邮件 =====

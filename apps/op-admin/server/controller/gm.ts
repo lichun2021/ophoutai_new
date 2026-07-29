@@ -6,6 +6,7 @@ import type { RowDataPacket } from 'mysql2';
 
 import { listActive, getByIdentifier as getGameServerByIdentifier, getByWorldId } from '../model/gameServers';
 import { insertGmOperationLog } from '../model/gmOperationLogs';
+import { upsertMuteStatus, removeMuteStatus } from '../model/playerMuteStatus';
 
 // 根据区服动态创建 GameServerClient（和支付一样，通过 server_id 查找 webhost）
 const createClientForServer = async (identifier: string): Promise<GameServerClient> => {
@@ -359,6 +360,183 @@ export const unbanPlayer = async (evt: H3Event) => {
     return {
       success: false,
       message: error.message || '解封失败'
+    };
+  }
+};
+
+// 禁言
+export const mutePlayer = async (evt: H3Event) => {
+  try {
+    const body = await readBody(evt);
+    const { server, playerId, openId, platform, duration, reason } = body;
+    const admin = await requireGMPermission(evt);
+
+    if (!server || !playerId || !openId || !duration || !reason) {
+      return {
+        success: false,
+        message: '参数不完整'
+      };
+    }
+
+    // 获取serverId（服务器ID）
+    const serverId = server.replace('game_', '');
+
+    try {
+      const plat = parsePlatform(platform);
+
+      // 调用游戏服接口禁言
+      const client = await createClientForServer(server);
+      const requestPayload = {
+        openId,
+        serverId,
+        platform: plat,
+        duration: Number(duration),
+        reason
+      };
+      await client.mutePlayer(requestPayload);
+
+      // 写入平台库禁言状态（mute_until=0 表示永禁）
+      const muteUntil = Number(duration) === 0 ? 0 : Date.now() + Number(duration) * 1000;
+      await upsertMuteStatus({
+        server,
+        player_id: String(playerId),
+        open_id: String(openId),
+        platform: String(platform ?? ''),
+        mute_until: muteUntil,
+        reason,
+        muted_by: admin?.id ?? null,
+      });
+
+      console.log('[GM] Mute success:', { playerId, duration });
+      const playerName = await getPlayerName(server, playerId);
+      await insertGmOperationLog({
+        op_type: 'mute',
+        server,
+        player_id: String(playerId),
+        player_name: playerName || null,
+        open_id: String(openId),
+        platform: String(platform ?? ''),
+        admin_id: admin?.id ?? null,
+        admin_name: admin?.name ?? null,
+        request_params: requestPayload,
+        response_result: { message: 'ok' },
+        success: 1,
+        error_message: null
+      });
+      return {
+        success: true,
+        message: '禁言成功'
+      };
+    } catch (err: any) {
+      console.error('[GM] 禁言接口调用失败:', err);
+      const playerName = await getPlayerName(server, playerId);
+      await insertGmOperationLog({
+        op_type: 'mute',
+        server,
+        player_id: String(playerId),
+        player_name: playerName || null,
+        open_id: String(openId),
+        platform: String(platform ?? ''),
+        admin_id: admin?.id ?? null,
+        admin_name: admin?.name ?? null,
+        request_params: { serverId, openId, duration, reason },
+        response_result: null,
+        success: 0,
+        error_message: err?.message || '禁言失败'
+      });
+      return {
+        success: false,
+        message: err?.message || '禁言失败'
+      };
+    }
+  } catch (error: any) {
+    console.error('[GM] 禁言失败:', error);
+    return {
+      success: false,
+      message: error.message || '禁言失败'
+    };
+  }
+};
+
+// 解禁言
+export const unmutePlayer = async (evt: H3Event) => {
+  try {
+    const body = await readBody(evt);
+    const { server, playerId, openId, platform } = body;
+    const admin = await requireGMPermission(evt);
+
+    if (!server || !playerId || !openId) {
+      return {
+        success: false,
+        message: '参数不完整'
+      };
+    }
+
+    // 获取serverId（服务器ID）
+    const serverId = server.replace('game_', '');
+
+    try {
+      const plat = parsePlatform(platform);
+
+      // 调用游戏服接口解禁言
+      const client = await createClientForServer(server);
+      const requestPayload = {
+        openId,
+        serverId,
+        platform: plat
+      };
+      await client.unmutePlayer(requestPayload);
+
+      // 删除平台库禁言状态
+      await removeMuteStatus(server, String(playerId));
+
+      console.log('[GM] Unmute success:', { server, playerId });
+      const playerName = await getPlayerName(server, playerId);
+      await insertGmOperationLog({
+        op_type: 'unmute',
+        server,
+        player_id: String(playerId),
+        player_name: playerName || null,
+        open_id: String(openId),
+        platform: String(platform ?? ''),
+        admin_id: admin?.id ?? null,
+        admin_name: admin?.name ?? null,
+        request_params: requestPayload,
+        response_result: { message: 'ok' },
+        success: 1,
+        error_message: null
+      });
+      return {
+        success: true,
+        message: '解禁言成功'
+      };
+    } catch (err: any) {
+      console.error('[GM] 解禁言接口调用失败:', err);
+      const playerName = await getPlayerName(server, playerId);
+      await insertGmOperationLog({
+        op_type: 'unmute',
+        server,
+        player_id: String(playerId),
+        player_name: playerName || null,
+        open_id: String(openId),
+        platform: String(platform ?? ''),
+        admin_id: admin?.id ?? null,
+        admin_name: admin?.name ?? null,
+        request_params: { serverId, openId },
+        response_result: null,
+        success: 0,
+        error_message: err?.message || '解禁言失败'
+      });
+      return {
+        success: false,
+        message: err?.message || '解禁言失败'
+      };
+    }
+  } catch (error: any) {
+    console.error('[GM] 解禁言失败:', error);
+    return {
+      success: false,
+      message: error.message || '解禁言失败'
     };
   }
 };
