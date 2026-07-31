@@ -711,7 +711,7 @@ const confirmBan = async () => {
   try {
     await $fetch('/api/gm/ban', {
       method:'POST', headers:authH(),
-      body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform, duration, reason }
+      body:{ server:getBname(row), playerId:row.uuid, openId:row.uuid, platform, duration, reason }
     });
     toast.add({ title:'封号成功', description:`角色 ${row.character_name} 已封号`, color:'green' });
     banModal.value.show = false;
@@ -726,7 +726,7 @@ const openUnban = async (row) => {
   try {
     await $fetch('/api/gm/unban', {
       method:'POST', headers:authH(),
-      body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform:row.platform || 'android' }
+      body:{ server:getBname(row), playerId:row.uuid, openId:row.uuid, platform:row.platform || 'android' }
     });
     toast.add({ title:'解封成功', description:`角色 ${row.character_name} 已解封`, color:'green' });
   } catch(e) {
@@ -751,7 +751,7 @@ const confirmMute = async () => {
   try {
     await $fetch('/api/gm/mute', {
       method:'POST', headers:authH(),
-      body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform, duration, reason }
+      body:{ server:getBname(row), playerId:row.uuid, openId:row.uuid, platform, duration, reason }
     });
     toast.add({ title:'禁言成功', description:`角色 ${row.character_name} 已禁言`, color:'green' });
     muteModal.value.show = false;
@@ -766,7 +766,7 @@ const openUnmute = async (row) => {
   try {
     await $fetch('/api/gm/unmute', {
       method:'POST', headers:authH(),
-      body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform:row.platform || 'android' }
+      body:{ server:getBname(row), playerId:row.uuid, openId:row.uuid, platform:row.platform || 'android' }
     });
     toast.add({ title:'解禁言成功', description:`角色 ${row.character_name} 已解禁言`, color:'green' });
   } catch(e) {
@@ -789,10 +789,10 @@ const confirmSendMail = async () => {
   try {
     if (validItems.length > 0) {
       await $fetch('/api/gm/send-items', { method:'POST', headers:authH(),
-        body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform, roleId:row.uuid, title, content, items:validItems } });
+        body:{ server:getBname(row), playerId:row.uuid, openId:row.uuid, platform, roleId:row.uuid, title, content, items:validItems } });
     } else {
       await $fetch('/api/gm/send-mail', { method:'POST', headers:authH(),
-        body:{ server:getBname(row), playerId:row.uuid, openId:row.subuser_id, platform, roleId:row.uuid, title, content } });
+        body:{ server:getBname(row), playerId:row.uuid, openId:row.uuid, platform, roleId:row.uuid, title, content } });
     }
     toast.add({ title:'发送成功', description:`已向角色 ${row.character_name} 发送邮件${validItems.length?`（含${validItems.length}种道具）`:''}`, color:'green' });
     mailModal.value.show = false;
@@ -819,7 +819,7 @@ const confirmBatchMail = async () => {
   for (const row of selectedRows.value) {
     const srv = getBname(row);
     if (!serverGroups.has(srv)) serverGroups.set(srv, []);
-    serverGroups.get(srv).push({ playerId:row.uuid, openId:row.subuser_id, roleId:row.uuid, platform });
+    serverGroups.get(srv).push({ playerId:row.uuid, openId:row.uuid, roleId:row.uuid, platform });
   }
 
   let totalSuccess = 0, totalFail = 0;
@@ -927,7 +927,7 @@ const confirmGlobalMail = async () => {
     let totalSuccess = 0, totalFail = 0;
     const errors = [];
     for (const batch of batches) {
-      const targets = batch.map(r => ({ playerId:r.uuid, openId:r.subuser_id, roleId:r.uuid, platform }));
+      const targets = batch.map(r => ({ playerId:r.uuid, openId:r.uuid, roleId:r.uuid, platform }));
       try {
         const res = await $fetch('/api/gm/send-items-batch', {
           method:'POST', headers:authH(),
