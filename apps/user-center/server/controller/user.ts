@@ -1,5 +1,5 @@
 import * as UserModel from '../model/user';
-import {H3Event, getHeaders, getQuery} from 'h3';
+import {H3Event, getHeaders, getQuery, setResponseStatus} from 'h3';
 import { User } from '../model/user';
 import * as AdminModel from '../model/admin';
 import * as ApisModel from '../model/apis';
@@ -13,6 +13,7 @@ import { getRedisCluster } from '../utils/redis-cluster';
 import * as PaymentModel from '../model/payment';
 import { sdkMessages } from '../utils/i18n';
 import { selectGameIpByAmount } from '../utils/gameIp';
+import { getClientIp, checkLoginLimits, recordLoginFailure, recordLoginSuccess } from '../utils/loginRateLimit';
 import { generateUserLoginUrl } from './payment';
 function getGameIp(amount?: number): string {
     const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
@@ -873,9 +874,10 @@ export const sdkLogin = async(evt: H3Event) => {
         
         // 获取客户端信息
         const headers = getHeaders(evt);
-        const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+        // 使用统一的 IP 提取逻辑（ali-cdn-real-ip 优先），限流与日志共用同一准确 IP
+        const ipAddress = getClientIp(headers as Record<string, string>);
         const userAgent = (headers['user-agent'] as string) || '';
-        
+
         if (!username || !password) {
             console.log("SDK登录失败: 用户名或密码为空");
             return {
@@ -888,7 +890,25 @@ export const sdkLogin = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
+        // 登录前预检：IP 失败锁 / 账号失败锁
+        // 命中任一锁返回 HTTP 429 + 剩余等待秒数
+        const limitResult = await checkLoginLimits(ipAddress, username);
+        if (limitResult.locked) {
+            setResponseStatus(evt, 429);
+            console.warn(`SDK登录被限流: IP=${ipAddress}, 用户名=${username}, 剩余=${limitResult.retryAfter}s`);
+            return {
+                z: -1,
+                x: limitResult.message || '登录过于频繁，请稍后再试',
+                b: "",
+                c: "",
+                d: "",
+                sid: serverId || "",
+                e: Date.now().toString(),
+                retry_after: limitResult.retryAfter
+            };
+        }
+
         console.log("正在查询SDK用户:", username);
         
         // 通过用户名和密码查找用户
@@ -901,7 +921,7 @@ export const sdkLogin = async(evt: H3Event) => {
         
         if (user.length === 0) {
             console.log("SDK登录失败: 用户名或密码错误");
-            
+
             // 记录失败的登录尝试
             try {
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
@@ -917,7 +937,11 @@ export const sdkLogin = async(evt: H3Event) => {
             } catch (logError) {
                 console.error("记录SDK登录日志失败:", logError);
             }
-            
+
+            // 累加失败计数：IP（1 分钟 5 次）/ 账号（10 分钟 10 次），达阈值锁定 30 分钟
+            // 仅对“账号或密码错误”计失败，封号/系统异常不计
+            await recordLoginFailure(ipAddress, username);
+
             return {
                 z: -1,
                 x: sdkMessages.login.invalidCredentials(),
@@ -1020,6 +1044,10 @@ export const sdkLogin = async(evt: H3Event) => {
         };
         
         console.log("SDK登录返回数据:", response);
+
+        // 登录成功：清除该 IP / 账号的失败计数与失败锁（登录成功后不再限制同一 IP 重复登录）
+        await recordLoginSuccess(ipAddress, username);
+
         return response;
         
     } catch (e: any) {
