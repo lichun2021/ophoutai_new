@@ -7,6 +7,7 @@ import type { RowDataPacket } from 'mysql2';
 import { listActive, getByIdentifier as getGameServerByIdentifier, getByWorldId } from '../model/gameServers';
 import { insertGmOperationLog } from '../model/gmOperationLogs';
 import { upsertMuteStatus, removeMuteStatus } from '../model/playerMuteStatus';
+import { gameDbSql, checkGameDatabase } from '../db/gameDb';
 
 // 根据区服动态创建 GameServerClient（和支付一样，通过 server_id 查找 webhost）
 const createClientForServer = async (identifier: string): Promise<GameServerClient> => {
@@ -22,7 +23,7 @@ const createClientForServer = async (identifier: string): Promise<GameServerClie
   if (!webhost) {
     throw new Error(`未找到服务器配置：identifier="${identifier}"，请在"服务器列表"中配置该区服的 webhost 地址`);
   }
-  return createGameServerClient(webhost, 'rest', timeoutMs);
+  return createGameServerClient(webhost, timeoutMs);
 };
 
 // 解析平台字符串
@@ -244,8 +245,8 @@ export const banPlayer = async (evt: H3Event) => {
         success: true,
         message: '封号成功'
       };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
+    } catch (err: any) {
+      console.error('[GM] 封号接口调用失败:', err);
       const playerName = await getPlayerName(server, playerId);
       await insertGmOperationLog({
         op_type: 'ban',
@@ -259,9 +260,9 @@ export const banPlayer = async (evt: H3Event) => {
         request_params: { serverId, openId, duration, reason },
         response_result: null,
         success: 0,
-        error_message: idipError?.message || 'IDIP错误'
+        error_message: err?.message || '封号失败'
       });
-      // 即使IDIP失败，也尝试更新数据库
+      // 即使游戏服调用失败，也尝试更新本地数据库
       const forbidenTime = Date.now() + Number(duration) * 1000;
       await gameDbSql({
         query: 'UPDATE player SET forbidenTime = ? WHERE id = ?',
@@ -332,8 +333,8 @@ export const unbanPlayer = async (evt: H3Event) => {
       success: true,
       message: '解封成功'
     };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
+    } catch (err: any) {
+      console.error('[GM] 解封接口调用失败:', err);
       const playerName = await getPlayerName(server, playerId);
       await insertGmOperationLog({
         op_type: 'unban',
@@ -347,12 +348,12 @@ export const unbanPlayer = async (evt: H3Event) => {
         request_params: { serverId, openId },
         response_result: null,
         success: 0,
-        error_message: idipError?.message || 'IDIP错误'
+        error_message: err?.message || '解封失败'
       });
       
       return {
         success: false,
-        message: `解封失败: ${idipError?.message || 'IDIP错误'}`
+        message: `解封失败: ${err?.message || '解封失败'}`
       };
     }
   } catch (error: any) {
@@ -599,8 +600,8 @@ export const sendItems = async (evt: H3Event) => {
         success: true,
         message: '物资发放成功'
       };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
+    } catch (err: any) {
+      console.error('[GM] 发放物资接口调用失败:', err);
       const playerName = await getPlayerName(server, playerId);
       await insertGmOperationLog({
         op_type: 'send_items',
@@ -613,13 +614,13 @@ export const sendItems = async (evt: H3Event) => {
         request_params: { serverId, openId, roleId: roleId || playerId, title, content, items },
         response_result: null,
         success: 0,
-        error_message: idipError?.message || 'IDIP错误',
+        error_message: err?.message || '发放失败',
         admin_id: admin?.id ?? null,
         admin_name: admin?.name ?? null
       });
       return {
         success: false,
-        message: `发放失败: ${idipError.message}`
+        message: `发放失败: ${err?.message || '发放失败'}`
       };
     }
   } catch (error: any) {
@@ -680,8 +681,8 @@ export const rechargePlayer = async (evt: H3Event) => {
         success: true,
         message: `成功充值 ${diamond} 钻石`
       };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
+    } catch (err: any) {
+      console.error('[GM] GM充值接口调用失败:', err);
       const playerName = await getPlayerName(server, playerId);
       await insertGmOperationLog({
         op_type: 'recharge',
@@ -693,13 +694,13 @@ export const rechargePlayer = async (evt: H3Event) => {
         request_params: { serverId, openId, diamond: Number(diamond) },
         response_result: null,
         success: 0,
-        error_message: idipError?.message || 'IDIP错误',
+        error_message: err?.message || '充值失败',
         admin_id: admin?.id ?? null,
         admin_name: admin?.name ?? null
       });
       return {
         success: false,
-        message: `充值失败: ${idipError.message}`
+        message: `充值失败: ${err?.message || '充值失败'}`
       };
     }
   } catch (error: any) {
@@ -763,8 +764,8 @@ export const sendMail = async (evt: H3Event) => {
         success: true,
         message: '邮件发送成功'
       };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
+    } catch (err: any) {
+      console.error('[GM] 发送邮件接口调用失败:', err);
       const playerName = await getPlayerName(server, playerId);
       await insertGmOperationLog({
         op_type: 'send_mail',
@@ -777,13 +778,13 @@ export const sendMail = async (evt: H3Event) => {
         request_params: { serverId, openId, roleId: roleId || playerId, title, content },
         response_result: null,
         success: 0,
-        error_message: idipError?.message || 'IDIP错误',
+        error_message: err?.message || '发送失败',
         admin_id: admin?.id ?? null,
         admin_name: admin?.name ?? null
       });
       return {
         success: false,
-        message: `发送失败: ${idipError.message}`
+        message: `发送失败: ${err?.message || '发送失败'}`
       };
     }
   } catch (error: any) {
@@ -867,7 +868,7 @@ export const checkTargetPuid = async (evt: H3Event) => {
   }
 };
 
-// 迁移平台（使用IDIP接口）
+// 迁移平台（安卓↔iOS）
 export const migratePlatform = async (evt: H3Event) => {
   try {
     const body = await readBody(evt);
@@ -944,8 +945,8 @@ export const migratePlatform = async (evt: H3Event) => {
         success: true,
         message: `平台迁移成功：${platform} → ${targetPlatform}`
       };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP调用失败:', idipError);
+    } catch (err: any) {
+      console.error('[GM] 平台迁移接口调用失败:', err);
       const playerName = await getPlayerName(server, playerId || openId);
       await insertGmOperationLog({
         op_type: 'migrate_platform',
@@ -958,13 +959,13 @@ export const migratePlatform = async (evt: H3Event) => {
         request_params: { serverId, areaId, openId, currentPlatform: platform, targetPlatform },
         response_result: null,
         success: 0,
-        error_message: idipError?.message || 'IDIP调用失败',
+        error_message: err?.message || '平台迁移失败',
         admin_id: admin?.id ?? null,
         admin_name: admin?.name ?? null
       });
       return {
         success: false,
-        message: idipError.message || '平台迁移失败'
+        message: err?.message || '平台迁移失败'
       };
     }
   } catch (error: any) {
@@ -1054,7 +1055,7 @@ export const sendItemsBatch = async (evt: H3Event) => {
         });
 
         results.push({ playerId, openId, success: true });
-      } catch (idipError: any) {
+      } catch (err: any) {
         const playerName = await getPlayerName(server, playerId);
         await insertGmOperationLog({
           op_type: 'send_items',
@@ -1067,12 +1068,12 @@ export const sendItemsBatch = async (evt: H3Event) => {
           request_params: requestPayload,
           response_result: null,
           success: 0,
-          error_message: idipError?.message || 'IDIP错误',
+          error_message: err?.message || '发放失败',
           admin_id: admin?.id ?? null,
           admin_name: admin?.name ?? null
         });
 
-        results.push({ playerId, openId, success: false, message: idipError?.message || 'IDIP错误' });
+        results.push({ playerId, openId, success: false, message: err?.message || '发放失败' });
       }
 
       // 0.5 秒间隔（避免并发冲击后端/脚本服务）
@@ -1154,7 +1155,7 @@ export const sendMailBatch = async (evt: H3Event) => {
         });
 
         results.push({ playerId, openId, success: true });
-      } catch (idipError: any) {
+      } catch (err: any) {
         const playerName = await getPlayerName(server, playerId);
         await insertGmOperationLog({
           op_type: 'send_mail',
@@ -1167,12 +1168,12 @@ export const sendMailBatch = async (evt: H3Event) => {
           request_params: requestPayload,
           response_result: null,
           success: 0,
-          error_message: idipError?.message || 'IDIP错误',
+          error_message: err?.message || '发送失败',
           admin_id: admin?.id ?? null,
           admin_name: admin?.name ?? null
         });
 
-        results.push({ playerId, openId, success: false, message: idipError?.message || 'IDIP错误' });
+        results.push({ playerId, openId, success: false, message: err?.message || '发送失败' });
       }
 
       if (i < deduped.length - 1) {

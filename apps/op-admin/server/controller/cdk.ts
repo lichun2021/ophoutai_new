@@ -51,7 +51,7 @@ const createClientForServer = async (identifier: string) => {
   const cfg = await getGameServerByIdentifier(identifier).catch(() => null);
   const webhost = (cfg?.webhost || process.env.GM_BASE_URL || '').replace(/\/+$/, '');
   const timeoutMs = parseInt(process.env.GM_TIMEOUT_MS || '10000');
-  return createGameServerClient(webhost, 'rest', timeoutMs);
+  return createGameServerClient(webhost, timeoutMs);
 };
 
 // 根据 server 参数解析 GameServers 配置

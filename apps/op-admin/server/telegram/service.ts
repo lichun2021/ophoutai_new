@@ -258,7 +258,7 @@ export const getOnlineStats = async () => {
             const webhost = (s.webhost || '').replace(/\/$/, '');
 
             try {
-                const client = createGameServerClient(webhost, 'rest', 3000);
+                const client = createGameServerClient(webhost, 3000);
                 const resp = await client.getServerStatus({ serverId: String(worldId), areaId });
                 const data = resp.data || {} as any;
                 return {
