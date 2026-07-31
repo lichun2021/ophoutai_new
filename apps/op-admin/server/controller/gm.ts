@@ -202,30 +202,63 @@ export const banPlayer = async (evt: H3Event) => {
 
     // 获取serverId（服务器ID）
     const serverId = server.replace('game_', '');
-    
-    try {
-      const plat = parsePlatform(platform);
-      
-      // 调用游戏服接口封号
-      const client = await createClientForServer(server);
-      const requestPayload = {
-        openId,
-        serverId,
-        platform: plat,
-        duration: Number(duration),
-        reason
-      };
-      await client.banPlayer(requestPayload);
+    const plat = parsePlatform(platform);
 
-      // 更新数据库中的封号时间
-      const forbidenTime = Date.now() + Number(duration) * 1000;
+    // 调用游戏服接口封号（主操作）
+    const client = await createClientForServer(server);
+    const requestPayload = {
+      openId,
+      serverId,
+      platform: plat,
+      duration: Number(duration),
+      reason
+    };
+
+    try {
+      await client.banPlayer(requestPayload);
+    } catch (gameErr: any) {
+      // 游戏服封号失败：记录失败日志并返回失败（主操作失败）
+      console.error('[GM] 封号游戏服调用失败:', gameErr);
+      try {
+        const playerName = await getPlayerName(server, playerId);
+        await insertGmOperationLog({
+          op_type: 'ban',
+          server,
+          player_id: String(playerId),
+          player_name: playerName || null,
+          open_id: String(openId),
+          platform: String(platform ?? ''),
+          admin_id: admin?.id ?? null,
+          admin_name: admin?.name ?? null,
+          request_params: requestPayload,
+          response_result: null,
+          success: 0,
+          error_message: gameErr?.message || '封号失败'
+        });
+      } catch (logErr) {
+        console.error('[GM] 封号失败日志记录异常:', logErr);
+      }
+      return {
+        success: false,
+        message: `封号失败: ${gameErr?.message || '游戏服调用失败'}`
+      };
+    }
+
+    // 游戏服封号成功 —— 更新本地库 forbidenTime（辅助操作，失败不影响封号成功结果）
+    const forbidenTime = Date.now() + Number(duration) * 1000;
+    try {
       await gameDbSql({
         query: 'UPDATE player SET forbidenTime = ? WHERE id = ?',
         values: [forbidenTime, playerId],
         database: server
       });
+    } catch (dbErr: any) {
+      // 本地库更新失败不影响封号成功结果，仅记日志
+      console.error('[GM] 封号成功但本地库 forbidenTime 更新失败:', dbErr?.message || dbErr);
+    }
 
-      console.log('[GM] Ban success:', { playerId, duration });
+    console.log('[GM] Ban success:', { playerId, duration });
+    try {
       const playerName = await getPlayerName(server, playerId);
       await insertGmOperationLog({
         op_type: 'ban',
@@ -241,40 +274,13 @@ export const banPlayer = async (evt: H3Event) => {
         success: 1,
         error_message: null
       });
-      return {
-        success: true,
-        message: '封号成功'
-      };
-    } catch (err: any) {
-      console.error('[GM] 封号接口调用失败:', err);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'ban',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        platform: String(platform ?? ''),
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null,
-        request_params: { serverId, openId, duration, reason },
-        response_result: null,
-        success: 0,
-        error_message: err?.message || '封号失败'
-      });
-      // 即使游戏服调用失败，也尝试更新本地数据库
-      const forbidenTime = Date.now() + Number(duration) * 1000;
-      await gameDbSql({
-        query: 'UPDATE player SET forbidenTime = ? WHERE id = ?',
-        values: [forbidenTime, playerId],
-        database: server
-      });
-      
-      return {
-        success: true,
-        message: '封号成功（数据库已更新）'
-      };
+    } catch (logErr: any) {
+      console.error('[GM] 封号成功日志记录异常:', logErr?.message || logErr);
     }
+    return {
+      success: true,
+      message: '封号成功'
+    };
   } catch (error: any) {
     console.error('[GM] 封号失败:', error);
     return {

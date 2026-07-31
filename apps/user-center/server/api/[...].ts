@@ -346,7 +346,8 @@ router.post('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaym
 
 router.get('/client/benefits/monthly-card/status', withLogging(BenefitsCtrl.getMonthlyCardStatus, '权益-月卡状态'));
 router.post('/client/benefits/monthly-card/claim', withLogging(BenefitsCtrl.claimMonthlyCard, '权益-领取月卡'));
-router.get('/client/benefits/checkin/status', withLogging(BenefitsCtrl.getCheckInStatus, '权益-签到状态'));
-router.post('/client/benefits/checkin', withLogging(BenefitsCtrl.doCheckIn, '权益-每日签到'));
+// 签到功能已屏蔽
+// router.get('/client/benefits/checkin/status', withLogging(BenefitsCtrl.getCheckInStatus, '权益-签到状态'));
+// router.post('/client/benefits/checkin', withLogging(BenefitsCtrl.doCheckIn, '权益-每日签到'));
 
 export default useBase('/api', router.handler);

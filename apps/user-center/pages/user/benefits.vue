@@ -115,73 +115,6 @@
       </template>
     </div>
 
-    <!-- ====== 签到区块 ====== -->
-    <div class="section-card">
-      <div class="section-head">
-        <span class="section-icon">📅</span>
-        <h3 class="section-title">每日签到</h3>
-        <span class="section-badge" :class="{ active: checkInStatus.todayChecked }">
-          {{ checkInStatus.todayChecked ? '今日已签' : '未签到' }}
-        </span>
-      </div>
-
-      <!-- 签到日历 -->
-      <div class="checkin-calendar">
-        <div
-          v-for="day in checkInMonthDays"
-          :key="day.date"
-          class="ci-day"
-          :class="{
-            checked: checkInStatus.checkedDates.includes(day.date),
-            today: day.date === checkInStatus.today,
-            future: day.isFuture
-          }"
-        >
-          <span class="ci-day-num">{{ day.num }}</span>
-          <span class="ci-check-mark" v-if="checkInStatus.checkedDates.includes(day.date)">✓</span>
-        </div>
-      </div>
-
-      <!-- 里程碑进度 -->
-      <div class="milestones">
-        <div class="ms-title">累计签到奖励</div>
-        <div class="ms-list">
-          <div
-            v-for="ms in checkInStatus.milestones"
-            :key="ms.days"
-            class="ms-item"
-            :class="{
-              achieved: checkInStatus.cumulativeDays >= ms.days,
-              next: isNextMilestone(ms)
-            }"
-          >
-            <div class="ms-days">{{ ms.days }}天</div>
-            <div class="ms-check">{{ checkInStatus.cumulativeDays >= ms.days ? '✓' : '+' }}{{ ms.bonus }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 签到按钮 -->
-      <div class="checkin-action">
-        <div class="checkin-info">
-          <span>本月已签 <strong>{{ checkInStatus.cumulativeDays }}</strong> 天</span>
-          <span v-if="checkInStatus.nextMilestone" class="next-hint">
-            再签 {{ checkInStatus.nextMilestone.days - checkInStatus.cumulativeDays }} 天得额外 {{ checkInStatus.nextMilestone.bonus }}
-          </span>
-        </div>
-        <button
-          class="checkin-btn"
-          :class="{ checked: checkInStatus.todayChecked, loading: checkInLoading }"
-          :disabled="checkInStatus.todayChecked || checkInLoading"
-          @click="doCheckIn"
-        >
-          <template v-if="checkInStatus.todayChecked">✅ 今日已签到</template>
-          <template v-else-if="checkInLoading">签到中...</template>
-          <template v-else>📅 签到 +{{ checkInStatus.baseCoins }} 平台币</template>
-        </button>
-      </div>
-    </div>
-
     <!-- 奖励动画弹出 -->
     <Transition name="reward-pop">
       <div v-if="rewardPopup.show" class="reward-popup" @click="rewardPopup.show = false">
@@ -221,19 +154,7 @@ const cardStatus = ref({
   today: '',
 });
 
-const checkInStatus = ref({
-  today: '',
-  checkedDates: [],
-  todayChecked: false,
-  cumulativeDays: 0,
-  nextMilestone: null,
-  achievedMilestones: [],
-  milestones: [],
-  baseCoins: 200,
-});
-
 const cardClaiming = ref(false);
-const checkInLoading = ref(false);
 
 const rewardPopup = ref({
   show: false,
@@ -266,26 +187,10 @@ const getDaysLeft = (expireDate) => {
   return Math.ceil((exp - today) / 86400000);
 };
 
-const isNextMilestone = (ms) => {
-  return checkInStatus.value.nextMilestone?.days === ms.days;
-};
-
 // ─── 日历计算 ───
 const monthDays = computed(() => {
   if (!cardStatus.value.today) return [];
   const today = cardStatus.value.today;
-  const [y, m] = today.split('-').map(Number);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  return Array.from({ length: daysInMonth }, (_, i) => {
-    const d = String(i + 1).padStart(2, '0');
-    const date = `${today.slice(0, 7)}-${d}`;
-    return { num: i + 1, date, isFuture: date > today };
-  });
-});
-
-const checkInMonthDays = computed(() => {
-  if (!checkInStatus.value.today) return [];
-  const today = checkInStatus.value.today;
   const [y, m] = today.split('-').map(Number);
   const daysInMonth = new Date(y, m, 0).getDate();
   return Array.from({ length: daysInMonth }, (_, i) => {
@@ -302,15 +207,6 @@ const loadCardStatus = async () => {
       query: { user_id: authStore.userInfo?.id },
     });
     if (res.code === 200) cardStatus.value = res.data;
-  } catch { /* 静默失败 */ }
-};
-
-const loadCheckInStatus = async () => {
-  try {
-    const res = await $fetch('/api/client/benefits/checkin/status', {
-      query: { user_id: authStore.userInfo?.id },
-    });
-    if (res.code === 200) checkInStatus.value = res.data;
   } catch { /* 静默失败 */ }
 };
 
@@ -353,50 +249,6 @@ const claimCard = async () => {
   }
 };
 
-const doCheckIn = async () => {
-  if (checkInLoading.value || checkInStatus.value.todayChecked) return;
-  checkInLoading.value = true;
-  try {
-    const res = await $fetch('/api/client/benefits/checkin', {
-      method: 'POST',
-      body: { user_id: authStore.userInfo?.id },
-    });
-    if (res.code === 200) {
-      const { base_coins, bonus_coins, total_coins, cumulative_days, new_balance } = res.data;
-      // 乐观更新：立即标记今日已签，防止重复点击
-      const today = checkInStatus.value.today;
-      checkInStatus.value = {
-        ...checkInStatus.value,
-        todayChecked: true,
-        cumulativeDays: cumulative_days,
-        checkedDates: [...checkInStatus.value.checkedDates, today],
-      };
-      // 立即更新为颟
-      authStore.platformCoins = new_balance;
-      if (authStore.userInfo) {
-        authStore.userInfo = { ...authStore.userInfo, platform_coins: new_balance };
-      }
-      const title = bonus_coins > 0
-        ? `签到成功！累计 ${cumulative_days} 天，获得里程碑奖励！`
-        : `签到成功！累计 ${cumulative_days} 天`;
-      rewardPopup.value = {
-        show: true,
-        title,
-        coins: total_coins,
-        newBalance: new_balance,
-      };
-      // 异步刷新签到状态（不阅塞 UI）
-      loadCheckInStatus();
-    } else {
-      tips.warning(res.message || '签到失败');
-    }
-  } catch {
-    tips.error('网络错误，请稍后重试');
-  } finally {
-    checkInLoading.value = false;
-  }
-};
-
 const purchaseCard = (cardType) => {
   // 调转到月卡专用收银台
   router.push({ path: '/user/card-payment', query: { type: cardType } });
@@ -407,7 +259,7 @@ onMounted(async () => {
     router.push('/user/login');
     return;
   }
-  await Promise.all([loadCardStatus(), loadCheckInStatus()]);
+  await loadCardStatus();
 });
 </script>
 
@@ -582,101 +434,6 @@ onMounted(async () => {
 }
 .shop-btn:hover { transform: translateY(-1px); opacity: 0.9; }
 
-/* ── 签到日历 ── */
-.checkin-calendar {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 5px;
-  margin-bottom: 20px;
-}
-.ci-day {
-  aspect-ratio: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  font-size: 12px;
-  background: var(--surface-container-low);
-  color: var(--on-surface-variant);
-  font-weight: 500;
-  position: relative;
-  gap: 1px;
-}
-.ci-day-num {
-  font-size: 12px;
-  line-height: 1;
-}
-.ci-check-mark {
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 900;
-  color: #10b981;
-}
-.ci-day.checked {
-  background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(5,150,105,0.12));
-  color: #064e3b;
-}
-.ci-day.checked .ci-day-num { color: #065f46; font-weight: 700; }
-.ci-day.today {
-  border: 2px solid #10b981;
-  color: var(--on-surface); font-weight: 700;
-}
-.ci-day.future { opacity: 0.3; }
-
-/* ── 里程碑 ── */
-.milestones { margin-bottom: 20px; }
-.ms-title { font-size: 12px; color: var(--on-surface-variant); margin-bottom: 10px; font-weight: 600; }
-.ms-list { display: flex; gap: 6px; flex-wrap: wrap; }
-.ms-item {
-  display: flex; flex-direction: column; align-items: center;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-container-low);
-  border: 1.5px solid var(--outline-variant);
-  min-width: 52px;
-  transition: all 0.2s;
-}
-.ms-item.achieved {
-  background: rgba(16,185,129,0.12);
-  border-color: #10b981;
-}
-.ms-item.next {
-  background: rgba(251,191,36,0.1);
-  border-color: #fbbf24;
-  box-shadow: 0 0 0 2px rgba(251,191,36,0.2);
-}
-.ms-days { font-size: 11px; color: var(--on-surface-variant); margin-bottom: 3px; }
-.ms-check { font-size: 12px; font-weight: 700; color: var(--on-surface); }
-.ms-item.achieved .ms-check { color: #10b981; }
-.ms-item.next .ms-check { color: #f59e0b; }
-
-/* ── 签到操作 ── */
-.checkin-action {
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--surface-container-low);
-  border-radius: var(--radius-md);
-  padding: 14px 18px;
-  gap: 12px;
-}
-.checkin-info { font-size: 14px; color: var(--on-surface); }
-.checkin-info strong { color: #10b981; font-size: 18px; }
-.next-hint { display: block; font-size: 12px; color: #f59e0b; margin-top: 3px; }
-.checkin-btn {
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #10b981, #059669);
-  border: none; border-radius: var(--radius-md);
-  color: #fff; font-size: 14px; font-weight: 700;
-  cursor: pointer; transition: all 0.2s; white-space: nowrap;
-  font-family: var(--font-family);
-}
-.checkin-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16,185,129,0.4); }
-.checkin-btn.checked, .checkin-btn:disabled {
-  background: var(--surface-container-low);
-  color: var(--on-surface-variant);
-  cursor: default;
-}
-
 /* ── 奖励弹窗 ── */
 .reward-popup {
   position: fixed; inset: 0; z-index: 200;
@@ -705,10 +462,5 @@ onMounted(async () => {
 @keyframes reward-in {
   from { opacity: 0; transform: scale(0.7); }
   to   { opacity: 1; transform: scale(1); }
-}
-
-@media (max-width: 480px) {
-  .checkin-action { flex-direction: column; align-items: stretch; text-align: center; }
-  .checkin-btn { width: 100%; }
 }
 </style>

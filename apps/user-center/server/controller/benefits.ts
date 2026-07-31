@@ -143,111 +143,16 @@ export const claimMonthlyCard = defineEventHandler(async (event: H3Event) => {
 
 // ────────────────────────────────────
 // GET /client/benefits/checkin/status
+// 签到功能已屏蔽
 // ────────────────────────────────────
-export const getCheckInStatus = defineEventHandler(async (event: H3Event) => {
-    try {
-        const userId = await getCurrentUserId(event);
-        if (!userId) return { code: 401, message: '未登录' };
-
-        const status = await CheckInModel.getMonthlyCheckInStatus(userId);
-        return { code: 200, data: status };
-    } catch (err: any) {
-        console.error('[getCheckInStatus] error:', err);
-        return { code: 500, message: '获取签到状态失败' };
-    }
+export const getCheckInStatus = defineEventHandler(async (_event: H3Event) => {
+    return { code: 403, message: '签到功能已关闭' };
 });
 
 // ────────────────────────────────────
 // POST /client/benefits/checkin
-// 执行每日签到
+// 执行每日签到 —— 签到功能已屏蔽
 // ────────────────────────────────────
-export const doCheckIn = defineEventHandler(async (event: H3Event) => {
-    const body = await readBody(event);
-    const userId = body?.user_id ? parseInt(body.user_id) : await getCurrentUserId(event);
-    if (!userId) return { code: 401, message: '未登录' };
-
-    try {
-        // 先检查今日是否已签（Redis 快速防重）
-        try {
-            const { getRedisCluster } = await import('../utils/redis-cluster');
-            const redis = getRedisCluster();
-            const today = MonthlyCardModel.getBeijingDate();
-            const key = `checkin:${userId}:${today}`;
-            const acquired = await redis.set(key, '1', 'EX', 86400, 'NX');
-            if (!acquired) {
-                return { code: 400, message: '今日已签到' };
-            }
-        } catch {
-            // Redis 不可用时继续，由 DB 唯一键兜底
-        }
-
-        const transactionId = genTransactionId('CI', userId);
-
-        // 执行签到（写 CheckInRecords）
-        const checkInResult = await CheckInModel.doCheckIn(userId, transactionId);
-        if (!checkInResult.success) {
-            return { code: 400, message: checkInResult.message };
-        }
-
-        const { reward } = checkInResult;
-        const totalCoins = reward!.total;
-
-        // 获取当前余额
-        const currentBalance = await UserModel.getPlatformCoins(userId);
-
-        // 发放平台币
-        const updateResult = await UserModel.updatePlatformCoinsUnified(userId, totalCoins, 9); // type 9 = 签到奖励
-        if (!updateResult.success) {
-            return { code: 500, message: '签到发放平台币失败' };
-        }
-        const newBalance = updateResult.newBalance!;
-
-        // 写入 PaymentRecords
-        const desc = reward!.bonus > 0
-            ? `签到第${reward!.cumulative}天，基础+${reward!.base}，里程碑额外+${reward!.bonus}`
-            : `签到第${reward!.cumulative}天，基础+${reward!.base}`;
-
-        await PaymentModel.insert({
-            user_id: userId,
-            sub_user_id: null,
-            role_id: '',
-            transaction_id: transactionId,
-            wuid: '',
-            payment_way: '签到奖励',
-            payment_id: 0,
-            world_id: 1,
-            product_name: '每日签到',
-            product_des: desc,
-            ip: '',
-            amount: 0,
-            mch_order_id: transactionId,
-            msg: desc,
-            server_url: '',
-            device: '',
-            channel_code: '',
-            game_code: '',
-            payment_status: 3,
-            ptb_before: currentBalance,
-            ptb_change: totalCoins,
-            ptb_after: newBalance,
-        });
-
-        return {
-            code: 200,
-            data: {
-                base_coins: reward!.base,
-                bonus_coins: reward!.bonus,
-                total_coins: totalCoins,
-                cumulative_days: reward!.cumulative,
-                new_balance: newBalance,
-                transaction_id: transactionId,
-            },
-            message: reward!.bonus > 0
-                ? `签到成功！获得 ${totalCoins} 平台币（含里程碑奖励 ${reward!.bonus}）`
-                : `签到成功！获得 ${totalCoins} 平台币`,
-        };
-    } catch (err: any) {
-        console.error('[doCheckIn] error:', err);
-        return { code: 500, message: '签到失败，请稍后重试' };
-    }
+export const doCheckIn = defineEventHandler(async (_event: H3Event) => {
+    return { code: 403, message: '签到功能已关闭' };
 });

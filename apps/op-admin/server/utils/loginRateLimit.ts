@@ -3,9 +3,14 @@ import { getRedisCluster } from './redis-cluster';
 /**
  * 登录频率限制工具（基于 Redis）
  *
- * 两类限制（详见 sdkapi/login/dologin 需求）：
+ * 三类限制（详见 sdkapi/login/dologin 需求 + 防撞库加固）：
  *   1. IP 登录失败限制：同一 IP 在 1 分钟内失败 5 次即锁定 IP 30 分钟。
  *   2. 账号登录失败限制：同一账号在 10 分钟内失败 10 次即锁定账号 30 分钟。
+ *   3. IP 黑名单：一个 IP 触发“IP 失败锁”累计达到 3 次（即反复撞库），升级为 24 小时黑名单，
+ *      guard 层最先检查，命中直接 403，不进入业务逻辑。
+ *
+ * 防撞库加固：请求被 IP 失败锁拦截时（账号锁尚未触发），仍对该请求的用户名累计一次账号失败计数，
+ *   使被撞的账号更快达到阈值被账号锁锁死（攻击者换 IP 也登不进这些账号）。
  *
  * 登录成功后：清除该 IP / 账号的失败计数与失败锁（不再限制同一 IP 重复登录）。
  *
@@ -20,10 +25,14 @@ const IP_FAIL_LOCK_TTL = 30 * 60;     // 1800s —— IP 失败锁定 30 分钟
 const ACCT_FAIL_WINDOW = 10 * 60;    // 600s —— 账号失败计数窗口（10 分钟）
 const ACCT_FAIL_THRESHOLD = 10;       // 账号在窗口内失败 10 次触发锁定
 const ACCT_FAIL_LOCK_TTL = 30 * 60;  // 1800s —— 账号失败锁定 30 分钟
+const IP_BLACKLIST_TTL = 24 * 60 * 60; // 86400s —— IP 黑名单封禁 24 小时
+const IP_BLACKLIST_TRIGGER = 3;        // IP 触发“IP 失败锁”累计 3 次升级为 24h 黑名单
 
 // ===== Redis 键名 =====
 const ipFailCntKey = (ip: string) => `login:ip_fail_cnt:${ip}`;
 const ipFailLockKey = (ip: string) => `login:ip_fail_lock:${ip}`;
+const ipLockTriggerCntKey = (ip: string) => `login:ip_lock_trigger_cnt:${ip}`; // IP 触发失败锁的累计次数（用于升级黑名单）
+const ipBlacklistKey = (ip: string) => `login:ip_blacklist:${ip}`;
 const acctFailCntKey = (name: string) => `login:acct_fail_cnt:${name}`;
 const acctFailLockKey = (name: string) => `login:acct_fail_lock:${name}`;
 
@@ -32,6 +41,8 @@ export interface LoginLimitResult {
   locked: boolean;
   retryAfter?: number;  // 剩余等待秒数
   message?: string;     // 提示文案
+  /** 命中的锁类型：blacklist | ip_fail | account（便于 guard 区分处理） */
+  reason?: 'blacklist' | 'ip_fail' | 'account';
 }
 
 /**
@@ -77,6 +88,25 @@ function formatWait(sec: number): string {
 }
 
 /**
+ * IP 黑名单预检：命中黑名单的 IP 直接判定为封禁（24h）。
+ * guard 层最先调用，命中即返回 403，不进入业务逻辑、不累计任何计数。
+ * Redis 异常时 fail-open（放行）。
+ */
+export async function checkIpBlacklist(ip: string): Promise<LoginLimitResult> {
+  if (!ip || ip === 'unknown') return { locked: false };
+  try {
+    const redis = getRedisCluster();
+    const ttl = await redis.ttl(ipBlacklistKey(ip));
+    if (ttl > 0) {
+      return { locked: true, reason: 'blacklist', retryAfter: ttl, message: `该 IP 因频繁攻击已被封禁，请 ${formatWait(ttl)} 后再试` };
+    }
+  } catch (e: any) {
+    console.warn(`[登录限流] 黑名单预检 Redis 异常，fail-open 放行: ${e?.message || e}`);
+  }
+  return { locked: false };
+}
+
+/**
  * 登录前预检失败锁：IP 失败锁 → 账号失败锁。
  * 任一命中即返回 { locked: true, retryAfter, message }。
  * IP 为 'unknown' 时跳过 IP 类检查，但仍检查账号锁。
@@ -93,7 +123,7 @@ export async function checkLoginLimits(ip: string, username: string): Promise<Lo
       // 1. IP 失败锁（1 分钟内失败 5 次触发，锁 30 分钟）
       const ipFailLockTtl = await redis.ttl(ipFailLockKey(ip));
       if (ipFailLockTtl > 0) {
-        return { locked: true, retryAfter: ipFailLockTtl, message: `登录失败次数过多，IP 已被锁定，请 ${formatWait(ipFailLockTtl)} 后再试` };
+        return { locked: true, reason: 'ip_fail', retryAfter: ipFailLockTtl, message: `登录失败次数过多，IP 已被锁定，请 ${formatWait(ipFailLockTtl)} 后再试` };
       }
     }
 
@@ -101,7 +131,7 @@ export async function checkLoginLimits(ip: string, username: string): Promise<Lo
       // 2. 账号失败锁（10 分钟内失败 10 次触发，锁 30 分钟）
       const acctFailLockTtl = await redis.ttl(acctFailLockKey(acct));
       if (acctFailLockTtl > 0) {
-        return { locked: true, retryAfter: acctFailLockTtl, message: `该账号登录失败次数过多已被锁定，请 ${formatWait(acctFailLockTtl)} 后再试` };
+        return { locked: true, reason: 'account', retryAfter: acctFailLockTtl, message: `该账号登录失败次数过多已被锁定，请 ${formatWait(acctFailLockTtl)} 后再试` };
       }
     }
   } catch (e: any) {
@@ -110,6 +140,23 @@ export async function checkLoginLimits(ip: string, username: string): Promise<Lo
   }
 
   return { locked: false };
+}
+
+/**
+ * 累加账号失败计数（私有）：10 分钟窗口内累计 10 次即锁定 30 分钟。
+ * 抽出供 recordLoginFailure（凭证错误）与防撞库加固（IP 锁拦截时）复用。
+ */
+async function incrAccountFailure(redis: any, acct: string): Promise<void> {
+  if (!acct) return;
+  const acctCnt = await redis.incr(acctFailCntKey(acct));
+  if (acctCnt === 1) {
+    await redis.expire(acctFailCntKey(acct), ACCT_FAIL_WINDOW);
+  }
+  if (acctCnt >= ACCT_FAIL_THRESHOLD) {
+    await redis.set(acctFailLockKey(acct), '1', 'EX', ACCT_FAIL_LOCK_TTL);
+    await redis.del(acctFailCntKey(acct));
+    console.warn(`[登录限流] 账号 ${acct} 10 分钟内失败 ${acctCnt} 次，锁定 30 分钟`);
+  }
 }
 
 /**
@@ -134,24 +181,42 @@ export async function recordLoginFailure(ip: string, username: string): Promise<
         await redis.set(ipFailLockKey(ip), '1', 'EX', IP_FAIL_LOCK_TTL);
         await redis.del(ipFailCntKey(ip));
         console.warn(`[登录限流] IP ${ip} 1 分钟内失败 ${ipCnt} 次，锁定 30 分钟`);
+
+        // 升级黑名单：该 IP 触发“IP 失败锁”累计达到 3 次，说明在反复撞库，升级为 24h 黑名单
+        const triggerCnt = await redis.incr(ipLockTriggerCntKey(ip));
+        if (triggerCnt === 1) {
+          // 触发次数计数保留较长时间（7 天），用于统计该 IP 历史撞库次数
+          await redis.expire(ipLockTriggerCntKey(ip), 7 * 24 * 60 * 60);
+        }
+        if (triggerCnt >= IP_BLACKLIST_TRIGGER) {
+          await redis.set(ipBlacklistKey(ip), '1', 'EX', IP_BLACKLIST_TTL);
+          console.warn(`[登录限流] IP ${ip} 反复撞库（触发失败锁 ${triggerCnt} 次），升级 24h 黑名单`);
+        }
       }
     }
 
-    if (acct) {
-      // 账号失败计数：10 分钟窗口内累计 10 次即锁定 30 分钟
-      const acctCnt = await redis.incr(acctFailCntKey(acct));
-      if (acctCnt === 1) {
-        await redis.expire(acctFailCntKey(acct), ACCT_FAIL_WINDOW);
-      }
-      if (acctCnt >= ACCT_FAIL_THRESHOLD) {
-        await redis.set(acctFailLockKey(acct), '1', 'EX', ACCT_FAIL_LOCK_TTL);
-        await redis.del(acctFailCntKey(acct));
-        console.warn(`[登录限流] 账号 ${acct} 10 分钟内失败 ${acctCnt} 次，锁定 30 分钟`);
-      }
-    }
+    // 账号失败计数
+    await incrAccountFailure(redis, acct);
   } catch (e: any) {
     // Redis 不可用：不阻断登录失败响应本身
     console.warn(`[登录限流] 记录失败计数 Redis 异常，已忽略: ${e?.message || e}`);
+  }
+}
+
+/**
+ * 防撞库加固：请求被 IP 失败锁拦截（账号锁尚未触发）时，仍对该请求的用户名累计一次账号失败计数。
+ * 使被撞的账号更快达到阈值被账号锁锁死——攻击者换 IP 也登不进这些账号。
+ * 仅累计账号维度（IP 维度已在 recordLoginFailure 处理，此处不重复）。
+ * Redis 异常时 fail-open（忽略）。
+ */
+export async function incrementAccountFailure(username: string): Promise<void> {
+  const acct = normalizeUsername(username);
+  if (!acct) return;
+  try {
+    const redis = getRedisCluster();
+    await incrAccountFailure(redis, acct);
+  } catch (e: any) {
+    console.warn(`[登录限流] 防撞库账号计数 Redis 异常，已忽略: ${e?.message || e}`);
   }
 }
 
