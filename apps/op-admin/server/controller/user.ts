@@ -13,7 +13,7 @@ import { getRedisCluster } from '../utils/redis-cluster';
 import * as PaymentModel from '../model/payment';
 import { sdkMessages } from '../utils/i18n';
 import { selectGameIpByAmount } from '../utils/gameIp';
-import { getClientIp, recordLoginFailure, recordLoginSuccess } from '../utils/loginRateLimit';
+import { getClientIp, checkGlobalBlacklist, checkLoginLimits, recordLoginFailure, recordLoginSuccess } from '../utils/loginRateLimit';
 import { generateUserLoginUrl } from './payment';
 function getGameIp(amount?: number): string {
     const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
@@ -661,13 +661,28 @@ export const userLogin = async (evt: H3Event) => {
 
         // 获取客户端信息
         const headers = getHeaders(evt);
-        const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+        // 使用统一的 IP 提取逻辑（ali-cdn-real-ip 优先），限流与日志共用同一准确 IP
+        const ipAddress = getClientIp(headers as Record<string, string>);
         const userAgent = (headers['user-agent'] as string) || '';
 
         // token 自动登录不需要 username（用 token 反查 user_id）
         if (!username && !t) {
             console.log("用户登录失败: 用户名为空");
             throw createError({ status: 400, message: '用户名不能为空' });
+        }
+
+        // 登录前限流预检（仅针对密码登录，token 免密登录不限流）
+        if (password && username) {
+            // 全局 IP 黑名单（命中即拒绝）
+            const gbl = await checkGlobalBlacklist(ipAddress);
+            if (gbl.locked) {
+                throw createError({ status: 403, message: gbl.message || '该 IP 已被封禁' });
+            }
+            // IP/账号失败锁预检
+            const limit = await checkLoginLimits(ipAddress, username);
+            if (limit.locked) {
+                throw createError({ status: 429, message: limit.message || '登录过于频繁，请稍后再试' });
+            }
         }
 
         console.log("正在查询用户:", username || `[autologin token]`);
@@ -721,6 +736,11 @@ export const userLogin = async (evt: H3Event) => {
                 channel_code: ''
             });
 
+            // 累加失败计数（仅密码登录，token 免密登录不计）：IP 1分钟5次/账号10分钟10次 → 锁30分钟
+            if (password && username) {
+                await recordLoginFailure(ipAddress, username);
+            }
+
             throw createError({
                 status: 401,
                 message: '用户名或密码错误',
@@ -767,6 +787,11 @@ export const userLogin = async (evt: H3Event) => {
         }
 
         loginSuccess = true;
+
+        // 登录成功：清除该 IP / 账号的失败计数与失败锁
+        if (username) {
+            await recordLoginSuccess(ipAddress, username);
+        }
 
         console.log("用户登录成功:", userData.username);
 
