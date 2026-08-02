@@ -676,12 +676,14 @@ export const userLogin = async (evt: H3Event) => {
             // 全局 IP 黑名单（命中即拒绝）
             const gbl = await checkGlobalBlacklist(ipAddress);
             if (gbl.locked) {
-                throw createError({ status: 403, message: gbl.message || '该 IP 已被封禁' });
+                console.warn(`[限流] /api/user/login IP=${ipAddress} 用户名=${username} 已封禁，原因：${gbl.message}`);
+                throw createError({ status: 403, message: '访问受限，请联系客服' });
             }
             // IP/账号失败锁预检
             const limit = await checkLoginLimits(ipAddress, username);
             if (limit.locked) {
-                throw createError({ status: 429, message: limit.message || '登录过于频繁，请稍后再试' });
+                console.warn(`[限流] /api/user/login IP=${ipAddress} 用户名=${username} 命中${limit.reason || '限流'}[${limit.message || ''}]，剩余 ${limit.retryAfter}s`);
+                throw createError({ status: 429, message: '登录尝试过于频繁，请稍后再试' });
             }
         }
 
@@ -830,6 +832,11 @@ export const userLogin = async (evt: H3Event) => {
         console.log("用户登录返回数据:", response);
         return response;
     } catch (e: any) {
+        // 限流拦截（403/429）：已在预检处打印一行精简日志，这里直接抛出，不打印堆栈、不记登录日志
+        if (e && (e.status === 403 || e.status === 429)) {
+            throw createError({ status: e.status, message: e.message || '访问受限' });
+        }
+
         console.error("用户登录异常:", e);
 
         // 如果还没有记录过登录日志且有用户名，记录失败的登录
