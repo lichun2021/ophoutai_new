@@ -7,7 +7,7 @@ import * as AdminCtrl from '../../controller/admin';
 import * as PaymentSettingsCtrl from '../../controller/paymentSettings';
 import * as PaymentCtrl from '../../controller/payment';
 import { sdkMessages } from '../../utils/i18n';
-import { getClientIp, checkIpBlacklist, checkLoginLimits, incrementAccountFailure } from '../../utils/loginRateLimit';
+import { getClientIp, checkGlobalBlacklist, checkIpBlacklist, checkLoginLimits, incrementAccountFailure } from '../../utils/loginRateLimit';
 
 const router = createRouter();
 
@@ -197,11 +197,28 @@ const withLoginRateGuard = (handler: Function) => {
         username = (body as any)?.z || '';
       } catch { /* 无 body 也按空用户名预检（仅 IP 维度） */ }
 
-      // 1. 最先检查 IP 黑名单（24h 封禁）：命中直接 403，不进入业务逻辑、不累计任何计数
+      // 0. 全局永久黑名单（所有接口统一检查，命中带原因）
+      const gbl = await checkGlobalBlacklist(ip);
+      if (gbl.locked) {
+        setResponseStatus(event, 403);
+        console.warn(`[黑名单] POST /sdkapi/login/dologin IP=${ip} 已封禁，原因：${gbl.message}`);
+        return {
+          z: -1,
+          x: '该 IP 已被封禁',
+          b: "",
+          c: "",
+          d: "",
+          sid: "",
+          e: Date.now().toString(),
+          retry_after: gbl.retryAfter
+        };
+      }
+
+      // 1. 登录专用 IP 黑名单（24h 封禁）：命中直接 403，不进入业务逻辑、不累计任何计数
       const bl = await checkIpBlacklist(ip);
       if (bl.locked) {
         setResponseStatus(event, 403);
-        console.warn(`[黑名单] POST /sdkapi/login/dologin IP=${ip} 命中黑名单，剩余 ${bl.retryAfter}s`);
+        console.warn(`[黑名单] POST /sdkapi/login/dologin IP=${ip} 命中黑名单，原因：${bl.message}，剩余 ${bl.retryAfter}s`);
         return {
           z: -1,
           x: bl.message || '该 IP 已被封禁',
@@ -218,8 +235,8 @@ const withLoginRateGuard = (handler: Function) => {
       const limit = await checkLoginLimits(ip, username);
       if (limit.locked) {
         setResponseStatus(event, 429);
-        // 被限流：仅一行精简日志，不进入详细 withLogging 流程
-        console.warn(`[限流] POST /sdkapi/login/dologin IP=${ip} 用户名=${username || '-'} 命中${limit.reason || '限流'}，剩余 ${limit.retryAfter}s`);
+        // 被限流：仅一行精简日志，不进入详细 withLogging 流程（带原因）
+        console.warn(`[限流] POST /sdkapi/login/dologin IP=${ip} 用户名=${username || '-'} 命中${limit.reason || '限流'}[${limit.message || ''}]，剩余 ${limit.retryAfter}s`);
 
         // 防撞库：若仅被 IP 失败锁拦截（账号锁未触发），累计该用户名的账号失败计数
         if (limit.reason === 'ip_fail' && username) {
