@@ -2,6 +2,7 @@ import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRe
 import { verifyApiSignature } from '../utils/apiSign';
 import { signAdminSession } from '../utils/auth';
 import { verifyAdminSession } from '../utils/auth';
+import { getClientIp, checkGlobalBlacklist, checkClientRateLimit, banIpTemporarily } from '../utils/loginRateLimit';
 import * as UserCtrl from '../controller/user';
 import * as PaymentCtrl from '../controller/payment';
 import * as UserClientCtrl from '../controller/userClient';
@@ -30,7 +31,8 @@ const withLogging = (handler: Function, apiName: string) => {
 
     // ========== 访问日志 ==========
     const headers = getHeaders(event);
-    const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+    // 使用统一的 IP 提取逻辑（ali-cdn-real-ip 优先），限流与日志共用同一准确 IP
+    const ipAddress = getClientIp(headers as Record<string, string>);
     const userAgent = (headers['user-agent'] as string) || 'unknown';
     const method = getMethod(event);
     const url = getRequestURL(event);
@@ -48,6 +50,25 @@ const withLogging = (handler: Function, apiName: string) => {
 
     // 访问日志（仅记录关键信息）
     console.log(`[API] ${method} ${url.pathname} | IP: ${ipAddress.split(',')[0]}`);
+
+    // ========== 全局 IP 黑名单（所有 /api/* 接口统一检查，命中即 403）==========
+    const gbl = await checkGlobalBlacklist(ipAddress);
+    if (gbl.locked) {
+      setResponseStatus(event, 403);
+      console.warn(`[黑名单] ${method} ${url.pathname} IP=${ipAddress} 已封禁，原因：${gbl.message}`);
+      return { success: false, message: '该 IP 已被封禁', data: null };
+    }
+
+    // ========== /api/client/* 接口频率限制（同 IP 30 次/分，超限 429 并封禁 24h）==========
+    if (url.pathname.startsWith('/api/client/')) {
+      const rl = await checkClientRateLimit(ipAddress);
+      if (rl.limited) {
+        setResponseStatus(event, 429);
+        console.warn(`[限流] ${method} ${url.pathname} IP=${ipAddress} ${rl.message}，封禁24h`);
+        await banIpTemporarily(ipAddress, rl.message || '客户端接口超频');
+        return { success: false, message: rl.message || '请求过于频繁，请稍后再试', data: null };
+      }
+    }
 
     let response: any = {};
     let error: any = null;

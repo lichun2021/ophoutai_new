@@ -28,6 +28,11 @@ const ACCT_FAIL_LOCK_TTL = 30 * 60;  // 1800s —— 账号失败锁定 30 分�
 const IP_BLACKLIST_TTL = 24 * 60 * 60; // 86400s —— IP 黑名单封禁 24 小时
 const IP_BLACKLIST_TRIGGER = 3;        // IP 触发“IP 失败锁”累计 3 次升级为 24h 黑名单
 
+// 客户端接口（/api/client/*）频率限制
+export const CLIENT_RATE_LIMIT = 30;            // 同 IP 每分钟最多 30 次请求
+export const CLIENT_RATE_WINDOW = 60;           // 60s 计数窗口
+export const CLIENT_BAN_TTL = 24 * 60 * 60;     // 客户端超频触发后封禁 24h
+
 // ===== Redis 键名 =====
 const ipFailCntKey = (ip: string) => `login:ip_fail_cnt:${ip}`;
 const ipFailLockKey = (ip: string) => `login:ip_fail_lock:${ip}`;
@@ -35,14 +40,26 @@ const ipLockTriggerCntKey = (ip: string) => `login:ip_lock_trigger_cnt:${ip}`; /
 const ipBlacklistKey = (ip: string) => `login:ip_blacklist:${ip}`;
 const acctFailCntKey = (name: string) => `login:acct_fail_cnt:${name}`;
 const acctFailLockKey = (name: string) => `login:acct_fail_lock:${name}`;
+// 全局黑名单（所有接口统一检查，值=封禁原因，不带 EX=永久）
+const globalBlacklistKey = (ip: string) => `global:ip_blacklist:${ip}`;
+// 客户端接口频率计数
+const clientRateCntKey = (ip: string) => `client:ip_rate_cnt:${ip}`;
 
 // ===== 工具结果 =====
 export interface LoginLimitResult {
   locked: boolean;
   retryAfter?: number;  // 剩余等待秒数
   message?: string;     // 提示文案
-  /** 命中的锁类型：blacklist | ip_fail | account（便于 guard 区分处理） */
-  reason?: 'blacklist' | 'ip_fail' | 'account';
+  /** 命中的锁类型：blacklist | ip_fail | account | global_blacklist（便于 guard 区分处理） */
+  reason?: 'blacklist' | 'ip_fail' | 'account' | 'global_blacklist';
+}
+
+/** 客户端接口频率限制结果 */
+export interface ClientRateResult {
+  limited: boolean;
+  count?: number;   // 当前窗口内已请求次数
+  retryAfter?: number; // 距窗口重置秒数
+  message?: string;  // 超频原因文案
 }
 
 /**
@@ -247,5 +264,115 @@ export async function recordLoginSuccess(ip: string, username: string): Promise<
   } catch (e: any) {
     // Redis 不可用：不影响登录成功响应
     console.warn(`[登录限流] 记录成功状态 Redis 异常，已忽略: ${e?.message || e}`);
+  }
+}
+
+// ==================== 全局 IP 黑名单（所有接口统一）====================
+// key: global:ip_blacklist:<ip>，value=封禁原因；不带 EX=永久，带 EX=临时（如客户端超频封 24h）
+// /api/* 与 /sdkapi/* 都在最外层检查此黑名单，命中即 403，不进入业务逻辑。
+
+/**
+ * 全局黑名单预检：命中即返回 {locked, reason, message=封禁原因}。
+ * 所有接口（api + sdkapi）在最外层调用，命中直接 403。
+ * Redis 异常时 fail-open（放行）。
+ */
+export async function checkGlobalBlacklist(ip: string): Promise<LoginLimitResult> {
+  if (!ip || ip === 'unknown') return { locked: false };
+  try {
+    const redis = getRedisCluster();
+    const reason = await redis.get(globalBlacklistKey(ip));
+    if (reason !== null && reason !== undefined) {
+      const ttl = await redis.ttl(globalBlacklistKey(ip));
+      const ttlHint = ttl > 0 ? `，剩余 ${formatWait(ttl)}` : '（永久）';
+      return {
+        locked: true,
+        reason: 'global_blacklist',
+        retryAfter: ttl > 0 ? ttl : undefined,
+        message: `${reason}${ttlHint}`,
+      };
+    }
+  } catch (e: any) {
+    console.warn(`[全局黑名单] 预检 Redis 异常，fail-open 放行: ${e?.message || e}`);
+  }
+  return { locked: false };
+}
+
+/**
+ * 永久封禁某 IP（写入全局黑名单，不过期）。
+ * value 存封禁原因，便于日志展示"触发了什么导致封锁"。
+ */
+export async function banIpPermanently(ip: string, reason = '手动封禁'): Promise<boolean> {
+  if (!ip || ip === 'unknown') return false;
+  try {
+    const redis = getRedisCluster();
+    await redis.set(globalBlacklistKey(ip), reason);
+    console.warn(`[全局黑名单] 永久封禁 IP=${ip}，原因：${reason}`);
+    return true;
+  } catch (e: any) {
+    console.warn(`[全局黑名单] 永久封禁 Redis 异常: ${e?.message || e}`);
+    return false;
+  }
+}
+
+/**
+ * 临时封禁某 IP（写入全局黑名单，带 TTL，默认 24h）。
+ * 用于客户端接口超频触发后的自动封禁。
+ */
+export async function banIpTemporarily(ip: string, reason: string, ttl: number = CLIENT_BAN_TTL): Promise<boolean> {
+  if (!ip || ip === 'unknown') return false;
+  try {
+    const redis = getRedisCluster();
+    await redis.set(globalBlacklistKey(ip), reason, 'EX', ttl);
+    console.warn(`[全局黑名单] 临时封禁 IP=${ip} ${formatWait(ttl)}，原因：${reason}`);
+    return true;
+  } catch (e: any) {
+    console.warn(`[全局黑名单] 临时封禁 Redis 异常: ${e?.message || e}`);
+    return false;
+  }
+}
+
+/** 解封某 IP（移出全局黑名单）。 */
+export async function unbanIp(ip: string): Promise<boolean> {
+  if (!ip || ip === 'unknown') return false;
+  try {
+    const redis = getRedisCluster();
+    await redis.del(globalBlacklistKey(ip));
+    console.log(`[全局黑名单] 解封 IP=${ip}`);
+    return true;
+  } catch (e: any) {
+    console.warn(`[全局黑名单] 解封 Redis 异常: ${e?.message || e}`);
+    return false;
+  }
+}
+
+// ==================== /api/client/* 接口频率限制 ====================
+// 同 IP 每分钟最多 CLIENT_RATE_LIMIT 次，超限返回 429，并由调用方触发 banIpTemporarily 封 24h。
+
+/**
+ * 客户端接口频率预检：返回 {limited, count, retryAfter, message}。
+ * 超限时 limited=true，message 含"客户端接口请求超频(N次/分)"。
+ * Redis 异常时 fail-open（放行）。
+ */
+export async function checkClientRateLimit(ip: string): Promise<ClientRateResult> {
+  if (!ip || ip === 'unknown') return { limited: false };
+  try {
+    const redis = getRedisCluster();
+    const cnt = await redis.incr(clientRateCntKey(ip));
+    if (cnt === 1) {
+      await redis.expire(clientRateCntKey(ip), CLIENT_RATE_WINDOW);
+    }
+    if (cnt > CLIENT_RATE_LIMIT) {
+      const ttl = await redis.ttl(clientRateCntKey(ip));
+      return {
+        limited: true,
+        count: cnt,
+        retryAfter: ttl > 0 ? ttl : CLIENT_RATE_WINDOW,
+        message: `客户端接口请求超频(${cnt}次/${CLIENT_RATE_WINDOW}秒)`,
+      };
+    }
+    return { limited: false, count: cnt };
+  } catch (e: any) {
+    console.warn(`[客户端限流] 预检 Redis 异常，fail-open 放行: ${e?.message || e}`);
+    return { limited: false };
   }
 }
