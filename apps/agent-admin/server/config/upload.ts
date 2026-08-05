@@ -15,9 +15,9 @@ export interface ImageConfig {
 }
 
 // 默认配置（作为后备）
-const defaultImageDirectory = process.env.IMAGE_DIRECTORY || '/www/wwwroot/update.kccyei.cn/images';
+const defaultImageDirectory = process.env.IMAGE_DIRECTORY || '/www/wwwroot/update.ymumel.cn/images';
 const defaultUrlPrefix = process.env.IMAGE_URL_PREFIX || '/images';
-const defaultResourceDomain = process.env.RESOURCE_DOMAIN || 'https://update.kccyei.cn';
+const defaultResourceDomain = process.env.RESOURCE_DOMAIN || 'https://update.ymumel.cn';
 
 // 获取图片目录路径（从系统参数读取）
 export async function getImageDirectory(): Promise<string> {

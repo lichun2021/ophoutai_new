@@ -325,7 +325,7 @@ export const steamInitPay = async (evt: H3Event) => {
 
         // 构建回调地址（优先读取系统参数 steam_notify_url）
         const { getOrCreate } = await import('../model/systemParams');
-        const defaultNotifyUrl = 'https://shop.kccyei.cn/api/payment/steam-notify';
+        const defaultNotifyUrl = 'https://shop.ymumel.cn/api/payment/steam-notify';
         let baseNotifyUrl = defaultNotifyUrl;
         try {
             const param = await getOrCreate('steam_notify_url', defaultNotifyUrl);

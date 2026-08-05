@@ -704,6 +704,8 @@ const checkoutCart = async () => {
         failCount++;
         failures.push({ name: item.package_name, msg: e?.data?.message || e?.message || '网络错误' });
       }
+      // 限速间隔：后端 purchase 接口对同一 user+package 1 秒限速一次，批量结算时每件间隔 1.1s 避免被拒
+      await new Promise(r => setTimeout(r, 1100));
     }
     // 若中途余额不足已 break 出内层，外层也停
     if (failures.some(f => f.msg.includes('平台币余额不足'))) break;

@@ -1720,7 +1720,7 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
 export const doPayment = async (evt: H3Event) => {
     try {
         const { getSystemParam } = await import('../utils/systemConfig');
-        const opAdminUrl = await getSystemParam('op_admin_url', 'https://pay.kccyei.cn');
+        const opAdminUrl = await getSystemParam('op_admin_url', 'https://pay.ymumel.cn');
         const targetUrl = `${opAdminUrl.replace(/\/+$/, '')}/sdkapi/Unipay/pay`;
 
         let body: any = {};
