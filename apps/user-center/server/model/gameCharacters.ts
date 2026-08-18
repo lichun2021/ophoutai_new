@@ -184,66 +184,77 @@ export const insert = async (characterData: Omit<GameCharacter, 'id' | 'created_
 };
 
 // 角色上报：基于 子账号ID + 角色UUID 判定（存在则更新，不存在则插入）
-export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'created_at'>) => {
+// maxPerSubUser: 传入时对新建角色做原子性数量限制（单条 INSERT...SELECT WHERE COUNT < N，避免并发竞态）
+export const upsertByUuid = async (
+    characterData: Omit<GameCharacter, 'id' | 'created_at'>,
+    maxPerSubUser?: number
+): Promise<{ isNew: boolean; id: number | undefined; limitExceeded?: true }> => {
     try {
         const extData = normalizeExtData(characterData.ext);
         const characterLevel = characterData.character_level || 1;
-        
-        // 1. 先根据 subuser_id + uuid 查询角色是否已存在
+
+        // 1. 检查该 subuser_id + uuid 是否已存在
         const existingResult = await sql({
             query: 'SELECT id, server_id, server_name FROM gamecharacters WHERE subuser_id = ? AND uuid = ? LIMIT 1',
             values: [characterData.subuser_id, characterData.uuid],
         }) as any[];
-        
+
         if (existingResult.length > 0) {
-            // 2. 如果已存在，则执行更新（不更新 server_id 和 server_name）
+            // 已存在 → 更新（不改 server_id / server_name）
             const existingId = existingResult[0].id;
-            
             await sql({
-                query: `
-                    UPDATE gamecharacters 
-                    SET 
-                        character_name = ?, 
-                        character_level = ?, 
-                        ext = ?, 
-                        last_login_at = NOW() 
-                    WHERE id = ?
-                `,
-                values: [
-                    characterData.character_name,
-                    characterLevel,
-                    extData,
-                    existingId
-                ],
+                query: `UPDATE gamecharacters
+                        SET character_name = ?, character_level = ?, ext = ?, last_login_at = NOW()
+                        WHERE id = ?`,
+                values: [characterData.character_name, characterLevel, extData, existingId],
             });
-            
             console.log(`角色上报成功: 更新信息 uuid=${characterData.uuid}, 服务器ID=${existingResult[0].server_id}`);
             return { isNew: false, id: existingId };
-        } else {
-            // 3. 如果不存在，则执行插入
+        }
+
+        // 2. 新角色 — 带原子数量限制的 INSERT
+        if (maxPerSubUser !== undefined) {
+            // 单条语句：COUNT 子查询和 INSERT 在同一 DML 中，避免 TOCTOU 竞态
             const result = await sql({
-                query: `
-                    INSERT INTO gamecharacters 
-                    (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                `,
+                query: `INSERT INTO gamecharacters
+                        (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at)
+                        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()
+                        FROM dual
+                        WHERE (SELECT COUNT(*) FROM gamecharacters WHERE subuser_id = ?) < ?`,
                 values: [
-                    characterData.user_id,
-                    characterData.subuser_id,
-                    characterData.game_id,
-                    characterData.uuid,
-                    characterData.character_name,
-                    characterLevel,
-                    characterData.server_name,
-                    characterData.server_id || 1,
-                    extData,
+                    characterData.user_id, characterData.subuser_id, characterData.game_id,
+                    characterData.uuid, characterData.character_name, characterLevel,
+                    characterData.server_name, characterData.server_id || 1, extData,
+                    characterData.subuser_id, maxPerSubUser,
                 ],
             }) as any;
-            
-            const id = result.insertId || result.lastInsertId;
+
+            if ((result.affectedRows ?? 0) === 0) {
+                console.log(`⛔ 角色创建限制: 子账号 ${characterData.subuser_id} 已达上限 ${maxPerSubUser}`);
+                return { isNew: false, id: undefined, limitExceeded: true };
+            }
+
+            const id = result.insertId;
             console.log(`角色上报成功: 新建角色 uuid=${characterData.uuid}, 服务器ID=${characterData.server_id || 1}`);
             return { isNew: true, id };
         }
+
+        // 3. 无限制普通 INSERT
+        const result = await sql({
+            query: `INSERT INTO gamecharacters
+                    (user_id, subuser_id, game_id, uuid, character_name, character_level, server_name, server_id, ext, last_login_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            values: [
+                characterData.user_id, characterData.subuser_id, characterData.game_id,
+                characterData.uuid, characterData.character_name, characterLevel,
+                characterData.server_name, characterData.server_id || 1, extData,
+            ],
+        }) as any;
+
+        const id = result.insertId || result.lastInsertId;
+        console.log(`角色上报成功: 新建角色 uuid=${characterData.uuid}, 服务器ID=${characterData.server_id || 1}`);
+        return { isNew: true, id };
+
     } catch (error: any) {
         console.error('角色上报失败:', error);
         throw error;

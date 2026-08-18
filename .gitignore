@@ -32,3 +32,26 @@ zips/
 backup_*.sh
 backup_db.sql
 clear_db.sql
+
+# 应急诊断/运维临时脚本与报告（可能含真实 IP/账号/凭据，不入库）
+ATTACK_*.md
+FIX_CHARACTER_LIMIT.md
+ONLINE_ATTACK_SOLUTION.md
+QUICK-SUMMARY.md
+attack-diagnosis-report.md
+malicious-login-attack-report.md
+game-login-protection-patch.md
+ban_suspicious_accounts.sh
+block-malicious-accounts.sh
+block-malicious-ips.sql
+cleanup_abnormal_characters.js
+cleanup_attack_characters.sh
+diagnose-attack.sh
+diagnose_abnormal_characters.js
+diagnose_online_attack.sh
+emergency-fix.sh
+mitigate-attack.sh
+monitor_attack.sh
+monitor_online_players.sh
+monitor_online_status.sh
+upload_scripts.sh

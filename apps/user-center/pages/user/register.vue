@@ -71,6 +71,7 @@
           </div>
         </div>
 
+        <!-- 图形验证码 -->
         <div class="form-field">
           <label class="field-label">验证码</label>
           <div class="captcha-row">
@@ -81,13 +82,16 @@
                 class="field-input"
                 placeholder="请输入验证码"
                 maxlength="4"
-                :disabled="loading || !channelValid"
+                :disabled="loading || !channelValid || captchaLoading"
                 style="text-transform: uppercase; letter-spacing: 4px;"
               />
             </div>
-            <div class="captcha-img-wrap" @click="fetchCaptcha" title="点击刷新验证码">
-              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" alt="验证码" />
-              <div v-else class="captcha-loading">加载中...</div>
+            <div class="captcha-img-wrap" :title="captchaError ? '点击重试' : '点击刷新验证码'" @click="fetchCaptcha">
+              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" alt="验证码" draggable="false" />
+              <div v-else class="captcha-loading">
+                <span v-if="captchaError" class="captcha-retry-text">点击重试</span>
+                <span v-else>加载中...</span>
+              </div>
               <span class="captcha-refresh-hint">🔄 点击刷新</span>
             </div>
           </div>
@@ -158,22 +162,35 @@ const channelValid = ref(true);
 const channelValidating = ref(false);
 const channelError = ref('');
 
-// 验证码状态
+// ========== 图形验证码 ==========
 const captchaToken = ref('');
 const captchaImage = ref('');
+const captchaLoading = ref(false);
+const captchaError = ref(false);
 
 async function fetchCaptcha() {
+  captchaLoading.value = true;
+  captchaError.value = false;
   captchaImage.value = '';
   formState.captchaInput = '';
   try {
     const res = await fetch('/api/user/captcha');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    captchaToken.value = data.token || '';
-    captchaImage.value = data.image || '';
-  } catch {
+    if (!data || !data.token || !data.image) throw new Error('验证码数据异常');
+    captchaToken.value = data.token;
+    captchaImage.value = data.image;
+  } catch (e) {
+    console.error('加载验证码失败:', e);
+    captchaToken.value = '';
     captchaImage.value = '';
+    captchaError.value = true;
+  } finally {
+    captchaLoading.value = false;
   }
 }
+// ========== END 图形验证码 ==========
+
 
 // 表单验证
 const isFormValid = computed(() => {
@@ -249,7 +266,8 @@ onMounted(async () => {
     channelValid.value = false;
     channelError.value = '缺少渠道代码参数';
   }
-  // 初始化验证码
+
+  // 加载图形验证码
   fetchCaptcha();
 });
 
@@ -281,11 +299,11 @@ const handleRegister = async () => {
       channel_code: urlParams.channel_code,
       game_code: urlParams.game_code,
       thirdparty_uid: urlParams.thirdparty_uid || `user_${Date.now()}`,
-      iphone: '', // 可以从URL参数中获取
-      uid: '', // 由后端生成
+      iphone: '',
+      uid: '',
       captcha_token: captchaToken.value,
       captcha_input: formState.captchaInput.trim(),
-      ...urlParams.extra_params // 包含其他参数
+      ...urlParams.extra_params
     };
     
     console.log('注册数据:', registerData);
@@ -305,9 +323,12 @@ const handleRegister = async () => {
     if (response.ok && result.status === 'success') {
       showSuccess('注册成功！即将跳转到登录页面...');
     } else {
+      // 验证码错误或其他错误，刷新验证码
+      fetchCaptcha();
       if (!response.ok) {
-        showError(result.message || '注册失败，请检查参数是否正确');
+        showError(result.message || result.statusMessage || '注册失败，请检查参数是否正确');
       } else if (result.message && result.message.includes('Duplicate')) {
+        // 数据库重复键错误
         if (result.message.includes('username')) {
           showError('用户名已存在，请更换用户名');
         } else if (result.message.includes('thirdparty_uid')) {
@@ -318,8 +339,6 @@ const handleRegister = async () => {
       } else {
         showError(result.message || '注册失败，请稍后重试');
       }
-      // 验证码错误时自动刷新
-      fetchCaptcha();
     }
   } catch (error) {
     console.error('注册错误:', error);
@@ -398,7 +417,7 @@ const handleModalClose = () => {
 .btn-gray:hover { background: var(--surface-container-highest); }
 @media (max-width: 480px) { .register-box { padding: 32px 24px; border-radius: 20px; } }
 
-/* 验证码行 */
+/* 图形验证码 */
 .captcha-row { display: flex; gap: 10px; align-items: stretch; }
 .captcha-input-wrap { flex: 1; }
 .captcha-img-wrap {
@@ -411,9 +430,19 @@ const handleModalClose = () => {
   display: flex;
   align-items: center;
   background: var(--surface-container);
+  min-width: 130px;
 }
 .captcha-img { height: 48px; width: auto; display: block; border-radius: var(--radius-sm); }
-.captcha-loading { height: 48px; width: 110px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--on-surface-variant); }
+.captcha-loading {
+  height: 48px;
+  width: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+.captcha-retry-text { color: var(--error); }
 .captcha-refresh-hint {
   position: absolute; bottom: 0; left: 0; right: 0;
   background: rgba(0,0,0,0.5);
@@ -423,7 +452,7 @@ const handleModalClose = () => {
   padding: 2px 0;
   opacity: 0;
   transition: opacity 0.2s;
+  pointer-events: none;
 }
 .captcha-img-wrap:hover .captcha-refresh-hint { opacity: 1; }
-
 </style>

@@ -1493,12 +1493,12 @@ export const reportRole = async(evt: H3Event) => {
             };
         }
         
-        // 查找主用户
+        // 查找主用户并检查状态
         const user = await sql({
-            query: 'SELECT id FROM users WHERE username = ?',
+            query: 'SELECT id, status, game_code, channel_code FROM users WHERE username = ?',
             values: [username],
         }) as any[];
-        
+
         if (user.length === 0) {
             setResponseStatus(evt, 200);
             return {
@@ -1511,13 +1511,31 @@ export const reportRole = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
-        
+
         const userId = user[0].id;
-        
+        const userStatus = parseInt(String(user[0].status ?? '0')) || 0;
+        const gameCode = user[0].game_code || '';
+        const channelCode = user[0].channel_code || '';
+
+        // 检查用户是否被封禁
+        if (userStatus === 1) {
+            console.log(`角色上报失败: 用户 ${username} 已被封号`);
+            setResponseStatus(evt, 200);
+            return {
+                z: -1,
+                x: "账号已被封禁，无法上报角色",
+                b: "",
+                c: "",
+                d: "",
+                sid: "",
+                e: Date.now().toString()
+            };
+        }
+
         // 通过子账号ID查找子账号
         const SubUsersModel = await import('../model/subUsers');
         const subUser = await SubUsersModel.findById(parseInt(subUserId));
-        
+
         if (!subUser || subUser.parent_user_id !== userId) {
             setResponseStatus(evt, 200);
             return {
@@ -1530,6 +1548,36 @@ export const reportRole = async(evt: H3Event) => {
                 e: Date.now().toString()
             };
         }
+
+        // #3 fix: 限流移到子账号归属校验之后，防止用已知用户名触发 DoS
+        // #4 fix: 渠道级限流阈值调高，避免误伤正常渠道玩家
+        try {
+            const { checkGameLoginRateLimit, checkChannelGameLoginRateLimit } = await import('../utils/gameLoginRateLimit');
+            await checkGameLoginRateLimit(username, gameCode, channelCode, {
+                maxLoginsPerMinute: 5,
+                maxLoginsPerHour: 50,
+                blockDurationMinutes: 30
+            });
+            await checkChannelGameLoginRateLimit(channelCode, gameCode, 5000);
+        } catch (rateLimitError: any) {
+            console.error(`游戏登录限流触发: ${username} | ${gameCode} | ${channelCode}`);
+            setResponseStatus(evt, 200);
+            return {
+                z: -1,
+                x: rateLimitError.message || "登录过于频繁，请稍后再试",
+                b: "",
+                c: "",
+                d: "",
+                sid: "",
+                e: Date.now().toString()
+            };
+        }
+
+        // 加载 GameCharactersModel（角色上报 + 原子数量限制）
+        const GameCharactersModel = await import('../model/gameCharacters');
+        // MAX_CHARS_PER_SUBUSER: 每个子账号在单个游戏服可创建的角色上限
+        // 当前游戏服有 10+ 个区服，5 个足够覆盖正常玩家在每个区都建号的需求
+        const MAX_CHARS_PER_SUBUSER = 5;
         
         // 角色上报不需要验证游戏ID，直接使用传入的游戏ID
         // 游戏验证已在前端或其他地方完成
@@ -1562,10 +1610,22 @@ export const reportRole = async(evt: H3Event) => {
             ext: extData || null
         };
         
-        // 执行角色上报（存在则更新，不存在则插入）
-        const GameCharactersModel = await import('../model/gameCharacters');
-        const result = await GameCharactersModel.upsertByUuid(characterData);
-        
+        // 执行角色上报（原子数量限制在 upsertByUuid 内部完成，避免重复查询和竞态）
+        const result = await GameCharactersModel.upsertByUuid(characterData, MAX_CHARS_PER_SUBUSER);
+
+        if (result.limitExceeded) {
+            setResponseStatus(evt, 200);
+            return {
+                z: -1,
+                x: `该小号已达到最大角色数限制(${MAX_CHARS_PER_SUBUSER}个)`,
+                b: "",
+                c: "",
+                d: "",
+                sid: "",
+                e: Date.now().toString()
+            };
+        }
+
         console.log(`角色上报成功: ${result.isNew ? '新建' : '更新'} 角色ID=${result.id}`);
         
         // 角色上报成功后，自动调用登录日志上报

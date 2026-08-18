@@ -157,13 +157,10 @@ router.post('/user/register', withLogging(async (event: H3Event) => {
 
   // 安全验证（图形验证码，答案只在后端保存，一次性使用）
   const body = await readBody(event);
-  const { captcha_token, captcha_input } = body || {};
-  if (!captcha_token || !captcha_input) {
-    throw createError({ statusCode: 400, statusMessage: '请完成图形验证码' });
-  }
-  const captchaOk = await verifyCaptcha(captcha_token, captcha_input);
+  const captchaInput = String(body?.captcha_input || '').trim();
+  const captchaOk = await verifyCaptcha(String(body?.captcha_token || ''), captchaInput);
   if (!captchaOk) {
-    throw createError({ statusCode: 400, statusMessage: '验证码错误或已过期，请刷新重试' });
+    throw createError({ statusCode: 400, statusMessage: '验证码错误，请重试' });
   }
 
   // ---- IP 注册频率限制：同一IP 8小时内只允许注册一次 ----
