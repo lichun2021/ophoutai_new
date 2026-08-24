@@ -498,7 +498,7 @@ const currentAdminLevel = computed(() => {
 const packageTypeOptions = [
   { label: '全部类型', value: 'all' },
   { label: '通用礼包', value: 'general' },
-  { label: '英雄超武', value: 'hero_super_weapon' },
+  { label: '空中花园', value: 'hero_super_weapon' },
   { label: '每日必买', value: 'daily_recharge' },
   { label: '每日消费', value: 'daily' },
   { label: '累计消费', value: 'cumulative' },
@@ -548,7 +548,7 @@ const tips = useTips()
 const getGiftTypeText = (type) => {
   const typeMap = {
     'general': '通用',
-    'hero_super_weapon': '英雄超武',
+    'hero_super_weapon': '空中花园',
     'daily_recharge': '每日必买',
     'daily': '每日消费',
     'cumulative': '累计消费',

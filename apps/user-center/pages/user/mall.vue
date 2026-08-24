@@ -504,7 +504,7 @@ const isAutoGrantCategory = (category) => ['daily', 'cumulative'].includes(categ
 
 const CATEGORY_TABS = [
   { key: 'general', label: '通用礼包' },
-  { key: 'hero_super_weapon', label: '英雄超武' },
+  { key: 'hero_super_weapon', label: '空中花园' },
   { key: 'daily_recharge', label: '每日必买' },
   { key: 'daily', label: '每日消费' },
   { key: 'cumulative', label: '累计消费' },

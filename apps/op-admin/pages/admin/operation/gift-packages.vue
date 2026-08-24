@@ -506,7 +506,7 @@ const limitedTimeRange = ref({
 const categoryOptions = [
   { label: '全部', value: '' },
   { label: '通用礼包', value: 'general' },
-  { label: '英雄超武', value: 'hero_super_weapon' },
+  { label: '空中花园', value: 'hero_super_weapon' },
   { label: '每日必买', value: 'daily_recharge' },
   { label: '每日消费', value: 'daily' },
   { label: '累计消费', value: 'cumulative' },
@@ -548,7 +548,7 @@ const columns = [
 
 const CATEGORY_LABEL_MAP = {
   general: '通用礼包',
-  hero_super_weapon: '英雄超武',
+  hero_super_weapon: '空中花园',
   daily_recharge: '每日必买',
   daily: '每日消费',
   cumulative: '累计消费',
