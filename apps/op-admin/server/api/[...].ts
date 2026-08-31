@@ -660,6 +660,7 @@ router.post('/admin/player/detail', adminWrap(PlayerDetailCtrl.getPlayerDetail, 
 router.post('/admin/player/update-remark', adminWrap(PlayerDetailCtrl.updateRemark, '更新玩家备注'));
 router.post('/admin/player/cards', adminWrap(PlayerDetailCtrl.getPlayerCards, '查询玩家月卡列表'));
 router.post('/admin/player/cards/activate', adminWrap(PlayerDetailCtrl.activatePlayerCard, '手动激活月卡/终身卡'));
+router.post('/admin/player/cards/update', adminWrap(PlayerDetailCtrl.updatePlayerCard, '编辑月卡/终身卡(调整时间区间)'));
 router.post('/admin/player/cards/deactivate', adminWrap(PlayerDetailCtrl.deactivatePlayerCard, '停用月卡'));
 
 /**

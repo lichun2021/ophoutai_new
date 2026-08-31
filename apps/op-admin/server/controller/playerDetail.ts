@@ -540,6 +540,76 @@ export const activatePlayerCard = async (evt: H3Event) => {
 };
 
 /**
+ * 编辑玩家已有月卡/终身卡（调整每日赠币、开始日期、到期日期）
+ * 仅允许修改数值/日期字段，不允许改变 card_type（类型固定不变）
+ */
+export const updatePlayerCard = async (evt: H3Event) => {
+    try {
+        const body = await readBody(evt);
+        const cardId = Number(body?.card_id);
+        const userId = Number(body?.user_id);
+
+        if (!cardId) throw createError({ statusCode: 400, message: '缺少 card_id' });
+        if (!userId) throw createError({ statusCode: 400, message: '缺少 user_id' });
+
+        // 确认卡属于该用户，并取出当前 card_type
+        const rows = await sql({
+            query: 'SELECT * FROM MonthlyCards WHERE id = ? AND user_id = ? LIMIT 1',
+            values: [cardId, userId],
+        }) as any[];
+        if (rows.length === 0) {
+            throw createError({ statusCode: 404, message: '未找到该卡，或卡不属于该用户' });
+        }
+        const card = rows[0];
+
+        const dailyCoins = Number(body?.daily_coins);
+        if (!Number.isFinite(dailyCoins) || dailyCoins < 0) {
+            throw createError({ statusCode: 400, message: 'daily_coins 无效' });
+        }
+
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        const startDate = body?.start_date;
+        if (!startDate || !dateRegex.test(startDate)) {
+            throw createError({ statusCode: 400, message: 'start_date 格式应为 YYYY-MM-DD' });
+        }
+
+        // 终身卡永久有效，忽略传入的到期日期，始终为 NULL；月卡必须指定到期日期
+        let expireDate: string | null = null;
+        if (card.card_type === 'monthly') {
+            const rawExpire = body?.expire_date;
+            if (!rawExpire || !dateRegex.test(rawExpire)) {
+                throw createError({ statusCode: 400, message: '月卡需要指定到期日期 expire_date' });
+            }
+            if (rawExpire < startDate) {
+                throw createError({ statusCode: 400, message: '到期日期不能早于开始日期' });
+            }
+            expireDate = rawExpire;
+        }
+
+        await sql({
+            query: 'UPDATE MonthlyCards SET daily_coins = ?, start_date = ?, expire_date = ? WHERE id = ?',
+            values: [dailyCoins, startDate, expireDate, cardId],
+        });
+
+        console.log(`[Player Cards] 管理员编辑卡片 card_id=${cardId}, user_id=${userId}: daily_coins=${dailyCoins}, start_date=${startDate}, expire_date=${expireDate ?? '永久'}`);
+
+        return {
+            success: true,
+            message: '月卡信息已更新',
+            data: {
+                card_id: cardId,
+                daily_coins: dailyCoins,
+                start_date: startDate,
+                expire_date: expireDate,
+            },
+        };
+    } catch (error: any) {
+        console.error('[Player Cards] 编辑失败:', error);
+        throw error;
+    }
+};
+
+/**
  * 停用玩家指定月卡（设置 is_active = 0）
  */
 export const deactivatePlayerCard = async (evt: H3Event) => {
