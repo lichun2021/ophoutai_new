@@ -662,6 +662,7 @@ router.post('/admin/player/cards', adminWrap(PlayerDetailCtrl.getPlayerCards, '�
 router.post('/admin/player/cards/activate', adminWrap(PlayerDetailCtrl.activatePlayerCard, '手动激活月卡/终身卡'));
 router.post('/admin/player/cards/update', adminWrap(PlayerDetailCtrl.updatePlayerCard, '编辑月卡/终身卡(调整时间区间)'));
 router.post('/admin/player/cards/deactivate', adminWrap(PlayerDetailCtrl.deactivatePlayerCard, '停用月卡'));
+router.get('/admin/player/recharge-ranking', adminWrap(PlayerDetailCtrl.getPlayerRechargeRanking, '玩家充值排行榜(按周期+分页+可定位用户)'));
 
 /**
  * 创建支付设置

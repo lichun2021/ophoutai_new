@@ -365,6 +365,22 @@
                 </template>
                 玩家详情
               </UButton>
+              <!-- 玩家充值 - 只有超级管理员可见 -->
+              <UButton 
+                v-if="isSuperAdmin"
+                :to="'/admin/operation/player-recharge'"
+                variant="ghost" 
+                color="gray"
+                :class="{ 'nav-active': route.path === '/admin/operation/player-recharge' }"
+                class="nav-subitem"
+                justify="start"
+                size="sm"
+              >
+                <template #leading>
+                  <UIcon name="i-heroicons-banknotes" class="w-4 h-4" />
+                </template>
+                玩家充值
+              </UButton>
               <!-- 系统参数 - 只有超级管理员可见 -->
               <UButton 
                 v-if="isSuperAdmin"

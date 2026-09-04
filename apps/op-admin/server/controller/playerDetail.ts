@@ -1,5 +1,6 @@
-import { H3Event, readBody, createError } from 'h3';
+import { H3Event, readBody, getQuery, createError } from 'h3';
 import { sql } from '../db';
+import { getChinaDateString, getChinaDateStringDaysAgo } from '../utils/timezone';
 
 type PaymentRecordRow = {
     id: number;
@@ -82,6 +83,69 @@ function isPlatformCoinRecharge(productNameRaw: string | null | undefined, serve
     const name = (productNameRaw || '').toString().toLowerCase();
     const url = (serverUrlRaw || '').toString();
     return name.includes('平台币') || name.includes('充值') || name.includes('ptb') || url.includes('cashier');
+}
+
+const RESOLVE_USER_BASE_FIELDS = 'id, username, password, platform_coins, created_at, status, thirdparty_uid, channel_code, remark';
+
+/**
+ * 按灵活标识（用户ID / 用户名 / 角色ID(playerId) / 子账号ID(openId)）解析出用户
+ * 供充值排行榜等场景做"定位某个玩家"用；解析顺序与 getPlayerDetail 内联逻辑保持一致
+ */
+async function resolveUserByIdentifier(rawInput: unknown): Promise<any | null> {
+    const fetchById = async (id: number) => {
+        if (!Number.isInteger(id) || id <= 0) return null;
+        const rows = await sql({
+            query: `SELECT ${RESOLVE_USER_BASE_FIELDS} FROM Users WHERE id = ? LIMIT 1`,
+            values: [id],
+        }) as any[];
+        return rows.length > 0 ? rows[0] : null;
+    };
+    const fetchByUsername = async (username: string) => {
+        if (!username) return null;
+        const rows = await sql({
+            query: `SELECT ${RESOLVE_USER_BASE_FIELDS} FROM Users WHERE username = ? LIMIT 1`,
+            values: [username],
+        }) as any[];
+        return rows.length > 0 ? rows[0] : null;
+    };
+    const fetchByRoleId = async (roleId: string) => {
+        if (!roleId) return null;
+        const rows = await sql({
+            query: `SELECT user_id FROM gamecharacters WHERE uuid = ? LIMIT 1`,
+            values: [roleId],
+        }) as any[];
+        if (rows.length === 0) return null;
+        return await fetchById(Number(rows[0].user_id));
+    };
+    const fetchBySubUserId = async (subUserId: string) => {
+        if (!subUserId) return null;
+        const subUserIdNum = parseInt(subUserId);
+        if (isNaN(subUserIdNum)) return null;
+        const rows = await sql({
+            query: `SELECT parent_user_id FROM subusers WHERE id = ? LIMIT 1`,
+            values: [subUserIdNum],
+        }) as any[];
+        if (rows.length === 0) return null;
+        return await fetchById(Number(rows[0].parent_user_id));
+    };
+
+    if (typeof rawInput === 'number') {
+        return await fetchById(rawInput);
+    }
+    if (typeof rawInput === 'string') {
+        const keyword = rawInput.trim();
+        if (!keyword) return null;
+        if (/^\d+$/.test(keyword)) {
+            const byId = await fetchById(Number(keyword));
+            if (byId) return byId;
+        }
+        const byUsername = await fetchByUsername(keyword);
+        if (byUsername) return byUsername;
+        const byRoleId = await fetchByRoleId(keyword);
+        if (byRoleId) return byRoleId;
+        return await fetchBySubUserId(keyword);
+    }
+    return null;
 }
 
 export const getPlayerDetail = async (evt: H3Event) => {
@@ -641,6 +705,186 @@ export const deactivatePlayerCard = async (evt: H3Event) => {
         return { success: true, message: '月卡已停用' };
     } catch (error: any) {
         console.error('[Player Cards] 停用失败:', error);
+        throw error;
+    }
+};
+
+// ========== 玩家充值排行榜（真实充值，支持今日/近3日/近7日/自定义区间 + 可选按用户ID定位 + 分页） ==========
+
+const RECHARGE_RANK_PAGE_SIZES = [10, 20, 50, 100];
+const RECHARGE_RANK_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 玩家充值排行榜
+ * 口径与 apps/op-admin/部署/scripts/batch-ban-and-refund.js 的 getCashRechargeTotal
+ * 以及 apps/user-center 玩家自查页保持一致：
+ *   payment_status = 3（支付成功）且排除平台币支付方式，其余现金支付方式（微信/支付宝/其他）均计入"真实充值"
+ * 按区间内累计充值金额从高到低排序；默认区间为“今日”，默认展示第 1~10 名
+ * 可选 user_id：只定位该用户在榜单中的位置（不改变排序口径，仍返回其在整体排行中的排名和数据）
+ */
+export const getPlayerRechargeRanking = async (evt: H3Event) => {
+    try {
+        const query = getQuery(evt);
+
+        // ── 计算统计区间（东8区日期） ──
+        const period = String(query.period || 'today');
+        const todayStr = getChinaDateString();
+        let startDate: string;
+        let endDate: string;
+
+        if (period === 'custom') {
+            const rawStart = String(query.start_date || '');
+            const rawEnd = String(query.end_date || '');
+            if (!RECHARGE_RANK_DATE_REGEX.test(rawStart) || !RECHARGE_RANK_DATE_REGEX.test(rawEnd)) {
+                throw createError({ statusCode: 400, message: '自定义区间需提供合法的 start_date / end_date（YYYY-MM-DD）' });
+            }
+            if (rawStart > rawEnd) {
+                throw createError({ statusCode: 400, message: '开始日期不能晚于结束日期' });
+            }
+            startDate = rawStart;
+            endDate = rawEnd;
+        } else if (period === 'today') {
+            startDate = todayStr;
+            endDate = todayStr;
+        } else if (period === '3' || period === '7') {
+            const days = Number(period);
+            startDate = getChinaDateStringDaysAgo(days - 1);
+            endDate = todayStr;
+        } else if (period === 'all') {
+            // 总榜：不限制时间
+            startDate = '';
+            endDate = '';
+        } else {
+            throw createError({ statusCode: 400, message: 'period 必须为 today / 3 / 7 / all / custom' });
+        }
+
+        // ── 可选：按用户ID/用户名/角色ID/子账号ID 定位某个玩家 ──
+        const rawIdentifier = query.user_id ?? query.userId ?? query.keyword;
+        let focusUserId: number | null = null;
+        if (rawIdentifier !== undefined && rawIdentifier !== null && String(rawIdentifier).trim() !== '') {
+            const identifier = String(rawIdentifier).trim();
+            const focusUser = await resolveUserByIdentifier(/^\d+$/.test(identifier) ? Number(identifier) : identifier);
+            if (!focusUser) {
+                throw createError({ statusCode: 404, message: '未找到该玩家' });
+            }
+            focusUserId = Number(focusUser.id);
+        }
+
+        // ── 分页参数 ──
+        const page = Math.max(parseInt(String(query.page || '1')) || 1, 1);
+        let pageSize = parseInt(String(query.pageSize || '10')) || 10;
+        if (!RECHARGE_RANK_PAGE_SIZES.includes(pageSize)) pageSize = 10;
+        const offset = (page - 1) * pageSize;
+
+        const cashFilterSql = `payment_status = 3 AND (payment_way NOT LIKE '%平台币%' OR payment_way IS NULL OR payment_way = '')`;
+        const dateFilterSql = startDate && endDate ? `AND created_at BETWEEN ? AND ?` : '';
+        const dateFilterValues = startDate && endDate ? [`${startDate} 00:00:00`, `${endDate} 23:59:59`] : [];
+
+        // 区间内按用户聚合真实充值金额，倒序排列
+        const rankRows = await sql({
+            query: `
+                SELECT user_id, COUNT(*) AS cnt, SUM(amount) AS total
+                FROM paymentrecords
+                WHERE ${cashFilterSql} ${dateFilterSql}
+                GROUP BY user_id
+                HAVING total > 0
+                ORDER BY total DESC
+            `,
+            values: dateFilterValues,
+        }) as { user_id: number; cnt: number; total: string }[];
+
+        const totalRankedUsers = rankRows.length;
+
+        // 如果指定了 user_id，定位其排名（1-based），若未上榜则排名为 null
+        let focusRank: number | null = null;
+        if (focusUserId !== null) {
+            const idx = rankRows.findIndex(r => Number(r.user_id) === focusUserId);
+            focusRank = idx >= 0 ? idx + 1 : null;
+        }
+
+        // 分页：若指定了 user_id 且已上榜，则自动跳转到该用户所在的那一页；否则按常规分页
+        let effectivePage = page;
+        if (focusUserId !== null && focusRank !== null) {
+            effectivePage = Math.ceil(focusRank / pageSize);
+        }
+        const effectiveOffset = (effectivePage - 1) * pageSize;
+        const pageRows = rankRows.slice(effectiveOffset, effectiveOffset + pageSize);
+
+        if (pageRows.length === 0) {
+            return {
+                code: 200,
+                data: {
+                    period, start_date: startDate || null, end_date: endDate || null,
+                    focus_user_id: focusUserId, focus_rank: focusRank,
+                    list: [],
+                    pagination: { page: effectivePage, pageSize, total: totalRankedUsers, totalPages: Math.max(Math.ceil(totalRankedUsers / pageSize), 1) },
+                },
+                message: '获取成功',
+            };
+        }
+
+        const pageUserIds = pageRows.map(r => Number(r.user_id));
+
+        // 批量获取用户名
+        const userRows = await sql({
+            query: `SELECT id, username FROM Users WHERE id IN (${pageUserIds.map(() => '?').join(',')})`,
+            values: pageUserIds,
+        }) as { id: number; username: string }[];
+        const userMap = new Map(userRows.map(u => [Number(u.id), u.username]));
+
+        // 批量获取角色列表（一个用户可能有多个角色/区服）
+        const characterRows = await sql({
+            query: `SELECT user_id, uuid, character_name, server_id, server_name
+                     FROM GameCharacters
+                     WHERE user_id IN (${pageUserIds.map(() => '?').join(',')})`,
+            values: pageUserIds,
+        }) as { user_id: number; uuid: string; character_name: string; server_id: number | string; server_name: string }[];
+
+        const charactersByUser = new Map<number, { uuid: string; character_name: string; server_id: number | string; server_name: string }[]>();
+        for (const row of characterRows) {
+            const uid = Number(row.user_id);
+            if (!charactersByUser.has(uid)) charactersByUser.set(uid, []);
+            charactersByUser.get(uid)!.push({
+                uuid: row.uuid,
+                character_name: row.character_name,
+                server_id: row.server_id,
+                server_name: row.server_name,
+            });
+        }
+
+        const list = pageRows.map((row, idx) => {
+            const userId = Number(row.user_id);
+            return {
+                rank: effectiveOffset + idx + 1,
+                user_id: userId,
+                username: userMap.get(userId) || '-',
+                total_amount: Number((parseFloat(row.total) || 0).toFixed(2)),
+                recharge_count: Number(row.cnt) || 0,
+                characters: charactersByUser.get(userId) || [],
+                is_focus: focusUserId !== null && userId === focusUserId,
+            };
+        });
+
+        return {
+            code: 200,
+            data: {
+                period,
+                start_date: startDate || null,
+                end_date: endDate || null,
+                focus_user_id: focusUserId,
+                focus_rank: focusRank,
+                list,
+                pagination: {
+                    page: effectivePage,
+                    pageSize,
+                    total: totalRankedUsers,
+                    totalPages: Math.max(Math.ceil(totalRankedUsers / pageSize), 1),
+                },
+            },
+            message: '获取成功',
+        };
+    } catch (error: any) {
+        console.error('[Player Recharge Ranking] 查询失败:', error);
         throw error;
     }
 };
