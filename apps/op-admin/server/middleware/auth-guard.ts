@@ -1,5 +1,5 @@
 import { defineEventHandler, getRequestURL, getCookie, setResponseStatus, sendRedirect, createError, getHeader } from 'h3';
-import { verifyAdminSession } from '../utils/auth';
+import { verifyAdminSession, verifyUserSession } from '../utils/auth';
 
 // 服务端中间件：拦截受保护的页面路由（不拦 /sdkapi/** 与公开页）
 // 仅针对页面请求（SSR/直访）；API与 /sdkapi/** 保持现有逻辑
@@ -96,6 +96,17 @@ export default defineEventHandler(async (event) => {
       if (isUser !== 'true') {
         throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
       }
+      // 客户端接口必须携带有效的用户会话（user_sid），并将会话 userId 写入上下文。
+      // 控制器必须使用 event.context.userId 而非请求体/查询参数里的 user_id，防止 IDOR（伪造他人 user_id）。
+      const userSid = getCookie(event, 'user_sid');
+      const uv = verifyUserSession(userSid);
+      if (!uv.ok) {
+        throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+      }
+      try {
+        // @ts-ignore
+        event.context.userId = uv.userId;
+      } catch {}
     }
     return; // 通过
   }

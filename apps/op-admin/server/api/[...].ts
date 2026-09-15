@@ -2,6 +2,7 @@ import { useBase, createRouter, defineEventHandler, getHeader, getHeaders, getMe
 import { verifyApiSignature } from '../utils/apiSign';
 import { signAdminSession } from '../utils/auth';
 import { verifyAdminSession } from '../utils/auth';
+import { signUserSession } from '../utils/auth';
 import { getClientIp, checkGlobalBlacklist, checkClientRateLimit, banIpTemporarily } from '../utils/loginRateLimit';
 import * as UserCtrl from '../controller/user';
 import * as PaymentCtrl from '../controller/payment';
@@ -1029,9 +1030,12 @@ router.post('/user/login', defineEventHandler(async (event) => {
   try {
     const ok = !!(result && result.data && result.data.user);
     if (ok) {
+      const userId = result.data.user.id;
+      const userSid = signUserSession(userId);
       event.node.res.setHeader('Set-Cookie', [
         'auth_logged_in=true; Path=/; HttpOnly; SameSite=Lax',
-        'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax'
+        'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax',
+        `user_sid=${userSid}; Path=/; HttpOnly; SameSite=Lax`
       ]);
     }
   } catch { }

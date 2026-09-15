@@ -189,3 +189,39 @@ export const verifyAdminSession = (value: string | undefined | null): { ok: bool
         return { ok: false };
     }
 }
+
+// ===== 普通用户会话签名/验证 =====
+// 用于将“已登录会话”与具体 user_id 绑定，防止客户端在请求参数中伪造他人 user_id（IDOR）。
+const getUserSecret = (): string => {
+    const secret = process.env.USER_SESSION_SECRET || 'k3m9!vB2qX7$rT4wZ8pL';
+    return secret || 'PLEASE_CHANGE_USER_SESSION_SECRET';
+}
+
+export const signUserSession = (userId: number | string, maxAgeSeconds: number = 30 * 24 * 60 * 60): string => {
+    const id = String(userId);
+    const iat = Math.floor(Date.now() / 1000);
+    const exp = iat + maxAgeSeconds;
+    const base = `${id}.${iat}.${exp}`;
+    const h = crypto.createHmac('sha256', getUserSecret()).update(base).digest('hex');
+    return `${base}.${h}`;
+}
+
+export const verifyUserSession = (value: string | undefined | null): { ok: boolean, userId?: number } => {
+    try {
+        const v = String(value || '');
+        const parts = v.split('.');
+        if (parts.length !== 4) return { ok: false };
+        const [idStr, iatStr, expStr, sig] = parts;
+        const base = `${idStr}.${iatStr}.${expStr}`;
+        const expect = crypto.createHmac('sha256', getUserSecret()).update(base).digest('hex');
+        if (expect.length !== sig.length) return { ok: false };
+        if (!crypto.timingSafeEqual(Buffer.from(expect), Buffer.from(sig))) return { ok: false };
+        const now = Math.floor(Date.now() / 1000);
+        if (now > parseInt(expStr)) return { ok: false };
+        const userId = parseInt(idStr);
+        if (isNaN(userId) || userId <= 0) return { ok: false };
+        return { ok: true, userId };
+    } catch {
+        return { ok: false };
+    }
+}

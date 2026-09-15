@@ -8,6 +8,20 @@ import { sql } from '../db';
 import { getSystemConfig } from '../utils/systemConfig';
 import { executePaymentBySystemParam } from '../utils/paymentGateways';
 
+// 会话身份校验：客户端接口不能信任请求体/查询参数里的 user_id，必须与登录会话（auth-guard 写入的
+// event.context.userId）一致，否则任何登录用户都能伪造他人 user_id 操作他人账号（IDOR）。
+// requestedUserId 缺省时直接返回会话身份。
+function requireSessionUserId(event: H3Event, requestedUserId?: number | null): { ok: true, userId: number } | { ok: false, response: { code: number, message: string } } {
+    const sessionUserId = (event.context as any)?.userId;
+    if (!sessionUserId || isNaN(Number(sessionUserId))) {
+        return { ok: false, response: { code: 401, message: '未授权，请先登录' } };
+    }
+    if (requestedUserId !== undefined && requestedUserId !== null && !isNaN(Number(requestedUserId)) && Number(requestedUserId) !== Number(sessionUserId)) {
+        return { ok: false, response: { code: 403, message: '禁止操作他人账号' } };
+    }
+    return { ok: true, userId: Number(sessionUserId) };
+}
+
 // 权限验证辅助函数
 function normalizeClientIp(ip: string): string {
     if (!ip) return '127.0.0.1';
@@ -263,6 +277,12 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                 code: 400,
                 message: '缺少必要参数'
             };
+        }
+
+        // 🔒 身份绑定：user_id 必须与当前登录会话一致，禁止拿他人 user_id 强制消费（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
         }
 
         // 验证角色参数
@@ -618,6 +638,12 @@ export const getUserPurchaseHistory = defineEventHandler(async (event) => {
             };
         }
 
+        // 🔒 身份绑定：禁止查询他人购买记录（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
+        }
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -666,6 +692,12 @@ export const getUserRechargeHistory = defineEventHandler(async (event) => {
                 code: 400,
                 message: '缺少用户ID参数'
             };
+        }
+
+        // 🔒 身份绑定：禁止查询他人充值记录（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
         }
 
         // 检查用户是否存在
@@ -739,6 +771,12 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
                 code: 400,
                 message: '缺少用户ID参数'
             };
+        }
+
+        // 🔒 身份绑定：禁止查询他人消费记录（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
         }
 
         // 检查用户是否存在
@@ -852,6 +890,12 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
             };
         }
 
+        // 🔒 身份绑定：禁止查询他人首页统计（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
+        }
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -919,6 +963,12 @@ export const getUserStats = defineEventHandler(async (event) => {
             };
         }
 
+        // 🔒 身份绑定：禁止查询他人个人资料统计（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
+        }
+
         // 检查用户是否存在
         const user = await UserModel.findById(user_id);
         if (!user) {
@@ -967,15 +1017,12 @@ export const getUserStats = defineEventHandler(async (event) => {
 // 获取当前用户的平台币余额
 export const getUserBalance = defineEventHandler(async (event) => {
     try {
-        const authorizationHeader = getHeader(event, 'authorization');
-        const userId = authorizationHeader ? parseInt(authorizationHeader) : null;
-
-        if (!userId || isNaN(userId)) {
-            return {
-                code: 401,
-                message: '未授权，请先登录'
-            };
+        // 🔒 Authorization 头由客户端自行传入，不可作为身份依据，必须以登录会话为准
+        const sessionCheck = requireSessionUserId(event);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
         }
+        const userId = sessionCheck.userId;
 
         // 验证用户是否存在
         const user = await UserModel.findById(userId);
@@ -1016,6 +1063,12 @@ export const getUserCharacters = defineEventHandler(async (event) => {
                 code: 400,
                 message: '缺少用户ID参数'
             };
+        }
+
+        // 🔒 身份绑定：禁止查询他人角色列表（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
         }
 
         // 检查用户是否存在
@@ -1085,6 +1138,12 @@ export const getPlayerGiftPackageRecords = defineEventHandler(async (event) => {
                 code: 400,
                 message: '缺少用户ID参数'
             };
+        }
+
+        // 🔒 身份绑定：禁止查询他人礼包记录（IDOR）
+        const sessionCheck = requireSessionUserId(event, user_id);
+        if (!sessionCheck.ok) {
+            return sessionCheck.response;
         }
 
         // 获取礼包购买记录（用户端强制限制最近 3 天，忽略前端传入的 startDate 早于3天前的情况）

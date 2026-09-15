@@ -1,5 +1,6 @@
 import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, createError, setResponseStatus, type H3Event } from "h3";
 import { verifyApiSignature } from '../utils/apiSign';
+import { signUserSession } from '../utils/auth';
 import * as UserCtrl from '../controller/user';
 import * as PaymentCtrl from '../controller/payment';
 import * as UserClientCtrl from '../controller/userClient';
@@ -130,9 +131,13 @@ router.post('/user/login', defineEventHandler(async (event) => {
   try {
     const ok = !!(result && result.data && result.data.user);
     if (ok) {
+      // user_sid 将本次登录会话与具体 user_id 绑定，客户端接口不再信任请求体里的 user_id
+      const userId = result.data.user.id;
+      const userSid = signUserSession(userId);
       event.node.res.setHeader('Set-Cookie', [
         'auth_logged_in=true; Path=/; HttpOnly; SameSite=Lax',
-        'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax'
+        'auth_is_user=true; Path=/; HttpOnly; SameSite=Lax',
+        `user_sid=${userSid}; Path=/; HttpOnly; SameSite=Lax`
       ]);
     }
   } catch { }
