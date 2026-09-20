@@ -3,9 +3,11 @@
  * Update agent password script
  * Usage:
  * node scripts/update-agent-password.js <agentName> <oldPassword> <newPassword>
+ * node scripts/update-agent-password.js --force <agentName> <newPassword>
  *
  * Examples:
  * node scripts/update-agent-password.js agent001 oldpass123 newpass456
+ * node scripts/update-agent-password.js --force agent001 newpass456
  */
 
 import mysql from 'mysql2/promise';
@@ -23,15 +25,20 @@ async function runUpdateAgentPassword() {
     let connection = null;
 
     try {
-        const agentName = process.argv[2];
-        const oldPassword = process.argv[3];
-        const newPassword = process.argv[4];
+        const forceMode = process.argv[2] === '--force';
+        const agentName = forceMode ? process.argv[3] : process.argv[2];
+        const oldPassword = forceMode ? null : process.argv[3];
+        const newPassword = forceMode ? process.argv[4] : process.argv[4];
 
-        if (!agentName || !oldPassword || !newPassword) {
+        if (forceMode) {
+            if (!agentName || !newPassword) {
+                throw new Error('缺少参数，请使用: node scripts/update-agent-password.js --force <代理名字> <新密码>');
+            }
+        } else if (!agentName || !oldPassword || !newPassword) {
             throw new Error('缺少参数，请使用: node scripts/update-agent-password.js <代理名字> <老密码> <新密码>');
         }
 
-        if (newPassword === oldPassword) {
+        if (!forceMode && newPassword === oldPassword) {
             throw new Error('新密码不能和老密码一致');
         }
 
@@ -52,10 +59,12 @@ async function runUpdateAgentPassword() {
         }
 
         const admin = admins[0];
-        const oldPasswordHash = hashAdminPassword(oldPassword);
 
-        if (admin.password !== oldPasswordHash) {
-            throw new Error('老密码不正确');
+        if (!forceMode) {
+            const oldPasswordHash = hashAdminPassword(oldPassword);
+            if (admin.password !== oldPasswordHash) {
+                throw new Error('老密码不正确');
+            }
         }
 
         const newPasswordHash = hashAdminPassword(newPassword);
