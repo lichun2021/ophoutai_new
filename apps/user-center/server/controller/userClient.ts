@@ -264,13 +264,14 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             };
         }
 
-        // 🚦 Redis 接口限速：同一用户 5 秒内只能下单一次
+        // 🚦 Redis 接口限速：同一用户对同一礼包 1 秒内只能下单一次（防止快速双击重复提交）
+        // key 含 package_id，使购物车里不同礼包互不影响；窗口 1s 既能防重复又不卡批量结算
         try {
             const { getRedisCluster } = await import('../utils/redis-cluster');
             const redis = getRedisCluster();
-            const rateLimitKey = `purchase_cooldown:${userId}`;  // ✅ 使用 JWT 中的 userId
-            // SET key 1 NX EX 5 —— 只有 key 不存在时才设置成功
-            const acquired = await redis.set(rateLimitKey, '1', 'EX', 5, 'NX');
+            const rateLimitKey = `purchase_cooldown:${userId}:${package_id}`;  // ✅ userId + package_id
+            // SET key 1 NX EX 1 —— 只有 key 不存在时才设置成功
+            const acquired = await redis.set(rateLimitKey, '1', 'EX', 1, 'NX');
             if (!acquired) {
                 const ttl = await redis.ttl(rateLimitKey);
                 return {

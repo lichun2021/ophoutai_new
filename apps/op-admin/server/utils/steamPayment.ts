@@ -30,7 +30,7 @@ export interface SteamPaymentConfig {
  *   steam_sandbox      - 是否沙盒模式 ('true'/'false')
  */
 export async function getSteamPaymentConfig(): Promise<SteamPaymentConfig> {
-    const webApiKey = await getSystemParam('steam_web_api_key', '573CE6DA907E8D23E60A9FF97CA7AC68');
+    const webApiKey = await getSystemParam('steam_web_api_key', 'F4EE3B464045A8CBD3613DD0361D2338');
     const appId = await getSystemParam('steam_app_id', '4671660');
     const sandbox = await getSystemParam('steam_sandbox', 'false');
 

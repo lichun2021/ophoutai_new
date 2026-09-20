@@ -1,4 +1,4 @@
-import { useBase, createRouter, defineEventHandler } from "h3";
+import { useBase, createRouter, defineEventHandler, getHeaders, readBody, setResponseStatus } from "h3";
 import { verifySdkSign } from '../../utils/sdkSign';
 import type { H3Event } from 'h3';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,6 +7,7 @@ import * as AdminCtrl from '../../controller/admin';
 import * as PaymentSettingsCtrl from '../../controller/paymentSettings';
 import * as PaymentCtrl from '../../controller/payment';
 import { sdkMessages } from '../../utils/i18n';
+import { getClientIp, checkLoginLimits } from '../../utils/loginRateLimit';
 
 const router = createRouter();
 
@@ -180,12 +181,51 @@ const withSign = (handler: Function) => {
 const withSignAndLogging = (handler: Function, apiName: string) => withLogging(withSign(handler), apiName);
 
 /**
+ * 登录限流守卫（最外层）：在签名校验与详细访问日志之前预检 IP/账号失败锁。
+ * 命中限流时只输出一行精简日志并直接返回 429，避免被刷时产生大量 [IN]/[OUT] 详细日志。
+ * readBody 会把解析结果缓存到 event.node.req，下游 withLogging / sdkLogin 再次调用时会命中缓存，不会报“body 已消费”。
+ */
+const withLoginRateGuard = (handler: Function) => {
+  return defineEventHandler(async (event: H3Event) => {
+    try {
+      const headers = getHeaders(event) as Record<string, string>;
+      const ip = getClientIp(headers);
+      let username = '';
+      try {
+        const body = await readBody(event);
+        username = (body as any)?.z || '';
+      } catch { /* 无 body 也按空用户名预检（仅 IP 维度） */ }
+
+      const limit = await checkLoginLimits(ip, username);
+      if (limit.locked) {
+        setResponseStatus(event, 429);
+        console.warn(`[限流] POST /sdkapi/login/dologin IP=${ip} 用户名=${username || '-'} 命中${limit.reason || '限流'}，剩余 ${limit.retryAfter}s`);
+        return {
+          z: -1,
+          x: limit.message || '登录过于频繁，请稍后再试',
+          b: "",
+          c: "",
+          d: "",
+          sid: "",
+          e: Date.now().toString(),
+          retry_after: limit.retryAfter
+        };
+      }
+    } catch (e: any) {
+      // 限流预检自身异常（如 Redis 不可用）时 fail-open，放行进入正常流程
+      console.warn(`[限流] 预检异常，fail-open 放行: ${e?.message || e}`);
+    }
+    return handler(event);
+  });
+};
+
+/**
  * SDK登录接口
  * @route POST /sdkapi/login/dologin
  * @body {z: string, b: string, c: number, d: string, e: string, f: string, x: string, h: string, i: string, vs: string, sid: string, o: string, p: string, q: string, r: string, s: string, si: string}
  * @returns {Object} SDK登录结果
  */
-router.post('/login/dologin', withSignAndLogging(UserCtrl.sdkLogin, 'SDK登录接口'));
+router.post('/login/dologin', withLoginRateGuard(withSignAndLogging(UserCtrl.sdkLogin, 'SDK登录接口')));
 
 /**
  * 获取子账号列表接口

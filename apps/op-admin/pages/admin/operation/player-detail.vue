@@ -386,16 +386,26 @@
                 </td>
                 <td class="px-3 py-2 text-gray-500">{{ formatDate(card.created_at) }}</td>
                 <td class="px-3 py-2 text-center">
-                  <UButton
-                    v-if="card.is_active"
-                    size="xs"
-                    color="red"
-                    variant="outline"
-                    :loading="deactivatingCardId === card.id"
-                    @click="handleDeactivateCard(card)"
-                  >
-                    停用
-                  </UButton>
+                  <div v-if="card.is_active" class="flex items-center justify-center gap-2">
+                    <UButton
+                      size="xs"
+                      color="blue"
+                      variant="outline"
+                      icon="i-heroicons-pencil-square"
+                      @click="openEditCardDialog(card)"
+                    >
+                      编辑
+                    </UButton>
+                    <UButton
+                      size="xs"
+                      color="red"
+                      variant="outline"
+                      :loading="deactivatingCardId === card.id"
+                      @click="handleDeactivateCard(card)"
+                    >
+                      停用
+                    </UButton>
+                  </div>
                   <span v-else class="text-gray-400 text-xs">-</span>
                 </td>
               </tr>
@@ -642,6 +652,63 @@
       </template>
     </UCard>
   </UModal>
+
+  <!-- 编辑月卡/终身卡弹窗（调整时间区间） -->
+  <UModal v-model="editCardDialogVisible" :ui="{ width: 'w-full max-w-md' }">
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-semibold text-gray-900">
+          编辑{{ editCardTarget?.card_type === 'lifetime' ? '终身卡' : '月卡' }}（ID: {{ editCardTarget?.id }}）
+        </h3>
+      </template>
+
+      <div class="space-y-4">
+        <div class="text-sm text-gray-600">
+          当前用户：<span class="font-semibold text-gray-900">{{ result?.user?.username }}</span>
+        </div>
+        <UFormGroup label="每日赠币数量" required>
+          <UInput
+            v-model.number="editCardCoins"
+            type="number"
+            min="0"
+            placeholder="例如：100"
+          />
+        </UFormGroup>
+        <UFormGroup label="开始日期" required>
+          <UInput v-model="editCardStartDate" type="date" />
+        </UFormGroup>
+        <UFormGroup v-if="editCardTarget?.card_type === 'monthly'" label="到期日期" required>
+          <UInput v-model="editCardExpireDate" type="date" :min="editCardStartDate" />
+          <template #hint>
+            <span class="text-gray-400 text-xs">直接调整到期日期，即时生效（延长或缩短均可）</span>
+          </template>
+        </UFormGroup>
+        <div v-else class="text-sm text-violet-600 bg-violet-50 rounded px-3 py-2">
+          终身卡永久有效，无到期日期
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <UButton
+            color="gray"
+            variant="outline"
+            @click="editCardDialogVisible = false"
+            :disabled="editingCard"
+          >
+            取消
+          </UButton>
+          <UButton
+            color="blue"
+            :loading="editingCard"
+            @click="submitEditCard"
+          >
+            保存修改
+          </UButton>
+        </div>
+      </template>
+    </UCard>
+  </UModal>
 </template>
 
 <script setup>
@@ -684,6 +751,14 @@ const cardTypeOptions = [
   { label: '月卡（有时限）', value: 'monthly' },
   { label: '终身卡（永久）', value: 'lifetime' },
 ]
+
+// 编辑月卡（调整时间区间）
+const editCardDialogVisible = ref(false)
+const editCardTarget = ref(null)
+const editCardCoins = ref(0)
+const editCardStartDate = ref('')
+const editCardExpireDate = ref('')
+const editingCard = ref(false)
 
 const handleSearch = async () => {
   const keyword = (userIdInput.value || '').toString().trim()
@@ -825,6 +900,72 @@ const handleDeactivateCard = async (card) => {
     })
   } finally {
     deactivatingCardId.value = null
+  }
+}
+
+const openEditCardDialog = (card) => {
+  editCardTarget.value = card
+  editCardCoins.value = Number(card.daily_coins) || 0
+  editCardStartDate.value = card.start_date ? String(card.start_date).slice(0, 10) : ''
+  editCardExpireDate.value = card.expire_date ? String(card.expire_date).slice(0, 10) : ''
+  editCardDialogVisible.value = true
+}
+
+const submitEditCard = async () => {
+  if (editingCard.value) return
+  if (!result.value?.user?.id || !editCardTarget.value) return
+
+  if (editCardCoins.value < 0) {
+    toast.add({ title: '每日赠币数量不能为负数', color: 'red' })
+    return
+  }
+  if (!editCardStartDate.value) {
+    toast.add({ title: '请填写开始日期', color: 'red' })
+    return
+  }
+  const isMonthly = editCardTarget.value.card_type === 'monthly'
+  if (isMonthly) {
+    if (!editCardExpireDate.value) {
+      toast.add({ title: '月卡需要填写到期日期', color: 'red' })
+      return
+    }
+    if (editCardExpireDate.value < editCardStartDate.value) {
+      toast.add({ title: '到期日期不能早于开始日期', color: 'red' })
+      return
+    }
+  }
+
+  try {
+    editingCard.value = true
+    const body = {
+      card_id: editCardTarget.value.id,
+      user_id: result.value.user.id,
+      daily_coins: editCardCoins.value,
+      start_date: editCardStartDate.value,
+      expire_date: isMonthly ? editCardExpireDate.value : null,
+    }
+    const response = await $fetch('/api/admin/player/cards/update', {
+      method: 'POST',
+      body,
+    })
+    if (response?.success) {
+      toast.add({
+        title: response.message || '更新成功',
+        color: 'green'
+      })
+      editCardDialogVisible.value = false
+      await loadPlayerCards(result.value.user.id)
+    } else {
+      throw new Error(response?.message || '更新失败')
+    }
+  } catch (error) {
+    toast.add({
+      title: '更新失败',
+      description: error.message || '请稍后再试',
+      color: 'red'
+    })
+  } finally {
+    editingCard.value = false
   }
 }
 

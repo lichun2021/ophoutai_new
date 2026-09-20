@@ -126,6 +126,25 @@ export default defineNuxtPlugin((nuxtApp) => {
       const ymd = formatYmd(dateForToken);
       const token = calcDailyToken(dateForToken, apiKey);
       const payload = { ts: String(ts), nonce } as any;
+      // 🔒 纳入高危业务字段（来源：URL query + options.params + body）
+      // 必须与后端 apiSign.ts 的 pickSignParams / SIGNED_BUSINESS_FIELDS 完全一致，
+      // 否则像 \$fetch('/api/admin/payments?payment_method=微信') 这种把参数拼在 URL 里的请求，
+      // 前端签名会缺少 payment_method 而后端有，导致 invalid_sign 验签失败
+      const SIGNED_BUSINESS_FIELDS = ['server_url', 'role_id', 'uid', 'p', 'price', 'package_id', 'pid', 'payment_method', 'l'];
+      const pickBusinessField = (source: any) => {
+        if (!source) return;
+        for (const f of SIGNED_BUSINESS_FIELDS) {
+          let v: any;
+          try {
+            if (source instanceof URLSearchParams || (source && typeof source.get === 'function')) v = source.get(f);
+            else v = source[f];
+          } catch { v = undefined; }
+          if (v !== undefined && v !== null && v !== '' && payload[f] === undefined) payload[f] = v;
+        }
+      };
+      pickBusinessField(url.searchParams);
+      pickBusinessField(extraParams);
+      pickBusinessField((options as any).body);
       const sign = md5Hex(buildSignBase(payload) + token);
 
       
@@ -254,7 +273,28 @@ export default defineNuxtPlugin((nuxtApp) => {
         const dateForToken = new Date(ts * 1000);
         const ymd = formatYmd(dateForToken);
         const token = calcDailyToken(dateForToken, apiKey);
-        const base = buildSignBase({ ts: String(ts), nonce });
+        // 🔒 与上方主路径一致：纳入 URL query + body 里的高危业务字段，与后端 pickSignParams 对齐
+        const fbPayload = { ts: String(ts), nonce } as any;
+        const FB_SIGNED_FIELDS = ['server_url', 'role_id', 'uid', 'p', 'price', 'package_id', 'pid', 'payment_method', 'l'];
+        for (const f of FB_SIGNED_FIELDS) {
+          if (url.searchParams.has(f)) fbPayload[f] = url.searchParams.get(f);
+        }
+        {
+          const b: any = (init as any)?.body;
+          try {
+            let src: any = null;
+            if (typeof b === 'string') src = JSON.parse(b);
+            else if (b && typeof b === 'object') src = b;
+            if (src && typeof src === 'object') {
+              for (const f of FB_SIGNED_FIELDS) {
+                if (src[f] !== undefined && src[f] !== null && src[f] !== '' && fbPayload[f] === undefined) {
+                  fbPayload[f] = src[f];
+                }
+              }
+            }
+          } catch {}
+        }
+        const base = buildSignBase(fbPayload);
     const sign = md5Hex(base + token);
 
         const existingHeaders = (init?.headers as any) || {};
