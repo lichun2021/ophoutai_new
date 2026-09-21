@@ -700,6 +700,7 @@ router.post('/admin/payment-routing/settings/update', adminWrap(PaymentRoutingCt
 /**
  * 玩家详情查询
  */
+router.get('/admin/player/recharge-ranking', adminWrap(PlayerDetailCtrl.getPlayerRechargeRanking, '玩家充值排行榜(按周期+分页+可定位用户)'));
 router.post('/admin/player/detail', adminWrap(PlayerDetailCtrl.getPlayerDetail, '获取玩家详情'));
 router.post('/admin/player/update-remark', adminWrap(PlayerDetailCtrl.updateRemark, '更新玩家备注'));
 router.post('/admin/player/update-role-server', adminWrap(PlayerDetailCtrl.updateRoleServer, '修改角色区服'));
