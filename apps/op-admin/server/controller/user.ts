@@ -1292,6 +1292,10 @@ export const steamLogin = async (evt: H3Event) => {
         console.log("Steam用户登录成功:", userData.username);
 
         // ========== 7. 生成响应 ==========
+        // 客户端收到 Steam 授权成功事件后，向此地址提交本次支付的 token。
+        const defaultSteamNotifyUrl = 'https://api.ymumel.cn/api/payment/steam-notify';
+        const steamNotifyUrl = String(await getSystemParam('steam_notify_url', defaultSteamNotifyUrl) || '').trim()
+            || defaultSteamNotifyUrl;
         const sign = crypto.createHash('md5')
             .update(`${userData.username}${Date.now()}${config.thirdPartyConfig?.accessKey || 'default_key'}`)
             .digest('hex');
@@ -1325,8 +1329,9 @@ export const steamLogin = async (evt: H3Event) => {
             mallUrl: mallUrl
         };
 
-        console.log("Steam登录返回数据:", response);
-        return response;
+        const steamResponse = { ...response, steam_notify_url: steamNotifyUrl };
+        console.log("Steam登录返回数据:", steamResponse);
+        return steamResponse;
 
     } catch (e: any) {
         console.error("Steam登录异常:", e);
@@ -2250,4 +2255,3 @@ export const banUser = async (evt: H3Event) => {
         };
     }
 };
-

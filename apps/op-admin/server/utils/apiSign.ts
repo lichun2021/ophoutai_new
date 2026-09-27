@@ -123,6 +123,10 @@ export function pickSignParams(allParams: Record<string, any>): Record<string, a
 }
 
 export function shouldBypass(pathname: string): boolean {
+  // Steam 授权通知不携带平台通用签名；支付状态由处理器向 Steam QueryTxn 核实。
+  // 精确匹配，避免把其他 Steam 路径一并放行。
+  if (pathname === '/api/payment/steam-notify' || pathname === '/api/payment/steam-notify/') return true;
+
   // 第三方回调等无法携带签名的接口，放行
   const bypassList = [
     '/api/payment/third-party-notify',
@@ -209,5 +213,4 @@ export async function verifyApiSignature(
     // console.error('Nonce check skipped due to Redis error:', e?.message || e);
   }
 }
-
 
