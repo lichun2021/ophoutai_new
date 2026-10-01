@@ -12,7 +12,7 @@
       </div>
 
       <!-- 登录表单 -->
-      <form class="login-form" @submit.prevent="login">
+      <form class="login-form" @submit.prevent="login()">
         <div class="form-field">
           <label class="field-label">用户名</label>
           <div class="input-wrap">
@@ -96,19 +96,29 @@ const login = async (isAutoLogin = false) => {
       await router.push(redirect);
       return;
     }
-    // 失败：自动登录场景下不抛错，让玩家在表单里手动输入
-    if (isAutoLogin) {
-      tips.error('登录链接已失效，请手动输入账号密码');
+    tips.error('登录失败，请稍后重试');
+  } catch (err) {
+    const status = Number(err?.statusCode || err?.status || err?.response?.status || err?.data?.statusCode);
+    const detail = err?.data?.data;
+    if (status === 429) {
+      const retryAfter = Number(detail?.retryAfter);
+      const wait = Number.isFinite(retryAfter) && retryAfter > 0
+        ? `请 ${Math.ceil(retryAfter)} 秒后重试。`
+        : '请稍后重试。';
+      const message = detail?.reason === 'IP_LOGIN_LIMIT'
+        ? `同一 IP 登录过于频繁，每分钟仅允许登录一次。${wait}`
+        : (err?.data?.message || `登录请求过于频繁，${wait}`);
+      tips.error(message);
+      // 限流不代表链接过期，保留 token 和目标页面供稍后重试
+    } else if (status === 401 && tParam) {
+      tips.error('免登录链接已失效或已被使用，请返回游戏重新登录获取新链接');
       await router.replace({ path: route.path });
-    } else {
+    } else if (status === 401) {
       tips.error('登录失败，用户名或密码错误');
-    }
-  } catch {
-    if (isAutoLogin) {
-      tips.error('登录链接已失效，请手动输入账号密码');
-      await router.replace({ path: route.path });
+    } else if (status === 403) {
+      tips.error('登录受限，请联系客服');
     } else {
-      tips.error('登录失败，无法连接到服务器');
+      tips.error(status >= 500 ? '登录服务暂不可用，请稍后重试' : '登录失败，请检查网络后重试');
     }
   } finally {
     loading.value = false;

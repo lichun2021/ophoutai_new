@@ -788,7 +788,8 @@ export const userLogin = async (evt: H3Event) => {
                     const ttl = await redis.ttl(loginLimitKey);
                     throw createError({
                         status: 429,
-                        message: `登录过于频繁，请 ${Math.max(1, ttl)} 秒后再试`,
+                        message: `同一 IP 登录过于频繁，每分钟仅允许登录一次，请 ${Math.max(1, ttl)} 秒后再试`,
+                        data: { reason: 'IP_LOGIN_LIMIT', retryAfter: Math.max(1, ttl) },
                     });
                 }
             } catch (err: any) {
@@ -814,11 +815,19 @@ export const userLogin = async (evt: H3Event) => {
                 values: [username, password],
             }) as any[];
         } else if (t) {
-            // 一次性 token 免密登录：Redis 原子 GETDEL，token 用过即焚
+            // Steam token 保留至到期；普通及旧版 token 原子读取并删除
             let userIdStr: string | null = null;
             try {
                 const redis = getRedisCluster();
-                userIdStr = await (redis as any).call('GETDEL', `autologin:${t}`);
+                userIdStr = await redis.eval(`
+                    local value = redis.call('GET', KEYS[1])
+                    if not value then return nil end
+                    if string.match(value, '^steam:%d+$') then
+                        return string.sub(value, 7)
+                    end
+                    redis.call('DEL', KEYS[1])
+                    return value
+                `, 1, `autologin:${t}`) as string | null;
             } catch (redisErr) {
                 logError('autologin token 校验失败 Redis 异常', redisErr);
                 throw createError({ status: 500, message: '登录服务暂不可用' });
@@ -983,7 +992,8 @@ export const userLogin = async (evt: H3Event) => {
             }
         }
         throw createError({
-            status: e.status || 500,
+            status: e.statusCode || e.status || 500,
+            data: e.data,
             message: e.message || '登录失败',
         });
     }

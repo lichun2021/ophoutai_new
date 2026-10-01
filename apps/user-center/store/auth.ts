@@ -123,8 +123,8 @@ export const useAuthStore = defineStore('auth', {
             data: error?.data
           });
           this.clearAuthState();
-          // 不重新抛出错误，而是返回false让上层正常处理
-          return false;
+          // 保留 HTTP 状态及限流信息，由登录页面显示具体原因
+          throw error;
         }
     },
     async logInAdmin(username: string, password: string, googleCode?: string) {

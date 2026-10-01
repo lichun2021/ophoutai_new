@@ -494,9 +494,9 @@ async function notifyGameServer(
  */
 export async function generateUserLoginUrl(userId: number, redirectPath: string = '/user/home'): Promise<string | null> {
     try {
-        // 仅校验用户存在；不再从库里取 username/password
+        // 查询用户及第三方身份，用于确定免密链接有效期
         const userResult = await sql({
-            query: 'SELECT id FROM Users WHERE id = ?',
+            query: 'SELECT id, thirdparty_uid FROM Users WHERE id = ?',
             values: [userId],
         }) as any[];
 
@@ -505,13 +505,17 @@ export async function generateUserLoginUrl(userId: number, redirectPath: string 
             return null;
         }
 
-        // 一次性 token 自动登录：
-        //   32 字节随机 token → Redis 存 user_id，TTL 60 秒，NX 保证不冲突
-        //   验证端用 GETDEL 原子取值并立即销毁，做到「用过即焚 + 短时效」
+        // 按数据库中的 Steam 身份判断，不采用客户端传入的渠道参数
+        const isSteamUser = /^steam_\d+$/.test(String(userResult[0].thirdparty_uid || ''));
+        const tokenTtlSeconds = isSteamUser ? 6 * 60 * 60 : 60;
+
+        // token 自动登录：
+        //   Steam token 带服务端身份标记，6 小时内可重复使用；其他用户 60 秒内仅可使用一次
+        //   有效期从生成时计算，重复登录不续期，NX 保证不冲突
         const token = crypto.randomBytes(32).toString('hex');
         try {
             const redis = getRedisCluster();
-            const ok = await redis.set(`autologin:${token}`, String(userId), 'EX', 60, 'NX');
+            const ok = await redis.set(`autologin:${token}`, isSteamUser ? `steam:${userId}` : String(userId), 'EX', tokenTtlSeconds, 'NX');
             if (!ok) {
                 console.error('autologin token 写 Redis 失败：NX 冲突', { userId });
                 return null;

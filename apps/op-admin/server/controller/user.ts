@@ -697,11 +697,19 @@ export const userLogin = async (evt: H3Event) => {
                 values: [username, password],
             }) as any[];
         } else if (t) {
-            // 一次性 token 免密登录：Redis 原子 GETDEL，token 用过即焚
+            // Steam token 保留至到期；普通及旧版 token 原子读取并删除
             let userIdStr: string | null = null;
             try {
                 const redis = getRedisCluster();
-                userIdStr = await (redis as any).call('GETDEL', `autologin:${t}`);
+                userIdStr = await redis.eval(`
+                    local value = redis.call('GET', KEYS[1])
+                    if not value then return nil end
+                    if string.match(value, '^steam:%d+$') then
+                        return string.sub(value, 7)
+                    end
+                    redis.call('DEL', KEYS[1])
+                    return value
+                `, 1, `autologin:${t}`) as string | null;
             } catch (redisErr) {
                 console.error('autologin token 校验失败 Redis 异常:', redisErr);
                 throw createError({ status: 500, message: '登录服务暂不可用' });
