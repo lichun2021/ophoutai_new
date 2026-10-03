@@ -150,7 +150,8 @@
               <th class="px-3 py-2 text-center">排名</th>
               <th class="px-3 py-2 text-left">用户ID</th>
               <th class="px-3 py-2 text-left">用户名</th>
-              <th class="px-3 py-2 text-right">累计充值</th>
+              <th class="px-3 py-2 text-right">区间累计充值</th>
+              <th class="px-3 py-2 text-right" title="不受日期筛选影响，统计历史成功的真实充值，包含 Steam">历史累计充值</th>
               <th class="px-3 py-2 text-right">充值笔数</th>
               <th class="px-3 py-2 text-left">角色 / 区服</th>
             </tr>
@@ -174,6 +175,7 @@
               <td class="px-3 py-2 text-gray-500 font-mono">{{ item.user_id }}</td>
               <td class="px-3 py-2 font-semibold text-gray-900">{{ item.username }}</td>
               <td class="px-3 py-2 text-right font-bold text-emerald-600">¥{{ formatCurrency(item.total_amount) }}</td>
+              <td class="px-3 py-2 text-right font-semibold text-gray-900">¥{{ formatCurrency(item.lifetime_total_amount) }}</td>
               <td class="px-3 py-2 text-right text-gray-600">{{ item.recharge_count }}</td>
               <td class="px-3 py-2">
                 <div v-if="item.characters.length === 0" class="text-gray-400 text-xs">暂无角色</div>

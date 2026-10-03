@@ -1210,7 +1210,7 @@ export const steamLogin = async (evt: H3Event) => {
 
             const thirdpartyUid = `steam_${verifiedSteamId}`;
             const channelCode = 'steam';
-            const gameCode = gameId || 'default';
+            const gameCode = !gameId || gameId === 'default' ? 'rd123' : gameId;
 
             // 为 Steam 用户生成一个随机密码（用户不需要知道，仅内部使用）
             const autoPassword = '123456';

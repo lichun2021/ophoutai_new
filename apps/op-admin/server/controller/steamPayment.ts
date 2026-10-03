@@ -316,6 +316,11 @@ export const steamInitPay = async (evt: H3Event) => {
         }
 
 
+        // 兼容旧 Steam 账号的空值/default，统一归属默认游戏。
+        if (!userGameCode || userGameCode === 'default') {
+            userGameCode = 'rd123';
+        }
+
         // 获取客户端 IP
         let clientIp = '';
         try {

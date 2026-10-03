@@ -825,6 +825,21 @@ export const getPlayerRechargeRanking = async (evt: H3Event) => {
 
         const pageUserIds = pageRows.map(r => Number(r.user_id));
 
+        // 历史累计不受当前日期区间影响，仅查询本页玩家，沿用真实充值口径。
+        const lifetimeRows = period === 'all' ? pageRows : await sql({
+            query: `
+                SELECT user_id, SUM(amount) AS total
+                FROM paymentrecords
+                WHERE ${cashFilterSql}
+                  AND user_id IN (${pageUserIds.map(() => '?').join(',')})
+                GROUP BY user_id
+            `,
+            values: pageUserIds,
+        }) as { user_id: number; total: string }[];
+        const lifetimeAmountByUser = new Map(lifetimeRows.map(row => [
+            Number(row.user_id), Number((parseFloat(row.total) || 0).toFixed(2)),
+        ]));
+
         // 批量获取用户名
         const userRows = await sql({
             query: `SELECT id, username FROM Users WHERE id IN (${pageUserIds.map(() => '?').join(',')})`,
@@ -859,6 +874,7 @@ export const getPlayerRechargeRanking = async (evt: H3Event) => {
                 user_id: userId,
                 username: userMap.get(userId) || '-',
                 total_amount: Number((parseFloat(row.total) || 0).toFixed(2)),
+                lifetime_total_amount: lifetimeAmountByUser.get(userId) || 0,
                 recharge_count: Number(row.cnt) || 0,
                 characters: charactersByUser.get(userId) || [],
                 is_focus: focusUserId !== null && userId === focusUserId,
