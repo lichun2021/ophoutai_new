@@ -56,3 +56,26 @@ CREATE TABLE IF NOT EXISTS CheckInRecords (
     INDEX idx_user (user_id),
     INDEX idx_date (check_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='每日签到记录';
+
+-- ============================================================
+-- 5. 多语言支持（中/英）：商城礼包、CDK类型、系统参数
+-- ============================================================
+
+-- 5.1 外部商城礼包表新增英文名称与英文描述字段
+ALTER TABLE `externalgiftpackages`
+  ADD COLUMN `package_name_en` VARCHAR(200) DEFAULT '' COMMENT '礼包英文名称' AFTER `package_name`,
+  ADD COLUMN `description_en` TEXT COMMENT '礼包英文描述' AFTER `description`;
+
+-- 5.2 CDK 类型表新增英文标题与英文内容字段
+ALTER TABLE `cdktypes`
+  ADD COLUMN `title_en` VARCHAR(255) COLLATE utf8mb4_general_ci DEFAULT '' COMMENT '英文标题' AFTER `title`,
+  ADD COLUMN `content_en` TEXT COLLATE utf8mb4_general_ci COMMENT '英文内容' AFTER `content`;
+
+-- 5.3 系统参数表新增英文支付说明参数
+INSERT INTO `systemparams` (`key`, `content`)
+VALUES (
+  'payment_message_en',
+  '*Platform Coin Info: 1 CNY = 1 Platform Coin (never expires). You can top up via the app or official website.\nDear Player: After recharging in-game, you can claim bonus benefits in the Welfare Center!'
+)
+ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP;
+

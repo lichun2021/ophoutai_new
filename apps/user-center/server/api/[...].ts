@@ -254,13 +254,13 @@ router.get('/user/item-config', defineEventHandler(async (event: H3Event) => {
     const results = searchItems(term);
     const total = results.length;
     const offset = (page - 1) * pageSize;
-    const paged = results.slice(offset, offset + pageSize).map(r => ({ id: r.id, n: r.name, cn: r.name }));
+    const paged = results.slice(offset, offset + pageSize).map(r => ({ id: r.id, n: r.name, cn: r.name, en: r.en || '' }));
     return { success: true, data: { list: paged, total, page, pageSize, totalPages: Math.ceil(total / pageSize) } };
   }
   const all = getAllItems();
   const total = all.length;
   const offset = (page - 1) * pageSize;
-  const paged = all.slice(offset, offset + pageSize).map(it => ({ id: it.id, n: it.name, cn: it.name }));
+  const paged = all.slice(offset, offset + pageSize).map(it => ({ id: it.id, n: it.name, cn: it.name, en: it.en || '' }));
   return { success: true, data: { list: paged, total, page, pageSize, totalPages: Math.ceil(total / pageSize) } };
 }));
 

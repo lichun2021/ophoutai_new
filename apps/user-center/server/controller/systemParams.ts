@@ -225,7 +225,7 @@ export const getPublicPTBRate = async (evt: H3Event) => {
 export const getPublicParamByKey = async (evt: H3Event) => {
     try {
         // 仅允许的公开键
-        const whitelist = new Set<string>(['ptb_exchange_rate', 'kefu_line']);
+        const whitelist = new Set<string>(['ptb_exchange_rate', 'kefu_line', 'payment_message', 'payment_message_en']);
         // @ts-ignore
         const key = (evt.context?.params?.key) || (evt as any).context?.params?.key;
         const k = String(key || '').trim();

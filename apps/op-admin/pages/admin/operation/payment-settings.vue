@@ -400,7 +400,17 @@
             <UTextarea
               v-model="messageForm.message"
               placeholder="请输入支付说明"
-              :rows="6"
+              :rows="4"
+              maxlength="500"
+              resize
+            />
+          </UFormGroup>
+
+          <UFormGroup label="英文支付说明">
+            <UTextarea
+              v-model="messageForm.message_en"
+              placeholder="选填，英文界面展示的支付说明"
+              :rows="4"
               maxlength="500"
               resize
             />
@@ -410,6 +420,9 @@
             <h4 class="text-sm font-semibold text-gray-700 mb-2">预览效果：</h4>
             <div class="preview-content">
               {{ messageForm.message || '暂无内容' }}
+            </div>
+            <div v-if="messageForm.message_en" class="preview-content mt-2 text-blue-700">
+              {{ messageForm.message_en }}
             </div>
           </div>
         </div>
@@ -622,7 +635,8 @@ const formData = ref({
 
 // 支付说明表单
 const messageForm = ref({
-  message: ''
+  message: '',
+  message_en: ''
 })
 
 // API到账开关
@@ -845,7 +859,8 @@ const showMessageDialog = async () => {
   try {
     loading.value = true
     const response = await $fetch('/api/admin/payment-message')
-    messageForm.value.message = response.data.message
+    messageForm.value.message = response.data.message || ''
+    messageForm.value.message_en = response.data.message_en || ''
     messageDialogVisible.value = true
   } catch (error) {
     toast.add({
@@ -865,7 +880,10 @@ const submitMessageForm = async () => {
     
     await $fetch('/api/admin/payment-message', {
       method: 'POST',
-      body: { message: messageForm.value.message }
+      body: {
+        message: messageForm.value.message,
+        message_en: messageForm.value.message_en || ''
+      }
     })
     
     toast.add({

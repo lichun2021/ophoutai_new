@@ -6,12 +6,12 @@
       <div class="hero-bg-orb"></div>
       <div class="hero-content">
         <div class="hero-left">
-          <p class="hero-greeting">欢迎回来 👋</p>
-          <h2 class="hero-username">{{ authStore.userInfo?.username || '用户' }}</h2>
+          <p class="hero-greeting">{{ tt('欢迎回来 👋', 'Welcome back 👋') }}</p>
+          <h2 class="hero-username">{{ authStore.userInfo?.username || tt('用户', 'User') }}</h2>
           <div class="hero-balance">
             <img src="/logo-warm.svg" alt="coin" class="hero-coin" />
             <span class="hero-amount">{{ formatBalance(authStore.userInfo?.platform_coins) }}</span>
-            <span class="hero-unit">平台币</span>
+            <span class="hero-unit">{{ tt('平台币', 'Coins') }}</span>
           </div>
         </div>
         <div class="hero-right">
@@ -25,15 +25,15 @@
       <div class="quick-actions">
         <button class="qa-btn primary" @click="recharge">
           <span class="qa-icon">💳</span>
-          <span>充值</span>
+          <span>{{ tt('充值', 'Top Up') }}</span>
         </button>
         <button class="qa-btn" @click="goToMall">
           <span class="qa-icon">🎁</span>
-          <span>商城</span>
+          <span>{{ tt('商城', 'Mall') }}</span>
         </button>
         <button class="qa-btn" @click="goToRechargeRecords">
           <span class="qa-icon">📋</span>
-          <span>充值记录</span>
+          <span>{{ tt('充值记录', 'History') }}</span>
         </button>
       </div>
     </div>
@@ -45,7 +45,7 @@
           <span>💰</span>
         </div>
         <div class="stat-body">
-          <p class="stat-label">累计充值</p>
+          <p class="stat-label">{{ tt('累计充值', 'Total Top-Up') }}</p>
           <p class="stat-value">¥{{ formatRecharge(stats.totalRecharge) }}</p>
         </div>
       </div>
@@ -54,8 +54,8 @@
           <span>🛒</span>
         </div>
         <div class="stat-body">
-          <p class="stat-label">购买次数</p>
-          <p class="stat-value">{{ stats.purchaseCount }}<small>次</small></p>
+          <p class="stat-label">{{ tt('购买次数', 'Purchases') }}</p>
+          <p class="stat-value">{{ stats.purchaseCount }}<small>{{ tt('次', '') }}</small></p>
         </div>
       </div>
     </div>
@@ -63,14 +63,14 @@
     <!-- 最近订单 -->
     <div class="section-card">
       <div class="section-head">
-        <h3 class="section-title">最近订单</h3>
-        <span class="section-hint">近3笔</span>
+        <h3 class="section-title">{{ tt('最近订单', 'Recent Orders') }}</h3>
+        <span class="section-hint">{{ tt('近3笔', 'Last 3') }}</span>
       </div>
 
       <div v-if="recentOrders.length > 0" class="order-list">
         <div v-for="order in recentOrders" :key="order.id" class="order-item">
           <div class="order-left">
-            <p class="order-name">{{ order.item_name || '平台币充值' }}</p>
+            <p class="order-name">{{ (isEn ? (order.item_name_en || order.item_name) : order.item_name) || tt('平台币充值', 'Platform Coins Top-Up') }}</p>
             <p class="order-date">{{ formatDate(order.created_at) }}</p>
             <span class="order-badge" :class="order.status">{{ getOrderStatusText(order.status) }}</span>
           </div>
@@ -83,11 +83,11 @@
 
       <div v-else class="empty-block">
         <span class="empty-emoji">📭</span>
-        <p>暂无购买记录</p>
-        <button class="mini-btn" @click="goToMall">前往商城</button>
+        <p>{{ tt('暂无购买记录', 'No purchase history yet') }}</p>
+        <button class="mini-btn" @click="goToMall">{{ tt('前往商城', 'Visit Mall') }}</button>
       </div>
 
-      <button class="view-all-btn" @click="viewAllOrders">查看全部购买记录 →</button>
+      <button class="view-all-btn" @click="viewAllOrders">{{ tt('查看全部购买记录 →', 'View All Purchase History →') }}</button>
     </div>
   </div>
 </template>
@@ -97,12 +97,14 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 definePageMeta({ middleware: 'auth', layout: 'user' });
 
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const { tt, isEn } = useI18n();
 
 const stats = ref({ totalRecharge: 0, purchaseCount: 0 });
 const recentOrders = ref([]);
@@ -110,15 +112,21 @@ const refreshing = ref(false);
 
 const formatBalance = (v) => { if (!v) return '0'; return Math.floor(parseFloat(v)).toString(); };
 const formatRecharge = (v) => { if (!v) return '0.00'; return parseFloat(v).toFixed(2); };
-const formatDate = (d) => { if (!d) return '-'; return new Date(d).toLocaleDateString('zh-CN'); };
-const getOrderStatusText = (s) => ({ pending: '待付款', paid: '已付款', completed: '已完成', cancelled: '已取消', failed: '支付失败' }[s] || '未知');
+const formatDate = (d) => { if (!d) return '-'; return new Date(d).toLocaleDateString(isEn.value ? 'en-US' : 'zh-CN'); };
+const getOrderStatusText = (s) => ({
+  pending: tt('待付款', 'Pending'),
+  paid: tt('已付款', 'Paid'),
+  completed: tt('已完成', 'Completed'),
+  cancelled: tt('已取消', 'Cancelled'),
+  failed: tt('支付失败', 'Failed')
+}[s] || tt('未知', 'Unknown'));
 
 const refreshBalance = async () => {
   refreshing.value = true;
   try {
     const ok = await authStore.refreshBalance();
-    tips[ok ? 'success' : 'warning'](ok ? '余额已刷新' : '刷新失败');
-  } catch { tips.error('刷新失败'); } finally { refreshing.value = false; }
+    tips[ok ? 'success' : 'warning'](ok ? tt('余额已刷新', 'Balance refreshed') : tt('刷新失败', 'Refresh failed'));
+  } catch { tips.error(tt('刷新失败', 'Refresh failed')); } finally { refreshing.value = false; }
 };
 
 const recharge = () => router.push('/user/cashier');
@@ -135,6 +143,7 @@ const loadUserData = async () => {
       recentOrders.value = (res.data.recentOrders || []).map(r => ({
         id: r.id,
         item_name: r.product_name,
+        item_name_en: r.product_name_en || '',
         amount: r.amount,
         status: r.payment_status === 3 ? 'completed' : r.payment_status === 1 ? 'pending' : 'failed',
         created_at: r.created_at

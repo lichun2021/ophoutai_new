@@ -2,8 +2,8 @@
   <div class="orders-container">
     <!-- 页面标题 -->
     <div class="page-header">
-      <h1>购买记录</h1>
-      <p>查看您的所有购买记录和消费明细</p>
+      <h1>{{ tt('购买记录', 'Purchase History') }}</h1>
+      <p>{{ tt('查看您的所有购买记录和消费明细', 'View all your gift pack purchases and spending details') }}</p>
     </div>
 
     <!-- 统计卡片 -->
@@ -13,7 +13,7 @@
           <UIcon name="i-heroicons-currency-dollar" />
         </div>
                   <div class="stat-content">
-            <h3>累计消费(平台币)</h3>
+            <h3>{{ tt('累计消费(平台币)', 'Total Spent (Coins)') }}</h3>
             <p class="stat-value">
               <img src="/logo-warm.svg" alt="平台币" class="stat-coin-icon" />
               {{ formatCoins(totalSpent) }}
@@ -26,8 +26,8 @@
             <UIcon name="i-heroicons-shopping-cart" />
           </div>
           <div class="stat-content">
-            <h3>购买次数</h3>
-            <p class="stat-value">{{ purchaseCount }}次</p>
+            <h3>{{ tt('购买次数', 'Total Purchases') }}</h3>
+            <p class="stat-value">{{ purchaseCount }}{{ tt('次', '') }}</p>
           </div>
       </div>
     </div>
@@ -35,33 +35,33 @@
     <!-- 筛选条件 -->
     <div class="filters">
       <div class="filter-group">
-        <label>订单状态：</label>
+        <label>{{ tt('订单状态：', 'Status:') }}</label>
         <USelectMenu 
           v-model="statusFilter" 
           :options="statusOptions"
           value-attribute="value"
           option-attribute="label"
-          placeholder="选择状态"
+          :placeholder="tt('选择状态', 'Select status')"
           class="filter-select"
         >
           <template #label>
-            {{ statusOptions.find(opt => opt.value === statusFilter)?.label || '选择状态' }}
+            {{ statusOptions.find(opt => opt.value === statusFilter)?.label || tt('选择状态', 'Select status') }}
           </template>
         </USelectMenu>
       </div>
       
       <div class="filter-group">
-        <label>时间范围：</label>
+        <label>{{ tt('时间范围：', 'Time Range:') }}</label>
         <USelectMenu 
           v-model="timeFilter" 
           :options="timeOptions"
           value-attribute="value"
           option-attribute="label"
-          placeholder="选择时间"
+          :placeholder="tt('选择时间', 'Select range')"
           class="filter-select"
         >
           <template #label>
-            {{ timeOptions.find(opt => opt.value === timeFilter)?.label || '选择时间' }}
+            {{ timeOptions.find(opt => opt.value === timeFilter)?.label || tt('选择时间', 'Select range') }}
           </template>
         </USelectMenu>
       </div>
@@ -71,14 +71,14 @@
     <div class="orders-list">
       <div v-if="loading" class="loading-state">
         <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
-        <p>加载中...</p>
+        <p>{{ tt('加载中...', 'Loading...') }}</p>
       </div>
 
       <div v-else-if="filteredOrders.length === 0" class="empty-state">
         <div class="empty-content">
           <UIcon name="i-heroicons-shopping-bag" class="empty-icon" />
-          <h3>暂无购买记录</h3>
-          <p>您还没有购买任何商品，快去商城看看精彩的礼包吧！</p>
+          <h3>{{ tt('暂无购买记录', 'No Purchase Records') }}</h3>
+          <p>{{ tt('您还没有购买任何商品，快去商城看看精彩的礼包吧！', 'You have not purchased any gift packs yet. Check out the Gift Mall!') }}</p>
           
           <!-- 推荐操作 -->
           <div class="recommend-actions">
@@ -90,7 +90,7 @@
                 size="lg" 
                 icon="i-heroicons-gift"
               >
-                前往商城
+                {{ tt('前往商城', 'Visit Mall') }}
               </UButton>
               <UButton 
                 v-else
@@ -99,7 +99,7 @@
                 size="lg" 
                 icon="i-heroicons-credit-card"
               >
-                平台币充值
+                {{ tt('平台币充值', 'Top Up Coins') }}
               </UButton>
             </div>
           </div>
@@ -114,8 +114,8 @@
         >
           <div class="order-header">
             <div class="order-info">
-              <h4>{{ order.package_name }}</h4>
-              <p class="order-id">订单号：{{ order.order_id }}</p>
+              <h4>{{ isEn ? (order.package_name_en || order.package_name) : order.package_name }}</h4>
+              <p class="order-id">{{ tt('订单号：', 'Order No.: ') }}{{ order.order_id }}</p>
             </div>
             <div class="order-status">
               <span class="status-badge" :class="getStatusClass(order.payment_status)">
@@ -126,11 +126,11 @@
 
           <div class="order-content">
             <div class="order-details">
-              <p class="order-description">{{ order.description }}</p>
+              <p class="order-description">{{ isEn && order.description === '礼包购买' ? 'Gift Pack Purchase' : order.description }}</p>
               
               <div class="order-meta">
                 <div class="meta-item">
-                  <span class="label">消费金额：</span>
+                  <span class="label">{{ tt('消费金额：', 'Cost:') }}</span>
                   <span class="value price-value">
                     <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                     {{ formatCoins(order.amount) }}
@@ -141,12 +141,12 @@
                 </div>
                 
                 <div class="meta-item">
-                  <span class="label">购买时间：</span>
+                  <span class="label">{{ tt('购买时间：', 'Purchased:') }}</span>
                   <span class="value">{{ formatDateTime(order.created_at) }}</span>
                 </div>
 
                 <div v-if="order.completed_at" class="meta-item">
-                  <span class="label">完成时间：</span>
+                  <span class="label">{{ tt('完成时间：', 'Completed:') }}</span>
                   <span class="value">{{ formatDateTime(order.completed_at) }}</span>
                 </div>
               </div>
@@ -161,7 +161,7 @@
         class="orders-pagination"
       >
         <div class="pagination-info">
-          共 {{ pagination.total }} 条记录
+          {{ tt(`共 ${pagination.total} 条记录`, `Total ${pagination.total} records`) }}
         </div>
         <UPagination
           v-model="pagination.page"
@@ -179,6 +179,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 // 页面元数据
 definePageMeta({
@@ -189,6 +190,7 @@ definePageMeta({
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const { isEn, tt } = useI18n();
 
 // 响应式数据
 const purchaseOrders = ref([]);
@@ -197,19 +199,19 @@ const statusFilter = ref('all');
 const timeFilter = ref('all');
 
 // 状态选项 - 根据 payment_status 字段定义
-const statusOptions = [
-  { label: '全部状态', value: 'all' },
-  { label: '成功', value: 'success' },
-  { label: '失败', value: 'failed' }
-];
+const statusOptions = computed(() => [
+  { label: tt('全部状态', 'All Status'), value: 'all' },
+  { label: tt('成功', 'Completed'), value: 'success' },
+  { label: tt('失败', 'Failed'), value: 'failed' }
+]);
 
 // 时间选项
-const timeOptions = [
-  { label: '全部时间', value: 'all' },
-  { label: '最近7天', value: '7days' },
-  { label: '最近30天', value: '30days' },
-  { label: '最近3个月', value: '3months' }
-];
+const timeOptions = computed(() => [
+  { label: tt('全部时间', 'All Time'), value: 'all' },
+  { label: tt('最近7天', 'Last 7 Days'), value: '7days' },
+  { label: tt('最近30天', 'Last 30 Days'), value: '30days' },
+  { label: tt('最近3个月', 'Last 3 Months'), value: '3months' }
+]);
 
 // 计算属性
 const totalSpent = ref(0);
@@ -267,17 +269,17 @@ const handlePageChange = () => {
 const formatDateTime = (dateString) => {
   if (!dateString) return '-';
   const date = new Date(dateString);
-  return date.toLocaleString('zh-CN');
+  return date.toLocaleString(isEn.value ? 'en-US' : 'zh-CN');
 };
 
 const getStatusText = (paymentStatus) => {
   const statusMap = {
-    0: '未完成',
-    1: '处理中',
-    2: '失败',
-    3: '已完成'
+    0: tt('未完成', 'Unpaid'),
+    1: tt('处理中', 'Processing'),
+    2: tt('失败', 'Failed'),
+    3: tt('已完成', 'Completed')
   };
-  return statusMap[paymentStatus] || '未知';
+  return statusMap[paymentStatus] || tt('未知', 'Unknown');
 };
 
 const getStatusClass = (paymentStatus) => {
@@ -316,7 +318,7 @@ const loadPurchaseOrders = async () => {
   try {
     const userId = authStore.userInfo?.id || authStore.id;
     if (!userId) {
-      tips.error('用户信息获取失败');
+      tips.error(tt('用户信息获取失败', 'Failed to load user info'));
       return;
     }
 
@@ -336,6 +338,7 @@ const loadPurchaseOrders = async () => {
         id: record.id,
         order_id: record.mch_order_id || record.transaction_id,
         package_name: record.product_name,
+        package_name_en: record.product_name_en || '',
         description: record.product_des, // 使用商品描述作为描述
         amount: record.amount,
         payment_status: record.payment_status,
@@ -350,7 +353,7 @@ const loadPurchaseOrders = async () => {
       totalSpent.value = response.data.totalSpent || 0;
     } else {
       console.error('获取购买记录失败:', response.message);
-      tips.error(response.message || '获取购买记录失败');
+      tips.error(response.message || tt('获取购买记录失败', 'Failed to load purchase history'));
       purchaseOrders.value = [];
       pagination.total = 0;
       pagination.totalPages = 1;
@@ -359,7 +362,7 @@ const loadPurchaseOrders = async () => {
     }
   } catch (error) {
     console.error('加载购买记录失败:', error);
-    tips.error('加载购买记录失败');
+    tips.error(tt('加载购买记录失败', 'Failed to load purchase history'));
     purchaseOrders.value = [];
     pagination.total = 0;
     pagination.totalPages = 1;

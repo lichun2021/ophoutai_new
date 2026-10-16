@@ -7,7 +7,7 @@
         <div class="brand-logo">
           <img src="/logo-warm.svg" alt="logo" class="brand-icon" />
         </div>
-        <span class="brand-name">会员中心</span>
+        <span class="brand-name">{{ t('layout.brandName') }}</span>
       </div>
 
       <!-- 用户信息卡片 -->
@@ -25,34 +25,35 @@
       <nav class="sidebar-nav">
         <NuxtLink to="/user/home" class="sn-item" :class="{ active: $route.path === '/user/home' }">
           <span class="sn-icon">🏠</span>
-          <span>首页</span>
+          <span>{{ t('layout.nav.home') }}</span>
         </NuxtLink>
         <NuxtLink to="/user/cashier" class="sn-item" :class="{ active: $route.path === '/user/cashier' }">
           <span class="sn-icon">💳</span>
-          <span>充值</span>
+          <span>{{ t('layout.nav.cashier') }}</span>
         </NuxtLink>
         <NuxtLink to="/user/benefits" class="sn-item" :class="{ active: $route.path === '/user/benefits' }">
           <span class="sn-icon">⭐</span>
-          <span>权益</span>
+          <span>{{ t('layout.nav.benefits') }}</span>
         </NuxtLink>
         <NuxtLink to="/user/recharge" class="sn-item" :class="{ active: $route.path === '/user/recharge' }">
           <span class="sn-icon">📋</span>
-          <span>充值记录</span>
+          <span>{{ t('layout.nav.recharge') }}</span>
         </NuxtLink>
         <NuxtLink to="/user/mall" class="sn-item" :class="{ active: $route.path === '/user/mall' }">
           <span class="sn-icon">🎁</span>
-          <span>礼包商城</span>
+          <span>{{ t('layout.nav.mall') }}</span>
         </NuxtLink>
         <NuxtLink to="/user/orders" class="sn-item" :class="{ active: $route.path === '/user/orders' }">
           <span class="sn-icon">📦</span>
-          <span>购买记录</span>
+          <span>{{ t('layout.nav.orders') }}</span>
         </NuxtLink>
       </nav>
 
       <div class="sidebar-bottom">
+        <LanguageSwitcher block />
         <button class="logout-btn" @click="handleLogout">
           <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-4 h-4" />
-          <span>退出登录</span>
+          <span>{{ t('layout.nav.logout') }}</span>
         </button>
       </div>
     </aside>
@@ -68,6 +69,7 @@
           <span class="top-title">{{ pageTitle }}</span>
         </div>
         <div class="top-bar-right">
+          <LanguageSwitcher />
           <div class="balance-chip">
             <img src="/logo-warm.svg" alt="coin" class="chip-coin" />
             <span>{{ formatBalance(userBalance) }}</span>
@@ -86,23 +88,23 @@
     <nav class="bottom-nav">
       <NuxtLink to="/user/home" class="bn-item" :class="{ active: $route.path === '/user/home' }">
         <span class="bn-icon">🏠</span>
-        <span class="bn-label">首页</span>
+        <span class="bn-label">{{ t('layout.nav.home') }}</span>
       </NuxtLink>
       <NuxtLink to="/user/cashier" class="bn-item" :class="{ active: $route.path === '/user/cashier' }">
         <span class="bn-icon">💳</span>
-        <span class="bn-label">充值</span>
+        <span class="bn-label">{{ t('layout.nav.cashier') }}</span>
       </NuxtLink>
       <NuxtLink to="/user/benefits" class="bn-item bn-center" :class="{ active: $route.path === '/user/benefits' }">
         <span class="bn-icon-center">⭐</span>
-        <span class="bn-label">权益</span>
+        <span class="bn-label">{{ t('layout.nav.benefits') }}</span>
       </NuxtLink>
       <NuxtLink to="/user/mall" class="bn-item" :class="{ active: $route.path === '/user/mall' }">
         <span class="bn-icon">🎁</span>
-        <span class="bn-label">商城</span>
+        <span class="bn-label">{{ t('layout.nav.mallShort') }}</span>
       </NuxtLink>
       <NuxtLink to="/user/orders" class="bn-item" :class="{ active: $route.path === '/user/orders' }">
         <span class="bn-icon">📦</span>
-        <span class="bn-label">记录</span>
+        <span class="bn-label">{{ t('layout.nav.ordersShort') }}</span>
       </NuxtLink>
     </nav>
 
@@ -133,9 +135,10 @@
               <span>{{ item.label }}</span>
             </NuxtLink>
             <div class="drawer-sep"></div>
+            <LanguageSwitcher block />
             <button class="drawer-item danger" @click="handleLogout">
               <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-4 h-4" />
-              <span>退出登录</span>
+              <span>{{ t('layout.nav.logout') }}</span>
             </button>
           </div>
         </div>
@@ -148,38 +151,42 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '~/store/auth';
+import { useI18n } from '~/composables/useI18n';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const { t } = useI18n();
 const mobileMenuOpen = ref(false);
 
-const userDisplayName = computed(() => authStore.userInfo?.username || authStore.name || '用户');
+const userDisplayName = computed(() => authStore.userInfo?.username || authStore.name || t('common.user'));
 const userInitial = computed(() => userDisplayName.value.charAt(0).toUpperCase() || 'U');
 const userBalance = computed(() => authStore.platformCoins || 0);
 const formatBalance = (v) => Math.floor(Number(v || 0)).toString();
 
-const pageTitles = {
-  '/user/home': '首页',
-  '/user/cashier': '充值收银台',
-  '/user/recharge': '充值记录',
-  '/user/mall': '礼包商城',
-  '/user/orders': '购买记录',
-  '/user/profile': '个人资料',
-  '/user/benefits': '权益中心',
-  '/user/card-payment': '购买月卡',
-};
-const pageTitle = computed(() => pageTitles[route.path] || '会员中心');
+const pageTitle = computed(() => {
+  const map = {
+    '/user/home': t('layout.nav.home'),
+    '/user/cashier': t('layout.nav.cashierFull'),
+    '/user/recharge': t('layout.nav.recharge'),
+    '/user/mall': t('layout.nav.mall'),
+    '/user/orders': t('layout.nav.orders'),
+    '/user/profile': t('layout.nav.profile'),
+    '/user/benefits': t('layout.nav.benefitsFull'),
+    '/user/card-payment': t('layout.nav.cardPayment'),
+  };
+  return map[route.path] || t('layout.brandName');
+});
 
-const menuItems = [
-  { to: '/user/home', label: '首页', emoji: '🏠' },
-  { to: '/user/cashier', label: '充值收银台', emoji: '💳' },
-  { to: '/user/benefits', label: '权益中心', emoji: '⭐' },
-  { to: '/user/recharge', label: '充值记录', emoji: '📋' },
-  { to: '/user/mall', label: '礼包商城', emoji: '🎁' },
-  { to: '/user/orders', label: '购买记录', emoji: '📦' },
-  { to: '/user/profile', label: '个人资料', emoji: '👤' },
-];
+const menuItems = computed(() => [
+  { to: '/user/home', label: t('layout.nav.home'), emoji: '🏠' },
+  { to: '/user/cashier', label: t('layout.nav.cashierFull'), emoji: '💳' },
+  { to: '/user/benefits', label: t('layout.nav.benefitsFull'), emoji: '⭐' },
+  { to: '/user/recharge', label: t('layout.nav.recharge'), emoji: '📋' },
+  { to: '/user/mall', label: t('layout.nav.mall'), emoji: '🎁' },
+  { to: '/user/orders', label: t('layout.nav.orders'), emoji: '📦' },
+  { to: '/user/profile', label: t('layout.nav.profile'), emoji: '👤' },
+]);
 
 const toggleMobileMenu = () => { mobileMenuOpen.value = !mobileMenuOpen.value; };
 const closeMobileMenu = () => { mobileMenuOpen.value = false; };

@@ -180,7 +180,9 @@ async function handleCreateGiftPackage(event: any) {
   const packageData = {
     package_code,
     package_name,
+    package_name_en: body.package_name_en || '',
     description: description || '',
+    description_en: body.description_en || '',
     price_platform_coins: Number(price_platform_coins),
     price_real_money: Number(body.price_real_money) || 0,
     gift_items: JSON.stringify(gift_items),
@@ -201,14 +203,16 @@ async function handleCreateGiftPackage(event: any) {
   // 保存到数据库
   const result: any = await sql({
     query: `INSERT INTO externalgiftpackages 
-            (package_code, package_name, description, price_platform_coins, price_real_money,
+            (package_code, package_name, package_name_en, description, description_en, price_platform_coins, price_real_money,
              gift_items, category, icon_url, is_active, is_limited, total_quantity, sold_quantity,
              max_per_user, start_time, end_time, available_weekdays, sort_order, game_code)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     values: [
       packageData.package_code,
       packageData.package_name,
+      packageData.package_name_en,
       packageData.description,
+      packageData.description_en,
       packageData.price_platform_coins,
       packageData.price_real_money,
       packageData.gift_items,
@@ -271,7 +275,7 @@ async function handleUpdateGiftPackage(event: any) {
   const updateValues = [];
   
   const updatableFields = [
-    'package_name', 'description', 'price_platform_coins', 'price_real_money',
+    'package_name', 'package_name_en', 'description', 'description_en', 'price_platform_coins', 'price_real_money',
     'category', 'icon_url', 'is_active', 'is_limited', 'total_quantity',
     'max_per_user', 'start_time', 'end_time', 'available_weekdays', 'sort_order'
   ];

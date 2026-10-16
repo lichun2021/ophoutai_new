@@ -3,11 +3,11 @@
     <!-- 页面标题 -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1>商城</h1>
-        <p>精选礼包，助力游戏体验</p>
+        <h1>{{ tt('商城', 'Gift Mall') }}</h1>
+        <p>{{ tt('精选礼包，助力游戏体验', 'Exclusive gift packs to boost your adventure') }}</p>
       </div>
       <!-- 购物车入口（右上角图标 + 数量角标） -->
-      <button class="cart-entry" @click="cartStore.openDrawer()" :title="`购物车（${cartStore.totalCount}）`">
+      <button class="cart-entry" @click="cartStore.openDrawer()" :title="tt(`购物车（${cartStore.totalCount}）`, `Cart (${cartStore.totalCount})`)">
         <UIcon name="i-heroicons-shopping-cart" />
         <span v-if="cartStore.totalCount > 0" class="cart-badge">{{ cartStore.totalCount > 99 ? '99+' : cartStore.totalCount }}</span>
       </button>
@@ -20,8 +20,8 @@
           <UIcon name="i-heroicons-cube" />
         </div>
                   <div class="stat-content">
-            <h4>商品总数</h4>
-            <p class="stat-value">{{ products.length }}个</p>
+            <h4>{{ tt('商品总数', 'Total Packs') }}</h4>
+            <p class="stat-value">{{ products.length }}{{ tt('个', '') }}</p>
           </div>
         </div>
         
@@ -30,8 +30,8 @@
             <UIcon name="i-heroicons-fire" />
           </div>
           <div class="stat-content">
-            <h4>热门礼包</h4>
-            <p class="stat-value">{{ hotProductsCount }}个</p>
+            <h4>{{ tt('热门礼包', 'Hot Packs') }}</h4>
+            <p class="stat-value">{{ hotProductsCount }}{{ tt('个', '') }}</p>
           </div>
         </div>
 
@@ -40,7 +40,7 @@
             <UIcon name="i-heroicons-currency-yen" />
           </div>
           <div class="stat-content">
-            <h4>当前余额</h4>
+            <h4>{{ tt('当前余额', 'Balance') }}</h4>
             <p class="stat-value">{{ formatCoins(authStore.userInfo?.platform_coins || 0) }}</p>
           </div>
       </div>
@@ -64,13 +64,13 @@
     <div class="products-section">
       <div v-if="loading" class="loading-state">
         <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
-        <p>加载中...</p>
+        <p>{{ tt('加载中...', 'Loading...') }}</p>
       </div>
 
       <div v-else-if="products.length === 0" class="empty-state">
         <UIcon name="i-heroicons-shopping-bag" />
-        <h3>暂无商品</h3>
-        <p>当前分类暂时没有商品</p>
+        <h3>{{ tt('暂无商品', 'No Gift Packs') }}</h3>
+        <p>{{ tt('当前分类暂时没有商品', 'No gift packs available in this category') }}</p>
       </div>
 
       <div v-else class="products-list">
@@ -83,7 +83,7 @@
           <div class="product-image">
             <img
               :src="product.icon_url || '/default-gift.svg'"
-              :alt="product.package_name"
+              :alt="getProductName(product)"
               @error="handleImageError"
             />
             <!-- 限时/限期标签 -->
@@ -99,7 +99,7 @@
 
           <!-- 中：商品信息 -->
           <div class="product-info">
-            <h3 class="product-name">{{ product.package_name }}</h3>
+            <h3 class="product-name">{{ getProductName(product) }}</h3>
             <div class="description-container">
               <p
                 :class="{ 'scrolling': scrollingProducts[product.id] }"
@@ -107,20 +107,20 @@
                 :style="getScrollStyle(product)"
                 @click="toggleProductScroll(product.id)"
               >
-                {{ product.description || '暂无描述' }}
+                {{ getProductDesc(product) }}
               </p>
             </div>
             <!-- 限购提示（排除自动发放礼包） -->
             <div v-if="product.max_per_user && product.max_per_user > 0 && !isAutoGrantCategory(product.category)" class="purchase-limit-badge">
               <UIcon name="i-heroicons-shopping-cart" class="limit-icon" />
-              <span v-if="product.category === 'daily_recharge'">限购 {{ product.max_per_user }} 次/日</span>
-              <span v-else>限购 {{ product.max_per_user }} 个</span>
+              <span v-if="product.category === 'daily_recharge'">{{ tt(`限购 ${product.max_per_user} 次/日`, `Limit ${product.max_per_user}/day`) }}</span>
+              <span v-else>{{ tt(`限购 ${product.max_per_user} 个`, `Limit ${product.max_per_user}`) }}</span>
             </div>
             <!-- 自动发放礼包提示 -->
             <div v-if="isAutoGrantCategory(product.category)" class="auto-gift-notice-inline">
               <UIcon name="i-heroicons-gift" />
-              <span v-if="product.category === 'daily'">每日消费自动发放</span>
-              <span v-else>累计消费自动发放</span>
+              <span v-if="product.category === 'daily'">{{ tt('每日消费自动发放', 'Auto-granted on daily spend') }}</span>
+              <span v-else>{{ tt('累计消费自动发放', 'Auto-granted on cumulative spend') }}</span>
             </div>
           </div>
 
@@ -150,7 +150,7 @@
                   color="primary"
                   size="md"
                   class="row-buy-btn"
-                >立即购买</UButton>
+                >{{ tt('立即购买', 'Buy Now') }}</UButton>
                 <UButton
                   @click.stop="addToCart(product)"
                   color="orange"
@@ -159,7 +159,7 @@
                   class="row-cart-btn"
                 >
                   <UIcon name="i-heroicons-shopping-cart" />
-                  <span>加入购物车</span>
+                  <span>{{ tt('加入购物车', 'Add to Cart') }}</span>
                 </UButton>
               </div>
             </div>
@@ -173,7 +173,7 @@
       <UCard>
         <template #header>
           <div class="modal-header">
-            <h3 class="text-lg font-semibold">确认购买</h3>
+            <h3 class="text-lg font-semibold">{{ tt('确认购买', 'Confirm Purchase') }}</h3>
             <button @click="showPurchaseModal = false" class="close-button">
               <UIcon name="i-heroicons-x-mark" />
             </button>
@@ -184,26 +184,26 @@
           <div class="product-summary">
             <img 
               :src="selectedProduct.icon_url || '/default-gift.svg'" 
-              :alt="selectedProduct.package_name"
+              :alt="getProductName(selectedProduct)"
               class="modal-product-image"
             />
             <div class="modal-product-info">
               <div class="modal-description-scroll">
-                <p class="modal-description-text">{{ selectedProduct.description || '暂无描述' }}</p>
+                <p class="modal-description-text">{{ getProductDesc(selectedProduct) }}</p>
               </div>
             </div>
           </div>
 
           <!-- 角色选择下拉 -->
           <div class="detail-row character-row">
-            <span>选择角色：<span class="required-mark">*</span></span>
+            <span>{{ tt('选择角色：', 'Character:') }}<span class="required-mark">*</span></span>
             <div class="character-select">
               <USelectMenu
                 v-model="selectedCharacterUuid"
                 :options="characterSelectOptions"
                 value-attribute="value"
                 option-attribute="label"
-                placeholder="请选择角色"
+                :placeholder="tt('请选择角色', 'Select character')"
               />
             </div>
           </div>
@@ -211,20 +211,20 @@
           <!-- 红色警告提示 -->
           <div class="character-warning">
             <UIcon name="i-heroicons-exclamation-triangle" class="warning-icon" />
-            <span class="warning-text">⚠️ 请仔细选择角色，选择后物品将发送到该角色，请勿选错！</span>
+            <span class="warning-text">{{ tt('⚠️ 请仔细选择角色，选择后物品将发送到该角色，请勿选错！', '⚠️ Please double-check your character! Items will be mailed to the selected character.') }}</span>
           </div>
           
           <div v-if="!characterSelectOptions.length" class="character-empty">
-            暂无可用角色，请先创建游戏角色
+            {{ tt('暂无可用角色，请先创建游戏角色', 'No characters found. Please create a character in-game first.') }}
           </div>
 
           <div class="gift-name-row">
-            <span class="gift-name-label">礼包名称：</span>
-            <span class="gift-name-text">{{ selectedProduct.package_name }}</span>
+            <span class="gift-name-label">{{ tt('礼包名称：', 'Pack Name:') }}</span>
+            <span class="gift-name-text">{{ getProductName(selectedProduct) }}</span>
           </div>
 
           <div v-if="selectedProduct.gift_items && selectedProduct.gift_items.length > 0" class="gift-items">
-            <h5>礼包内容</h5>
+            <h5>{{ tt('礼包内容', 'Pack Contents') }}</h5>
             <ul class="items-list">
               <li v-for="(item, index) in parseGiftItems(selectedProduct.gift_items)" :key="index" class="item-entry">
                 <span class="item-order">{{ (index + 1).toString().padStart(2, '0') }}</span>
@@ -236,7 +236,7 @@
 
           <div class="purchase-details">
             <div class="detail-row">
-              <span>支付方式：</span>
+              <span>{{ tt('支付方式：', 'Payment Method:') }}</span>
             </div>
             <div class="payment-method-list">
               <button
@@ -247,16 +247,16 @@
                 :class="{ active: selectedPaymentMethod === method.id }"
                 @click="selectedPaymentMethod = method.id"
               >
-                <img :src="method.icon" :alt="method.name" />
-                <span>{{ method.name }}</span>
+                <img :src="method.icon" :alt="getPaymentMethodName(method.id)" />
+                <span>{{ getPaymentMethodName(method.id) }}</span>
               </button>
             </div>
             <div v-if="paymentMethods.length === 0" class="payment-warning">
-              暂无可用支付方式，请联系管理员
+              {{ tt('暂无可用支付方式，请联系管理员', 'No payment methods available, please contact support') }}
             </div>
 
             <div class="detail-row">
-              <span>商品价格：</span>
+              <span>{{ tt('商品价格：', 'Price:') }}</span>
               <span v-if="selectedPaymentMethod === 'ptb'" class="price-with-icon">
                 <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                 {{ formatCoins(selectedProduct.price_platform_coins) }}
@@ -268,7 +268,7 @@
             </div>
 
             <div v-if="selectedPaymentMethod === 'ptb'" class="detail-row">
-              <span>当前余额：</span>
+              <span>{{ tt('当前余额：', 'Balance:') }}</span>
               <span class="balance price-with-icon">
                 <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                 {{ formatCoins(authStore.userInfo?.platform_coins || 0) }}
@@ -286,7 +286,7 @@
               size="lg"
               block
             >
-              {{ selectedPaymentMethod === 'ptb' ? '确认购买' : '前往支付' }}
+              {{ selectedPaymentMethod === 'ptb' ? tt('确认购买', 'Confirm Purchase') : tt('前往支付', 'Proceed to Pay') }}
             </UButton>
           </div>
         </template>
@@ -303,8 +303,8 @@
           <header class="cart-header">
             <h3>
               <UIcon name="i-heroicons-shopping-cart" />
-              购物车
-              <span v-if="cartStore.kindCount > 0" class="cart-header-count">{{ cartStore.kindCount }} 种 / {{ cartStore.totalCount }} 件</span>
+              {{ tt('购物车', 'Cart') }}
+              <span v-if="cartStore.kindCount > 0" class="cart-header-count">{{ tt(`${cartStore.kindCount} 种 / ${cartStore.totalCount} 件`, `${cartStore.kindCount} types / ${cartStore.totalCount} pcs`) }}</span>
             </h3>
             <button class="cart-close" @click="cartStore.closeDrawer()">
               <UIcon name="i-heroicons-x-mark" />
@@ -314,16 +314,16 @@
           <!-- 购物车为空 -->
           <div v-if="cartStore.items.length === 0" class="cart-empty">
             <UIcon name="i-heroicons-shopping-bag" class="cart-empty-icon" />
-            <p>购物车空空如也</p>
-            <span>从商品列表加入礼包吧</span>
+            <p>{{ tt('购物车空空如也', 'Your cart is empty') }}</p>
+            <span>{{ tt('从商品列表加入礼包吧', 'Add some gift packs from the store!') }}</span>
           </div>
 
           <!-- 购物车商品列表 -->
           <div v-else class="cart-items">
             <div v-for="item in cartStore.items" :key="item.key" class="cart-item">
-              <img :src="item.icon_url || '/default-gift.svg'" :alt="item.package_name" class="cart-item-img" @error="handleImageError" />
+              <img :src="item.icon_url || '/default-gift.svg'" :alt="getProductName(item)" class="cart-item-img" @error="handleImageError" />
               <div class="cart-item-info">
-                <h4>{{ item.package_name }}</h4>
+                <h4>{{ getProductName(item) }}</h4>
                 <div class="cart-item-price">
                   <template v-if="item.price_platform_coins > 0">
                     <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
@@ -337,15 +337,15 @@
               </div>
               <div class="cart-item-controls">
                 <div class="qty-control">
-                  <button @click="cartStore.decrement(item.key)" :disabled="false" title="减少">−</button>
+                  <button @click="cartStore.decrement(item.key)" :disabled="false" :title="tt('减少', 'Decrease')">−</button>
                   <span class="qty-value">{{ item.quantity }}</span>
                   <button
                     @click="cartStore.increment(item.key)"
                     :disabled="item.max_per_user > 0 && item.quantity >= item.max_per_user"
-                    title="增加"
+                    :title="tt('增加', 'Increase')"
                   >+</button>
                 </div>
-                <button class="cart-item-remove" @click="removeCartItem(item.key)" title="移除">
+                <button class="cart-item-remove" @click="removeCartItem(item.key)" :title="tt('移除', 'Remove')">
                   <UIcon name="i-heroicons-trash" />
                 </button>
               </div>
@@ -355,7 +355,7 @@
           <!-- 底部合计 + 选角色 + 去结算（同一界面） -->
           <footer v-if="cartStore.items.length > 0" class="cart-footer">
             <div class="cart-total">
-              <span class="cart-total-label">合计</span>
+              <span class="cart-total-label">{{ tt('合计', 'Total') }}</span>
               <div class="cart-total-price">
                 <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                 <span>{{ formatCoins(cartStore.totalPlatformCoins) }}</span>
@@ -364,7 +364,7 @@
 
             <!-- 当前余额 -->
             <div class="cart-balance-row" :class="{ insufficient: !balanceSufficient }">
-              <span class="cart-balance-label">当前余额</span>
+              <span class="cart-balance-label">{{ tt('当前余额', 'Balance') }}</span>
               <span class="cart-balance-value">
                 <img src="/logo-warm.svg" alt="平台币" class="coin-icon-small" />
                 {{ formatCoins(authStore.userInfo?.platform_coins || 0) }}
@@ -373,7 +373,7 @@
             <!-- 余额不足提示 -->
             <div v-if="!balanceSufficient" class="cart-balance-warn">
               <UIcon name="i-heroicons-exclamation-triangle" />
-              <span>余额不足，请先<a @click="goToRecharge" class="cart-recharge-link">充值</a></span>
+              <span>{{ tt('余额不足，请先', 'Insufficient balance, please ') }}<a @click="goToRecharge" class="cart-recharge-link">{{ tt('充值', 'top up') }}</a></span>
             </div>
 
             <!-- 抽屉内直接选角色 -->
@@ -383,13 +383,13 @@
                 :options="characterSelectOptions"
                 value-attribute="value"
                 option-attribute="label"
-                placeholder="选择接收礼包的角色"
+                :placeholder="tt('选择接收礼包的角色', 'Select character to receive items')"
                 class="cart-character-select"
                 @click="ensureCharactersLoaded"
               />
             </div>
             <div v-if="characterSelectOptions.length === 0" class="cart-character-empty">
-              暂无可用角色，请先创建游戏角色
+              {{ tt('暂无可用角色，请先创建游戏角色', 'No characters found. Create one in-game first.') }}
             </div>
 
             <UButton
@@ -400,7 +400,7 @@
               block
               class="checkout-btn"
               :disabled="!canCheckout"
-            >去结算（{{ cartStore.totalCount }} 件）</UButton>
+            >{{ tt(`去结算（${cartStore.totalCount} 件）`, `Checkout (${cartStore.totalCount})`) }}</UButton>
           </footer>
         </aside>
       </Transition>
@@ -415,6 +415,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useCartStore } from '@/store/cart';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 // 页面元数据
 definePageMeta({
@@ -426,6 +427,19 @@ const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
 const cartStore = useCartStore();
+const { locale, isEn, tt } = useI18n();
+
+const getProductName = (product) => {
+  if (!product) return '';
+  return tt(product.package_name || '', product.package_name_en);
+};
+
+const getProductDesc = (product) => {
+  if (!product) return '';
+  const zhDesc = product.description || '暂无描述';
+  const enDesc = product.description_en || (product.description ? product.description : 'No description');
+  return tt(zhDesc, enDesc);
+};
 
 // 记录上次选择的角色索引（使用cookie）
 const lastCharacterIndexCookie = useCookie('mall_last_character_index', {
@@ -502,20 +516,20 @@ const hotProductsCount = computed(() => {
 const isRmbCategory = (category) => ['general', 'hero_super_weapon', 'daily_recharge', 'limited', 'scheduled'].includes(category);
 const isAutoGrantCategory = (category) => ['daily', 'cumulative'].includes(category);
 
-const CATEGORY_TABS = [
-  { key: 'general', label: '通用礼包' },
-  { key: 'hero_super_weapon', label: '空中花园' },
-  { key: 'daily_recharge', label: '每日必买' },
-  { key: 'daily', label: '每日消费' },
-  { key: 'cumulative', label: '累计消费' },
-  { key: 'limited', label: '限时礼包' },
-  { key: 'scheduled', label: '限期礼包' }
-];
+const CATEGORY_TABS = computed(() => [
+  { key: 'general', label: tt('通用礼包', 'General') },
+  { key: 'hero_super_weapon', label: tt('空中花园', 'Sky Garden') },
+  { key: 'daily_recharge', label: tt('每日必买', 'Daily Deals') },
+  { key: 'daily', label: tt('每日消费', 'Daily Spend') },
+  { key: 'cumulative', label: tt('累计消费', 'Total Spend') },
+  { key: 'limited', label: tt('限时礼包', 'Limited Time') },
+  { key: 'scheduled', label: tt('限期礼包', 'Scheduled') }
+]);
 
 // 动态生成分类页签
 const categoryTabs = computed(() => {
-  const available = categories.value.length > 0 ? categories.value : CATEGORY_TABS.map(tab => tab.key);
-  return CATEGORY_TABS.filter(tab => available.includes(tab.key));
+  const available = categories.value.length > 0 ? categories.value : CATEGORY_TABS.value.map(tab => tab.key);
+  return CATEGORY_TABS.value.filter(tab => available.includes(tab.key));
 });
 
 // 方法
@@ -541,7 +555,8 @@ const getScrollStyle = (product) => {
   if (!scrollingProducts.value[product.id]) return {};
   
   // 计算动画时长，基于文字长度
-  const textLength = product.description?.length || 0;
+  const text = getProductDesc(product);
+  const textLength = text?.length || 0;
   const duration = Math.max(6, Math.min(15, textLength * 0.05));
   
   return {
@@ -557,38 +572,40 @@ const getTimeRemaining = (endTime) => {
   const end = new Date(endTime);
   const diff = end.getTime() - now.getTime();
   
-  if (diff <= 0) return '已结束';
+  if (diff <= 0) return tt('已结束', 'Ended');
   
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   
-  if (days > 0) return `剩${days}天${hours}时`;
-  if (hours > 0) return `剩${hours}时${minutes}分`;
-  return `剩${minutes}分`;
+  if (days > 0) return tt(`剩${days}天${hours}时`, `${days}d ${hours}h left`);
+  if (hours > 0) return tt(`剩${hours}时${minutes}分`, `${hours}h ${minutes}m left`);
+  return tt(`剩${minutes}分`, `${minutes}m left`);
 };
 
 // 获取限期礼包标签（限期礼包）
 const getScheduledLabel = (product) => {
   if (!product.available_weekdays) {
-    return '未设置日期';
+    return tt('未设置日期', 'No schedule');
   }
   
-  const weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  const weekdayNames = isEn.value
+    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    : ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   const availableDays = String(product.available_weekdays).split(',').map(d => parseInt(d.trim())).filter(d => d >= 1 && d <= 7);
   
   if (availableDays.length === 0) {
-    return '未设置日期';
+    return tt('未设置日期', 'No schedule');
   }
   
   // 只有一天（单选模式）
   if (availableDays.length === 1) {
-    return `${weekdayNames[availableDays[0] - 1]}限定`;
+    return isEn.value ? `${weekdayNames[availableDays[0] - 1]} Only` : `${weekdayNames[availableDays[0] - 1]}限定`;
   }
   
   // 兼容旧数据：如果是多天
   if (availableDays.length === 7) {
-    return '每天可用';
+    return tt('每天可用', 'Daily');
   }
   
   if (availableDays.length <= 3) {
@@ -596,7 +613,7 @@ const getScheduledLabel = (product) => {
     return dayLabels.join('/');
   } else {
     const firstDay = weekdayNames[availableDays[0] - 1];
-    return `${firstDay}等${availableDays.length}天`;
+    return isEn.value ? `${firstDay} & ${availableDays.length}d` : `${firstDay}等${availableDays.length}天`;
   }
 };
 
@@ -630,11 +647,11 @@ const addToCart = (product) => {
   if (!product) return;
   // 自动发放类礼包不支持加入购物车
   if (isAutoGrantCategory(product.category)) {
-    tips.error('该礼包为自动发放，无需购买');
+    tips.error(tt('该礼包为自动发放，无需购买', 'This gift pack is auto-granted and cannot be purchased directly'));
     return;
   }
   cartStore.add(product, 1);
-  tips.success(`已加入购物车：${product.package_name}`);
+  tips.success(tt(`已加入购物车：${product.package_name}`, `Added to cart: ${getProductName(product)}`));
 };
 
 // 移除购物车项（带提示）
@@ -645,16 +662,16 @@ const removeCartItem = (key) => {
 // 去结算：直接在抽屉内用已选角色逐个下单（不再单独弹选角色窗）
 const checkoutCart = async () => {
   if (cartStore.items.length === 0) {
-    tips.error('购物车为空');
+    tips.error(tt('购物车为空', 'Your cart is empty'));
     return;
   }
   if (!cartCharacterUuid.value || !checkoutCharacter.value) {
-    tips.error('请先选择要接收物品的角色！');
+    tips.error(tt('请先选择要接收物品的角色！', 'Please select a character to receive the items!'));
     return;
   }
   // 余额校验：合计平台币必须 ≤ 当前余额
   if (!balanceSufficient.value) {
-    tips.error('平台币余额不足，请先充值');
+    tips.error(tt('平台币余额不足，请先充值', 'Insufficient Platform Coins, please top up first'));
     return;
   }
   if (checkoutLoading.value) return;
@@ -662,7 +679,7 @@ const checkoutCart = async () => {
   checkoutLoading.value = true;
   const userId = authStore.userInfo?.id || authStore.id;
   if (!userId) {
-    tips.error('用户信息获取失败');
+    tips.error(tt('用户信息获取失败', 'Failed to load user info'));
     checkoutLoading.value = false;
     return;
   }
@@ -685,6 +702,7 @@ const checkoutCart = async () => {
             package_id: item.package_id,
             character_uuid: character.uuid,
             server_id: character.server_id,
+            lang: locale.value,
           },
         });
         if (response.code === 200) {
@@ -694,19 +712,19 @@ const checkoutCart = async () => {
           }
         } else {
           failCount++;
-          failures.push({ name: item.package_name, msg: response.message || '失败' });
+          failures.push({ name: item.package_name, msg: response.message || tt('失败', 'Failed') });
           // 平台币余额不足时停止后续，避免无效请求
-          if (response.code === 400 && response.message && response.message.includes('平台币余额不足')) {
+          if (response.code === 400 && response.message && (response.message.includes('平台币余额不足') || response.message.toLowerCase().includes('insufficient'))) {
             break;
           }
         }
       } catch (e) {
         failCount++;
-        failures.push({ name: item.package_name, msg: e?.data?.message || e?.message || '网络错误' });
+        failures.push({ name: item.package_name, msg: e?.data?.message || e?.message || tt('网络错误', 'Network error') });
       }
     }
     // 若中途余额不足已 break 出内层，外层也停
-    if (failures.some(f => f.msg.includes('平台币余额不足'))) break;
+    if (failures.some(f => f.msg.includes('平台币余额不足') || f.msg.toLowerCase().includes('insufficient'))) break;
   }
 
   // 更新余额
@@ -735,9 +753,9 @@ const checkoutCart = async () => {
   }
 
   // 结果汇总
-  let summary = `成功 ${successCount} 件`;
-  if (failCount > 0) summary += `，失败 ${failCount} 件`;
-  if (failCount > 0 && failures[0]) summary += `（${failures[0].msg}）`;
+  let summary = isEn.value ? `Succeeded: ${successCount}` : `成功 ${successCount} 件`;
+  if (failCount > 0) summary += isEn.value ? `, Failed: ${failCount}` : `，失败 ${failCount} 件`;
+  if (failCount > 0 && failures[0]) summary += ` (${failures[0].msg})`;
   if (successCount > 0) tips.success(summary);
   else tips.error(summary);
 
@@ -775,8 +793,9 @@ const ensureItemNameCache = async () => {
       list.forEach((item) => {
         const key = item.id != null ? String(item.id) : null;
         if (!key) return;
-        const name = item.cn || item.n || item.name || item.desc || `道具${key}`;
-        cache[key] = name;
+        const cnName = item.cn || item.n || item.name || item.desc || `道具${key}`;
+        const enName = item.en || cnName;
+        cache[key] = { cn: cnName, en: enName };
       });
       itemNameCache.value = cache;
       itemNamesLoaded.value = true;
@@ -789,16 +808,19 @@ const ensureItemNameCache = async () => {
 const getItemNameSync = (itemId) => {
   const cache = itemNameCache.value;
   const key = itemId != null ? String(itemId) : '';
-  return cache[key] || `道具${itemId}`;
+  const entry = cache[key];
+  if (!entry) return isEn.value ? `Item #${itemId}` : `道具${itemId}`;
+  if (typeof entry === 'string') return entry;
+  return isEn.value ? (entry.en || entry.cn) : entry.cn;
 };
 
 const getPaymentMethodName = (method) => {
   const nameMap = {
-    wx: '微信支付',
-    zfb: '支付宝',
-    ptb: '平台币',
-    djq: '代金券',
-    kf: '客服'
+    wx: tt('微信支付', 'WeChat Pay'),
+    zfb: tt('支付宝', 'Alipay'),
+    ptb: tt('平台币', 'Platform Coins'),
+    djq: tt('代金券', 'Voucher'),
+    kf: tt('客服', 'Customer Service')
   };
   return nameMap[method] || method;
 };
@@ -825,7 +847,7 @@ const confirmPurchase = async () => {
   
   // 强制检查角色选择
   if (!selectedCharacterUuid.value || !selectedCharacter.value) {
-    tips.error('请先选择要接收物品的角色！');
+    tips.error(tt('请先选择要接收物品的角色！', 'Please select a character to receive the items!'));
     return;
   }
   if (selectedPaymentMethod.value !== 'ptb') {
@@ -843,7 +865,7 @@ const confirmPurchase = async () => {
   try {
     const userId = authStore.userInfo?.id || authStore.id;
     if (!userId) {
-      tips.error('用戶信息獲取失敗');
+      tips.error(tt('用户信息获取失败', 'Failed to load user info'));
       return;
     }
     const character = selectedCharacter.value;
@@ -863,7 +885,8 @@ const confirmPurchase = async () => {
       user_id: userId,
       package_id: selectedProduct.value.package_id || selectedProduct.value.id,
       character_uuid: character.uuid,
-      server_id: character.server_id
+      server_id: character.server_id,
+      lang: locale.value
     };
     
     const response = await $fetch('/api/client/gift-packages/purchase', {
@@ -871,7 +894,7 @@ const confirmPurchase = async () => {
       body: requestBody
     });
     if (response.code === 200) {
-      tips.success('购买成功！');
+      tips.success(tt('购买成功！', 'Purchase successful!'));
       showPurchaseModal.value = false;
       selectedProduct.value = null;
       // 直接用服务端返回的新余额更新，无需再调 balance 接口
@@ -885,15 +908,15 @@ const confirmPurchase = async () => {
       }
     } else {
       // 平台币余额不足的特殊提示
-      if (response.code === 400 && response.message && response.message.includes('平台币余额不足')) {
-        tips.error('平台币余额不足，请先购买平台币');
+      if (response.code === 400 && response.message && (response.message.includes('平台币余额不足') || response.message.toLowerCase().includes('insufficient'))) {
+        tips.error(tt('平台币余额不足，请先购买平台币', 'Insufficient Platform Coins, please top up first'));
       } else {
-        tips.error(response.message || '购买失败');
+        tips.error(response.message || tt('购买失败', 'Purchase failed'));
       }
     }
   } catch (error) {
     console.error('购买失败:', error);
-    tips.error('购买失败，请稍后重试');
+    tips.error(tt('购买失败，请稍后重试', 'Purchase failed, please try again later'));
   } finally {
     confirmLoading.value = false;
   }
@@ -902,12 +925,12 @@ const confirmPurchase = async () => {
 const submitRmbPurchase = async () => {
   if (!selectedProduct.value) return;
   if (!selectedPaymentMethod.value || selectedPaymentMethod.value === 'ptb') {
-    tips.error('请选择支付方式');
+    tips.error(tt('请选择支付方式', 'Please select a payment method'));
     return;
   }
   const availableRmbMethods = paymentMethods.value.filter(m => m.id !== 'ptb');
   if (availableRmbMethods.length === 0) {
-    tips.error('暂无可用支付方式');
+    tips.error(tt('暂无可用支付方式', 'No available payment methods'));
     return;
   }
   
@@ -921,12 +944,12 @@ const submitRmbPurchase = async () => {
   try {
     const userInfo = authStore.userInfo;
     if (!userInfo?.username) {
-      tips.error('用户信息获取失败');
+      tips.error(tt('用户信息获取失败', 'Failed to load user info'));
       return;
     }
     const character = selectedCharacter.value;
     if (!character) {
-      tips.error('请选择角色');
+      tips.error(tt('请选择角色', 'Please select a character'));
       return;
     }
 
@@ -968,21 +991,19 @@ const submitRmbPurchase = async () => {
     });
 
     if (response.code === 1) {
-      tips.success('订单创建成功，请完成付款');
+      tips.success(tt('订单创建成功，请完成付款', 'Order created, please complete payment'));
       showPurchaseModal.value = false;
       selectedProduct.value = null;
-      
-
       
       if (response.data) {
         window.location.href = response.data;
       }
     } else {
-      tips.error(response.msg || '支付订单创建失败');
+      tips.error(response.msg || tt('支付订单创建失败', 'Failed to create payment order'));
     }
   } catch (error) {
     console.error('创建礼包支付订单失败:', error);
-    const message = error?.data?.message || error?.message || '下单失败，请稍后重试';
+    const message = error?.data?.message || error?.message || tt('下单失败，请稍后重试', 'Order failed, please try again later');
     tips.error(message);
   } finally {
     confirmLoading.value = false;
@@ -1073,7 +1094,7 @@ const loadPaymentMethods = async () => {
     selectedPaymentMethod.value = 'ptb';
   } catch (error) {
     console.error('加载支付方式失败:', error);
-    tips.error('加载支付方式失败');
+    tips.error(tt('加载支付方式失败', 'Failed to load payment methods'));
   }
 };
 

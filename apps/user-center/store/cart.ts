@@ -11,8 +11,10 @@ export interface CartItem {
   key: string;
   package_id: number | string;
   package_name: string;
+  package_name_en?: string;
   icon_url?: string;
   description?: string;
+  description_en?: string;
   price_platform_coins: number;
   price_real_money?: number;
   category?: string;
@@ -75,6 +77,8 @@ export const useCartStore = defineStore('cart', {
       const existing = this.items.find(i => i.key === key);
       if (existing) {
         existing.quantity += qty;
+        if (product.package_name_en) existing.package_name_en = product.package_name_en;
+        if (product.description_en) existing.description_en = product.description_en;
         // 限购商品数量不超过限购数
         if (product.max_per_user && existing.quantity > product.max_per_user) {
           existing.quantity = product.max_per_user;
@@ -84,8 +88,10 @@ export const useCartStore = defineStore('cart', {
           key,
           package_id: product.package_id || product.id,
           package_name: product.package_name,
+          package_name_en: product.package_name_en || '',
           icon_url: product.icon_url,
           description: product.description,
+          description_en: product.description_en || '',
           price_platform_coins: product.price_platform_coins || 0,
           price_real_money: product.price_real_money || 0,
           category: product.category,

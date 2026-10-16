@@ -649,7 +649,7 @@ router.post('/internal/gift-package/deliver', defineEventHandler(async (event: H
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized: invalid internal secret' });
   }
   const body = await readBody(event);
-  const { purchaseRecordId, serverId, roleId } = body || {};
+  const { purchaseRecordId, serverId, roleId, lang } = body || {};
   if (!purchaseRecordId) {
     throw createError({ statusCode: 400, statusMessage: 'purchaseRecordId is required' });
   }
@@ -660,7 +660,8 @@ router.post('/internal/gift-package/deliver', defineEventHandler(async (event: H
   const result = await ExternalGiftPackageModel.deliverPackageToGame(
     Number(purchaseRecordId),
     String(normalizedServerId),
-    roleId || ''
+    roleId || '',
+    lang
   );
   return result;
 }));

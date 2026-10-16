@@ -1,9 +1,11 @@
-﻿import { sql } from '../db';
+import { sql } from '../db';
 
 export type CDKType = {
   id?: number;
   title: string;
+  title_en?: string | null;
   content: string;
+  content_en?: string | null;
   type: 'universal' | 'unique' | 'data';
   items: any; // JSON 数组: [{ ItemId: number, ItemNum: number }, ...]
   created_at?: string;
@@ -44,8 +46,15 @@ export const generateRandomCode = (length = 8) => {
 // ========== 类型 ==========
 export const createType = async (data: Omit<CDKType, 'id' | 'created_at' | 'updated_at'>) => {
   const result = await sql({
-    query: `INSERT INTO cdktypes (title, content, type, items) VALUES (?, ?, ?, ?)`,
-    values: [data.title, data.content, data.type, JSON.stringify(data.items)],
+    query: `INSERT INTO cdktypes (title, title_en, content, content_en, type, items) VALUES (?, ?, ?, ?, ?, ?)`,
+    values: [
+      data.title,
+      data.title_en || null,
+      data.content,
+      data.content_en || null,
+      data.type,
+      JSON.stringify(data.items),
+    ],
   }) as any;
   return { insertId: result.insertId };
 };
@@ -54,7 +63,9 @@ export const updateType = async (id: number, data: Partial<CDKType>) => {
   const fields: string[] = [];
   const values: any[] = [];
   if (data.title !== undefined) { fields.push('title = ?'); values.push(data.title); }
+  if (data.title_en !== undefined) { fields.push('title_en = ?'); values.push(data.title_en || null); }
   if (data.content !== undefined) { fields.push('content = ?'); values.push(data.content); }
+  if (data.content_en !== undefined) { fields.push('content_en = ?'); values.push(data.content_en || null); }
   if (data.type !== undefined) { fields.push('type = ?'); values.push(data.type); }
   if (data.items !== undefined) { fields.push('items = ?'); values.push(JSON.stringify(data.items)); }
   if (fields.length === 0) return { affectedRows: 0 };

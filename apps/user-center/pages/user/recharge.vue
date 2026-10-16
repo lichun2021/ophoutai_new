@@ -5,15 +5,15 @@
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg,var(--primary),var(--primary-container))">💰</div>
         <div>
-          <p class="stat-label">累计充值</p>
+          <p class="stat-label">{{ tt('累计充值', 'Total Top-Up') }}</p>
           <p class="stat-value">¥{{ formatBalance(totalRecharge) }}</p>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg,var(--secondary-dim),var(--secondary))">📊</div>
         <div>
-          <p class="stat-label">充值次数</p>
-          <p class="stat-value">{{ rechargeCount }}<small>次</small></p>
+          <p class="stat-label">{{ tt('充值次数', 'Top-Up Count') }}</p>
+          <p class="stat-value">{{ rechargeCount }}<small>{{ tt('次', '') }}</small></p>
         </div>
       </div>
     </div>
@@ -21,15 +21,15 @@
     <!-- 筛选栏 -->
     <div class="filter-bar">
       <div class="filter-group">
-        <label class="filter-label">状态</label>
+        <label class="filter-label">{{ tt('状态', 'Status') }}</label>
         <USelectMenu v-model="statusFilter" :options="statusOptions" value-attribute="value" option-attribute="label" class="filter-select">
-          <template #label>{{ statusOptions.find(o => o.value === statusFilter)?.label || '全部' }}</template>
+          <template #label>{{ statusOptions.find(o => o.value === statusFilter)?.label || tt('全部', 'All') }}</template>
         </USelectMenu>
       </div>
       <div class="filter-group">
-        <label class="filter-label">时间</label>
+        <label class="filter-label">{{ tt('时间', 'Time') }}</label>
         <USelectMenu v-model="timeFilter" :options="timeOptions" value-attribute="value" option-attribute="label" class="filter-select">
-          <template #label>{{ timeOptions.find(o => o.value === timeFilter)?.label || '全部' }}</template>
+          <template #label>{{ timeOptions.find(o => o.value === timeFilter)?.label || tt('全部', 'All') }}</template>
         </USelectMenu>
       </div>
     </div>
@@ -38,12 +38,12 @@
     <div class="record-area">
       <div v-if="loading" class="center-box">
         <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin" style="color:var(--primary-container)" />
-        <p>加载中...</p>
+        <p>{{ tt('加载中...', 'Loading...') }}</p>
       </div>
       <div v-else-if="filteredRecords.length === 0" class="center-box">
         <span style="font-size:48px">📭</span>
-        <p>暂无充值记录</p>
-        <button class="mini-btn" @click="goToRecharge">立即充值</button>
+        <p>{{ tt('暂无充值记录', 'No top-up records found') }}</p>
+        <button class="mini-btn" @click="goToRecharge">{{ tt('立即充值', 'Top Up Now') }}</button>
       </div>
       <div v-else class="record-list">
         <div v-for="record in filteredRecords" :key="record.id" class="record-card">
@@ -55,15 +55,15 @@
             <span class="status-badge" :class="getStatusClass(record.payment_status)">{{ getStatusText(record.payment_status) }}</span>
           </div>
           <div class="rc-details">
-            <div class="rc-row"><span class="rc-key">充值金额</span><span class="rc-val amount">¥{{ formatBalance(record.amount) }}</span></div>
-            <div class="rc-row"><span class="rc-key">支付方式</span><span class="rc-val">{{ record.payment_method || '线上支付' }}</span></div>
-            <div class="rc-row"><span class="rc-key">充值时间</span><span class="rc-val">{{ formatDateTime(record.created_at) }}</span></div>
-            <div v-if="record.completed_at" class="rc-row"><span class="rc-key">完成时间</span><span class="rc-val">{{ formatDateTime(record.completed_at) }}</span></div>
+            <div class="rc-row"><span class="rc-key">{{ tt('充值金额', 'Amount') }}</span><span class="rc-val amount">¥{{ formatBalance(record.amount) }}</span></div>
+            <div class="rc-row"><span class="rc-key">{{ tt('支付方式', 'Method') }}</span><span class="rc-val">{{ record.payment_method || tt('线上支付', 'Online Pay') }}</span></div>
+            <div class="rc-row"><span class="rc-key">{{ tt('充值时间', 'Time') }}</span><span class="rc-val">{{ formatDateTime(record.created_at) }}</span></div>
+            <div v-if="record.completed_at" class="rc-row"><span class="rc-key">{{ tt('完成时间', 'Completed') }}</span><span class="rc-val">{{ formatDateTime(record.completed_at) }}</span></div>
           </div>
           <div v-if="record.payment_status !== 3" class="rc-action">
             <button class="query-btn" :disabled="isQueryCooldown(record.order_id) || queryLoading[record.order_id]" @click="queryOrderStatus(record.order_id)">
               <UIcon name="i-heroicons-arrow-path" class="w-4 h-4" :class="{ 'animate-spin': queryLoading[record.order_id] }" />
-              <span>{{ isQueryCooldown(record.order_id) ? getQueryCooldownText(record.order_id) : '刷新状态' }}</span>
+              <span>{{ isQueryCooldown(record.order_id) ? getQueryCooldownText(record.order_id) : tt('刷新状态', 'Refresh Status') }}</span>
             </button>
           </div>
         </div>
@@ -77,12 +77,14 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 definePageMeta({ middleware: 'auth', layout: 'user' });
 
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const { isEn, tt } = useI18n();
 
 const rechargeRecords = ref([]);
 const loading = ref(false);
@@ -92,20 +94,20 @@ const queryLoading = ref({});
 const queryCooldowns = ref({});
 const cooldownTimers = ref({});
 
-const statusOptions = [
-  { label: '全部状态', value: 'all' },
-  { label: '未完成', value: '0' },
-  { label: '处理中', value: '1' },
-  { label: '失败', value: '2' },
-  { label: '已完成', value: '3' }
-];
+const statusOptions = computed(() => [
+  { label: tt('全部状态', 'All Status'), value: 'all' },
+  { label: tt('未完成', 'Unpaid'), value: '0' },
+  { label: tt('处理中', 'Processing'), value: '1' },
+  { label: tt('失败', 'Failed'), value: '2' },
+  { label: tt('已完成', 'Completed'), value: '3' }
+]);
 
-const timeOptions = [
-  { label: '全部时间', value: 'all' },
-  { label: '最近7天', value: '7days' },
-  { label: '最近30天', value: '30days' },
-  { label: '最近3个月', value: '3months' }
-];
+const timeOptions = computed(() => [
+  { label: tt('全部时间', 'All Time'), value: 'all' },
+  { label: tt('最近7天', 'Last 7 Days'), value: '7days' },
+  { label: tt('最近30天', 'Last 30 Days'), value: '30days' },
+  { label: tt('最近3个月', 'Last 3 Months'), value: '3months' }
+]);
 
 const totalRecharge = computed(() =>
   rechargeRecords.value.filter(r => r.payment_status === 3).reduce((t, r) => t + parseFloat(r.amount || 0), 0)
@@ -129,36 +131,41 @@ const filteredRecords = computed(() => {
 });
 
 const formatBalance = (v) => { if (!v) return '0.00'; return parseFloat(v).toFixed(2); };
-const formatDateTime = (d) => { if (!d) return '-'; return new Date(d).toLocaleString('zh-CN'); };
-const getStatusText = (s) => ({ 0: '未完成', 1: '处理中', 2: '失败', 3: '已完成' }[s] || '未知');
+const formatDateTime = (d) => { if (!d) return '-'; return new Date(d).toLocaleString(isEn.value ? 'en-US' : 'zh-CN'); };
+const getStatusText = (s) => ({
+  0: tt('未完成', 'Unpaid'),
+  1: tt('处理中', 'Processing'),
+  2: tt('失败', 'Failed'),
+  3: tt('已完成', 'Completed')
+}[s] || tt('未知', 'Unknown'));
 const getStatusClass = (s) => ({ 0: 'pending', 1: 'processing', 2: 'failed', 3: 'completed' }[s] || 'unknown');
 const goToRecharge = () => router.push('/user/cashier');
 
 const queryOrderStatus = async (orderId) => {
-  if (isQueryCooldown(orderId)) { tips.warning('请等待冷却时间结束'); return; }
+  if (isQueryCooldown(orderId)) { tips.warning(tt('请等待冷却时间结束', 'Please wait for cooldown')); return; }
   queryLoading.value[orderId] = true;
   try {
     const res = await $fetch('/api/user/payment/query', { method: 'POST', body: { transaction_id: orderId } });
     if (res.code === 200) {
       const status = res.data?.status;
       if (status === 1) {
-        tips.success('充值成功！平台币已到账');
+        tips.success(tt('充值成功！平台币已到账', 'Top-up successful! Coins credited'));
         startQueryCooldown(orderId);
         setTimeout(() => { loadRechargeRecords(); }, 1000);
         if (authStore.userInfo) { try { await authStore.fetchUserInfo(); } catch {} }
       } else if (status === 0) {
-        tips.info('订单尚未支付完成');
+        tips.info(tt('订单尚未支付完成', 'Order is not paid yet'));
         startQueryCooldown(orderId);
       } else {
-        tips.warning('订单状态未知');
+        tips.warning(tt('订单状态未知', 'Unknown order status'));
         startQueryCooldown(orderId);
       }
     } else {
-      tips.error(res.msg || '查询失败');
+      tips.error(res.msg || tt('查询失败', 'Query failed'));
       startQueryCooldown(orderId, 30);
     }
   } catch {
-    tips.error('查询失败，请检查网络');
+    tips.error(tt('查询失败，请检查网络', 'Query failed, please check your connection'));
     startQueryCooldown(orderId, 30);
   } finally {
     queryLoading.value[orderId] = false;
@@ -179,16 +186,16 @@ const startQueryCooldown = (orderId, seconds = 99) => {
 };
 const isQueryCooldown = (orderId) => !!(queryCooldowns.value[orderId] && queryCooldowns.value[orderId] > Date.now());
 const getQueryCooldownText = (orderId) => {
-  if (!queryCooldowns.value[orderId]) return '刷新';
+  if (!queryCooldowns.value[orderId]) return tt('刷新', 'Refresh');
   const r = Math.ceil((queryCooldowns.value[orderId] - Date.now()) / 1000);
-  return r <= 0 ? '刷新' : `${r}s`;
+  return r <= 0 ? tt('刷新', 'Refresh') : `${r}s`;
 };
 
 const loadRechargeRecords = async () => {
   loading.value = true;
   try {
     const userId = authStore.userInfo?.id || authStore.id;
-    if (!userId) { tips.error('用户信息获取失败'); return; }
+    if (!userId) { tips.error(tt('用户信息获取失败', 'Failed to load user info')); return; }
     const res = await $fetch('/api/client/recharge-history', { query: { user_id: userId, page: 1, pageSize: 100 } });
     if (res.code === 200) {
       rechargeRecords.value = (res.data.records || []).map(r => ({
@@ -197,16 +204,16 @@ const loadRechargeRecords = async () => {
         item_name: r.product_name,
         amount: r.amount,
         payment_status: r.payment_status,
-        payment_method: r.payment_way || '线上支付',
+        payment_method: r.payment_way || tt('线上支付', 'Online Pay'),
         created_at: r.created_at,
         completed_at: r.payment_status === 3 ? r.notify_at || r.created_at : null
       }));
     } else {
-      tips.error(res.message || '获取充值记录失败');
+      tips.error(res.message || tt('获取充值记录失败', 'Failed to load top-up history'));
       rechargeRecords.value = [];
     }
   } catch {
-    tips.error('加载充值记录失败');
+    tips.error(tt('加载充值记录失败', 'Failed to load top-up history'));
     rechargeRecords.value = [];
   } finally {
     loading.value = false;

@@ -3,7 +3,7 @@
       <!-- 当前余额显示 -->
       <div class="balance-display">
         <div class="balance-info">
-          <span class="balance-label">当前平台币余额</span>
+          <span class="balance-label">{{ tt('当前平台币余额', 'Available Platform Coins') }}</span>
           <div class="balance-amount">
             <img src="/logo-warm.svg" alt="平台币" class="coin-icon" />
             <span class="amount">{{ formatBalance(currentBalance) }}</span>
@@ -13,7 +13,7 @@
 
       <!-- 充值金额选择 -->
       <div class="amount-section">
-        <h3>选择充值金额</h3>
+        <h3>{{ tt('选择充值金额', 'Select Top-Up Amount') }}</h3>
         
         <!-- 预设金额选择 -->
         <div class="preset-amounts">
@@ -35,12 +35,12 @@
 
         <!-- 自定义金额输入 -->
         <div class="custom-amount">
-          <h4>或输入其他金额</h4>
+          <h4>{{ tt('或输入其他金额', 'Or Enter Custom Amount') }}</h4>
           <div class="amount-input-group">
             <UInput
               v-model="customAmount"
               type="number"
-              placeholder="请输入充值金额"
+              :placeholder="tt('请输入充值金额', 'Enter amount')"
               icon="i-heroicons-currency-yen"
               size="lg"
               :min="minAmount"
@@ -48,27 +48,27 @@
               @input="onCustomAmountChange"
             >
               <template #trailing>
-                <span class="text-gray-400">元</span>
+                <span class="text-gray-400">{{ tt('元', 'CNY') }}</span>
               </template>
             </UInput>
           </div>
           <div class="amount-tips">
-            <p class="tip-text">最低充值¥{{ minAmount }}，最高充值¥{{ maxAmount }}</p>
+            <p class="tip-text">{{ tt(`最低充值¥${minAmount}，最高充值¥${maxAmount}`, `Min ¥${minAmount}, Max ¥${maxAmount}`) }}</p>
           </div>
         </div>
 
         <!-- 兑换预览 -->
         <div v-if="finalAmount > 0" class="exchange-preview">
           <div class="exchange-item">
-            <span class="label">充值金额：</span>
+            <span class="label">{{ tt('充值金额：', 'Amount:') }}</span>
             <span class="value">¥{{ finalAmount }}</span>
           </div>
           <div class="exchange-item">
-            <span class="label">兑换比例：</span>
+            <span class="label">{{ tt('兑换比例：', 'Exchange Rate:') }}</span>
             <span class="value">1:{{ ptbRate }}</span>
           </div>
           <div class="exchange-item highlight">
-            <span class="label">可获得平台币：</span>
+            <span class="label">{{ tt('可获得平台币：', 'Coins to Receive:') }}</span>
             <span class="value">
               <img src="/logo-warm.svg" alt="平台币" class="preview-coin-icon" />
               {{ Math.floor(finalAmount * ptbRate) }}
@@ -79,7 +79,7 @@
 
       <!-- 支付方式选择 -->
       <div class="payment-method-section">
-        <h3>选择支付方式</h3>
+        <h3>{{ tt('选择支付方式', 'Payment Method') }}</h3>
         <div class="payment-methods">
           <div 
             v-for="method in paymentMethods" 
@@ -90,9 +90,9 @@
             }"
             @click="selectPaymentMethod(method.id)"
           >
-            <img :src="method.icon" :alt="method.name" class="method-icon" />
+            <img :src="method.icon" :alt="getPaymentMethodName(method.id)" class="method-icon" />
             <div class="method-info">
-              <span class="method-name">{{ method.name }}</span>
+              <span class="method-name">{{ getPaymentMethodName(method.id) }}</span>
             </div>
             <div class="check-icon" :class="{ 'visible': selectedPaymentMethod === method.id }">
               <UIcon name="i-heroicons-check-circle" />
@@ -112,8 +112,8 @@
           block
           class="recharge-btn"
         >
-          <span v-if="!processing">立即充值</span>
-          <span v-else>处理中...</span>
+          <span v-if="!processing">{{ tt('立即充值', 'Top Up Now') }}</span>
+          <span v-else>{{ tt('处理中...', 'Processing...') }}</span>
         </UButton>
       </div>
 
@@ -125,6 +125,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 // 页面元数据
 definePageMeta({
@@ -135,6 +136,7 @@ definePageMeta({
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const { tt } = useI18n();
 
 // 响应式数据
 const selectedAmount = ref(0);
@@ -148,14 +150,14 @@ const maxAmount = 10000;
 const ptbRate = ref(10);
 
 // 预设充值金额
-const presetAmounts = [
+const presetAmounts = computed(() => [
   { value: 50, coins: 50, bonus: '' },
   { value: 100, coins: 100, bonus: '' },
-  { value: 200, coins: 200, bonus: '推荐' },
+  { value: 200, coins: 200, bonus: tt('推荐', 'Best') },
   { value: 500, coins: 500, bonus: '' },
-  { value: 1000, coins: 1000, bonus: '热门' },
+  { value: 1000, coins: 1000, bonus: tt('热门', 'Hot') },
   { value: 2000, coins: 2000, bonus: '' }
-];
+]);
 
 // 支付方式 - 从数据库动态获取启用的支付方式
 const paymentMethods = ref([]);
@@ -211,7 +213,7 @@ const proceedPayment = async () => {
   try {
     const userInfo = authStore.userInfo;
     if (!userInfo?.username) {
-      tips.error('用户信息获取失败');
+      tips.error(tt('用户信息获取失败', 'Failed to load user info'));
       return;
     }
 
@@ -265,7 +267,7 @@ const proceedPayment = async () => {
         // 跳转到支付页面
         window.location.href = response.data;
       } else {
-        tips.success('支付订单创建成功');
+        tips.success(tt('支付订单创建成功', 'Payment order created'));
         // 可以跳转到订单列表页面
         setTimeout(() => {
           router.push('/user/orders');
@@ -277,12 +279,12 @@ const proceedPayment = async () => {
         window.location.href = response.data;
         return;
       }
-      tips.error(response.msg || '支付失败，请重试');
+      tips.error(response.msg || tt('支付失败，请重试', 'Payment failed, please try again'));
     }
 
   } catch (error) {
     console.error('支付失败:', error);
-    tips.error('支付失败，请检查网络连接后重试');
+    tips.error(tt('支付失败，请检查网络连接后重试', 'Payment failed, please check your connection'));
   } finally {
     processing.value = false;
   }
@@ -309,18 +311,18 @@ const loadPaymentMethods = async () => {
     }
   } catch (error) {
     console.error('加载支付方式失败:', error);
-    tips.error('加载支付方式失败');
+    tips.error(tt('加载支付方式失败', 'Failed to load payment methods'));
   }
 };
 
 // 获取支付方式名称
 const getPaymentMethodName = (method) => {
   const nameMap = {
-    'wx': '微信支付',
-    'zfb': '支付宝',
-    'ptb': '平台币',
-    'djq': '代金券',
-    'kf': '客服'
+    'wx': tt('微信支付', 'WeChat Pay'),
+    'zfb': tt('支付宝', 'Alipay'),
+    'ptb': tt('平台币', 'Platform Coins'),
+    'djq': tt('代金券', 'Voucher'),
+    'kf': tt('客服', 'Customer Service')
   };
   return nameMap[method] || method;
 };

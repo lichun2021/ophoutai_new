@@ -66,7 +66,7 @@ const getServerConfigByInput = async (server: string) => {
 // ========== 管理端：CDK 类型 ==========
 export const createType = async (evt: H3Event) => {
   const body = await readBody(evt);
-  const { title, content, type, items } = body || {};
+  const { title, title_en, content, content_en, type, items } = body || {};
   if (!title || !content || !type || !items) {
     throw createError({ status: 400, message: '缺少必要参数' });
   }
@@ -88,7 +88,14 @@ export const createType = async (evt: H3Event) => {
   if (validItems.length === 0) {
     throw createError({ status: 400, message: '物品列表无有效条目' });
   }
-  const ret = await CDKModel.createType({ title, content, type, items: validItems });
+  const ret = await CDKModel.createType({
+    title,
+    title_en: title_en || null,
+    content,
+    content_en: content_en || null,
+    type,
+    items: validItems,
+  });
   return { code: 200, data: ret, message: '创建成功' };
 };
 
@@ -168,10 +175,14 @@ export const listRedemptions = async (evt: H3Event) => {
 
 export const redeem = async (evt: H3Event) => {
   const body = await readBody(evt);
-  const { server, playerId, code } = body || {};
-  console.log(`[CDK][redeem] 入参`, { server, playerId, code });
+  const { server, playerId, code, lang } = body || {};
+  const isEn = lang === 'en';
+  console.log(`[CDK][redeem] 入参`, { server, playerId, code, lang });
   if (!server || !playerId || !code) {
-    throw createError({ status: 400, message: '缺少参数：server/playerId/code' });
+    throw createError({
+      status: 400,
+      message: isEn ? 'Missing parameters: server/playerId/code' : '缺少参数：server/playerId/code',
+    });
   }
   const serverCfg = await getServerConfigByInput(String(server));
   const serverId = String(serverCfg.server_id ?? serverCfg.bname).replace('game_', '');
@@ -179,13 +190,15 @@ export const redeem = async (evt: H3Event) => {
   // 辅助：调用游戏服发放物资邮件（不依赖 gameDb）
   const doSendMail = async (cdkType: any) => {
     const client = await createClientForServer(String(server));
+    const mailTitle = (isEn && cdkType.title_en) ? cdkType.title_en : cdkType.title;
+    const mailContent = (isEn && cdkType.content_en) ? cdkType.content_en : cdkType.content;
     await client.sendItemMail({
       openId: String(playerId),   // 游戏服通过 roleId 定位玩家，openId 同 roleId
       serverId,
       platform: 'android',        // 不查 gameDb，平台由游戏服按 roleId 自行判断
       roleId: String(playerId),
-      mailTitle: cdkType.title,
-      mailContent: cdkType.content,
+      mailTitle,
+      mailContent,
       items: cdkType.items.map((i: any) => ({ itemId: String(i.ItemId), itemCount: Number(i.ItemNum) })),
     });
   };
@@ -199,7 +212,7 @@ export const redeem = async (evt: H3Event) => {
       const cdkType = await CDKModel.getLatestTypeByType('data');
       if (!cdkType) {
         console.log(`[CDK][redeem][data] 未找到 data 类型配置`);
-        return { code: 400, message: '未配置 data 类型' };
+        return { code: 400, message: isEn ? 'Daily verification code is not configured' : '未配置 data 类型' };
       }
 
       const typeId = (cdkType as any).id as number;
@@ -209,7 +222,7 @@ export const redeem = async (evt: H3Event) => {
       const lockValue = await acquireCdkLock(lockKey);
       if (lockValue === null) {
         console.warn(`[CDK][redeem][data] 并发拦截 playerId=${playerId} todayCode=${todayCode}`);
-        return { code: 400, message: '今日已领取，无法重复领取' };
+        return { code: 400, message: isEn ? 'Already claimed today, cannot claim again' : '今日已领取，无法重复领取' };
       }
 
       try {
@@ -217,7 +230,7 @@ export const redeem = async (evt: H3Event) => {
         const alreadyToday = await CDKModel.hasRedeemedByTypeAndCode(playerId, typeId, String(todayCode));
         console.log(`[CDK][redeem][data] 幂等检查`, { playerId, typeId, todayCode, alreadyToday });
         if (alreadyToday) {
-          return { code: 400, message: '今日已领取，无法重复领取' };
+          return { code: 400, message: isEn ? 'Already claimed today, cannot claim again' : '今日已领取，无法重复领取' };
         }
 
         await doSendMail(cdkType);
@@ -232,10 +245,16 @@ export const redeem = async (evt: H3Event) => {
         });
 
         console.log(`[CDK][redeem][data] 发放成功`);
-        return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
+        return {
+          code: 200,
+          message: isEn ? 'Redeemed successfully! Rewards have been sent via in-game mail' : '领取成功，奖励已通过游戏内邮件发放',
+        };
       } catch (e: any) {
         console.error(`[CDK][redeem][data] 发放失败`, { server, playerId, code: String(code) }, e);
-        throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
+        throw createError({
+          status: 500,
+          message: (isEn ? 'Delivery failed: ' : '发放失败: ') + (e?.message || (isEn ? 'GM interface error' : 'GM接口错误')),
+        });
       } finally {
         // 成功写库后才释放锁，确保并发请求被锁住直到 DB 有记录
         await releaseCdkLock(lockKey, lockValue);
@@ -248,13 +267,13 @@ export const redeem = async (evt: H3Event) => {
   // 1) 校验码是否存在
   const codeRow = await CDKModel.getCode(code);
   if (!codeRow) {
-    return { code: 400, message: 'CDK不存在或无效' };
+    return { code: 400, message: isEn ? 'Invalid or non-existent CDK' : 'CDK不存在或无效' };
   }
 
   // 2) 读取类型
   const cdkType = await CDKModel.getTypeById(codeRow.cdk_type_id);
   if (!cdkType) {
-    return { code: 400, message: 'CDK类型不存在' };
+    return { code: 400, message: isEn ? 'CDK type does not exist' : 'CDK类型不存在' };
   }
 
   // ===== 【防并发】Redis 分布式锁 =====
@@ -266,26 +285,29 @@ export const redeem = async (evt: H3Event) => {
   const lockValue = await acquireCdkLock(lockKey);
   if (lockValue === null) {
     console.warn(`[CDK][redeem] 并发拦截 playerId=${playerId} code=${code}`);
-    return { code: 400, message: '请勿重复提交，稍后再试' };
+    return { code: 400, message: isEn ? 'Please do not submit repeatedly, try again later' : '请勿重复提交，稍后再试' };
   }
 
   try {
     // 3) 幂等校验（锁内二次检查）：同一类型每个角色只能领一次
     const already = await CDKModel.hasRedeemed(playerId, codeRow.cdk_type_id);
     if (already) {
-      return { code: 400, message: '该类型已领取，无法重复领取' };
+      return { code: 400, message: isEn ? 'This CDK type has already been claimed' : '该类型已领取，无法重复领取' };
     }
 
     // 4) 唯一码：校验是否已被使用
     if (cdkType.type === 'unique' && codeRow.is_used) {
-      return { code: 400, message: '该CDK已被使用' };
+      return { code: 400, message: isEn ? 'This CDK has already been used' : '该CDK已被使用' };
     }
 
     // 5) 调用游戏服发放物资
     try {
       await doSendMail(cdkType);
     } catch (e: any) {
-      throw createError({ status: 500, message: '发放失败: ' + (e?.message || 'GM接口错误') });
+      throw createError({
+        status: 500,
+        message: (isEn ? 'Delivery failed: ' : '发放失败: ') + (e?.message || (isEn ? 'GM interface error' : 'GM接口错误')),
+      });
     }
 
     // 6) 记录 & 标记
@@ -302,7 +324,10 @@ export const redeem = async (evt: H3Event) => {
       await CDKModel.markCodeUsed(code, playerId);
     }
 
-    return { code: 200, message: '领取成功，奖励已通过游戏内邮件发放' };
+    return {
+      code: 200,
+      message: isEn ? 'Redeemed successfully! Rewards have been sent via in-game mail' : '领取成功，奖励已通过游戏内邮件发放',
+    };
   } finally {
     // 成功写库后才释放锁
     await releaseCdkLock(lockKey, lockValue);

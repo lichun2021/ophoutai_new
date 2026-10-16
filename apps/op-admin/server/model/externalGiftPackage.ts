@@ -7,7 +7,9 @@ export type ExternalGiftPackage = {
     id?: number;
     package_code: string;
     package_name: string;
+    package_name_en?: string;
     description?: string;
+    description_en?: string;
     price_platform_coins: number;
     price_real_money?: number;
     gift_items: any; // JSON格式
@@ -127,14 +129,15 @@ export const getGiftPackageByCode = async (package_code: string) => {
 };
 
 // 检查用户是否可以购买该礼包
-export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: number, quantity = 1) => {
+export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: number, quantity = 1, lang = 'zh') => {
+    const isEn = lang === 'en';
     console.log(`[限购检查] 开始检查 - 角色UUID: ${thirdparty_uid}, 礼包ID: ${package_id}, 数量: ${quantity}`);
 
     // 获取礼包信息
     const giftPackage = await getGiftPackageById(package_id);
     if (!giftPackage) {
         console.log(`[限购检查] 失败 - 礼包不存在`);
-        return { canPurchase: false, reason: '礼包不存在' };
+        return { canPurchase: false, reason: isEn ? 'Gift package does not exist' : '礼包不存在' };
     }
 
     console.log(`[限购检查] 礼包信息 - 名称: ${giftPackage.package_name}, 分类: ${giftPackage.category}, 限购: ${giftPackage.max_per_user}`);
@@ -142,18 +145,18 @@ export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: n
     // 检查礼包是否启用
     if (!giftPackage.is_active) {
         console.log(`[限购检查] 失败 - 礼包已下架`);
-        return { canPurchase: false, reason: '礼包已下架' };
+        return { canPurchase: false, reason: isEn ? 'Gift package is no longer available' : '礼包已下架' };
     }
 
     // 检查时间限制
     const now = new Date();
     if (giftPackage.start_time && new Date(giftPackage.start_time) > now) {
         console.log(`[限购检查] 失败 - 礼包尚未开始销售`);
-        return { canPurchase: false, reason: '礼包尚未开始销售' };
+        return { canPurchase: false, reason: isEn ? 'Gift package sale has not started yet' : '礼包尚未开始销售' };
     }
     if (giftPackage.end_time && new Date(giftPackage.end_time) < now) {
         console.log(`[限购检查] 失败 - 礼包销售已结束`);
-        return { canPurchase: false, reason: '礼包销售已结束' };
+        return { canPurchase: false, reason: isEn ? 'Gift package sale has ended' : '礼包销售已结束' };
     }
 
     // 检查星期限制（限期礼包）
@@ -165,10 +168,15 @@ export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: n
         console.log(`[限购检查] 限期礼包 - 当前星期: ${weekdayMap}, 可购买星期: [${availableDays.join(', ')}]`);
 
         if (!availableDays.includes(weekdayMap)) {
-            const weekdayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-            const availableNames = availableDays.map(d => weekdayNames[d]).join('、');
+            const weekdayNames = isEn
+                ? ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                : ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+            const availableNames = availableDays.map(d => weekdayNames[d]).join(isEn ? ', ' : '、');
             console.log(`[限购检查] 失败 - 今日不可购买此礼包`);
-            return { canPurchase: false, reason: `该礼包仅在${availableNames}可购买` };
+            return {
+                canPurchase: false,
+                reason: isEn ? `This package is only available on ${availableNames}` : `该礼包仅在${availableNames}可购买`
+            };
         }
         console.log(`[限购检查] 通过 - 今日可购买`);
     }
@@ -179,7 +187,7 @@ export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: n
         console.log(`[限购检查] 库存检查 - 总量: ${giftPackage.total_quantity}, 已售: ${giftPackage.sold_quantity}, 剩余: ${remainingQuantity}`);
         if (remainingQuantity < quantity) {
             console.log(`[限购检查] 失败 - 礼包库存不足`);
-            return { canPurchase: false, reason: '礼包库存不足' };
+            return { canPurchase: false, reason: isEn ? 'Insufficient stock for this package' : '礼包库存不足' };
         }
     }
 
@@ -191,7 +199,10 @@ export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: n
             console.log(`[限购检查] 今日已购买: ${todayCount}次, 限购: ${giftPackage.max_per_user}次, 本次购买: ${quantity}次`);
             if (todayCount + quantity > giftPackage.max_per_user) {
                 console.log(`[限购检查] 失败 - 超过每日限购 (${todayCount} + ${quantity} > ${giftPackage.max_per_user})`);
-                return { canPurchase: false, reason: `每日最多购买${giftPackage.max_per_user}次` };
+                return {
+                    canPurchase: false,
+                    reason: isEn ? `Daily purchase limit reached (max ${giftPackage.max_per_user}/day)` : `每日最多购买${giftPackage.max_per_user}次`
+                };
             }
             console.log(`[限购检查] 通过 - 未超过每日限购`);
         } else {
@@ -200,7 +211,10 @@ export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: n
             console.log(`[限购检查] 总共已购买: ${userPurchaseCount}次, 限购: ${giftPackage.max_per_user}次, 本次购买: ${quantity}次`);
             if (userPurchaseCount + quantity > giftPackage.max_per_user) {
                 console.log(`[限购检查] 失败 - 超过总限购 (${userPurchaseCount} + ${quantity} > ${giftPackage.max_per_user})`);
-                return { canPurchase: false, reason: `每用户最多购买${giftPackage.max_per_user}个` };
+                return {
+                    canPurchase: false,
+                    reason: isEn ? `Purchase limit reached (max ${giftPackage.max_per_user} per character)` : `每用户最多购买${giftPackage.max_per_user}个`
+                };
             }
             console.log(`[限购检查] 通过 - 未超过总限购`);
         }
@@ -482,8 +496,8 @@ export const updatePackageSoldQuantity = async (package_id: number, quantity: nu
 // ========== 游戏内发放功能 ==========
 
 // 发放礼包到游戏内
-export const deliverPackageToGame = async (purchaseRecordId: number, server_id: string, role_id: string) => {
-    console.log(`[deliverPackageToGame] 开始发放礼包, 购买记录ID: ${purchaseRecordId}, 服务器ID: ${server_id}, 角色ID: ${role_id}`);
+export const deliverPackageToGame = async (purchaseRecordId: number, server_id: string, role_id: string, lang?: string) => {
+    console.log(`[deliverPackageToGame] 开始发放礼包, 购买记录ID: ${purchaseRecordId}, 服务器ID: ${server_id}, 角色ID: ${role_id}, lang: ${lang || 'auto'}`);
 
     try {
         // 获取购买记录
@@ -564,7 +578,16 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
         const { createGameServerClient } = await import('../controller/gameServerClient');
         const client = createGameServerClient(webhost, 15000);
 
-        console.log(`[deliverPackageToGame] sendItemMail 参数: openId=${openId}, serverId=${worldId}, roleId=${actualRoleId}, items=${JSON.stringify(sendItemList)}`);
+        const isEn = lang === 'en'
+            || !!(record.remark && record.remark.includes('[LANG:en]'))
+            || !!(giftPackage.package_name_en && record.package_name === giftPackage.package_name_en);
+        const pkgNameForMail = isEn ? (giftPackage.package_name_en || giftPackage.package_name) : giftPackage.package_name;
+        const mailTitle = pkgNameForMail || (isEn ? 'System Reward' : '系统发放');
+        const mailContent = isEn
+            ? `Your purchased ${pkgNameForMail} has been delivered. Please check your mail!`
+            : `您购买的${pkgNameForMail}已到账，请查收！`;
+
+        console.log(`[deliverPackageToGame] sendItemMail 参数: openId=${openId}, serverId=${worldId}, roleId=${actualRoleId}, isEn=${isEn}, items=${JSON.stringify(sendItemList)}`);
 
         // 更新状态为正在发送
         await sql({
@@ -577,8 +600,8 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
             serverId: String(worldId),
             platform: 'android',
             roleId:   actualRoleId,
-            mailTitle:   giftPackage.package_name || '系统发放',
-            mailContent: `您购买的${giftPackage.package_name}已到账，请查收！`,
+            mailTitle,
+            mailContent,
             items: sendItemList,
         });
 
@@ -598,8 +621,8 @@ export const deliverPackageToGame = async (purchaseRecordId: number, server_id: 
 
 
 // 基于 IDIP 的礼包发放方法（参照 auto-gift-delivery.js）
-export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serverId: string, roleId: string) => {
-    console.log(`[deliverPackageToGameViaIDIP] 开始发放礼包, 购买记录ID: ${purchaseRecordId}, 服务器ID: ${serverId}, 角色ID: ${roleId}`);
+export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serverId: string, roleId: string, lang?: string) => {
+    console.log(`[deliverPackageToGameViaIDIP] 开始发放礼包, 购买记录ID: ${purchaseRecordId}, 服务器ID: ${serverId}, 角色ID: ${roleId}, lang: ${lang || 'auto'}`);
 
     try {
         // 获取购买记录
@@ -707,7 +730,16 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
         // 平台默认 android（礼包系统暂不区分平台）
         const plat: Platform = 'android';
 
-        console.log(`[deliverPackageToGameViaIDIP] 发送物资邮件: openId=${subUserId}, serverId=${actualServerId}, roleId=${actualRoleId}`);
+        const isEn = lang === 'en'
+            || !!(record.remark && record.remark.includes('[LANG:en]'))
+            || !!(giftPackage.package_name_en && record.package_name === giftPackage.package_name_en);
+        const pkgNameForMail = isEn ? (giftPackage.package_name_en || giftPackage.package_name) : giftPackage.package_name;
+        const mailTitle = pkgNameForMail || (isEn ? 'System Reward' : '系统发放');
+        const mailContent = isEn
+            ? `Your purchased ${pkgNameForMail} has been delivered. Please check your mail!`
+            : `您购买的${pkgNameForMail}已到账，请查收！`;
+
+        console.log(`[deliverPackageToGameViaIDIP] 发送物资邮件: openId=${subUserId}, serverId=${actualServerId}, roleId=${actualRoleId}, isEn=${isEn}`);
 
         try {
             const resp = await client.sendItemMail({
@@ -715,8 +747,8 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
                 serverId: String(actualServerId),
                 platform: plat,
                 roleId: actualRoleId,
-                mailTitle: giftPackage.package_name || '系统发放',
-                mailContent: `您购买的${giftPackage.package_name}已到账，请查收！`,
+                mailTitle,
+                mailContent,
                 items: sendItemList.map(i => ({ itemId: i.ItemId, itemCount: i.ItemNum })),
             });
 

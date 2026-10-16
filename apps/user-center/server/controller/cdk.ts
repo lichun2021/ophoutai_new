@@ -1,10 +1,10 @@
-import { H3Event, readBody, getQuery, createError } from 'h3';
+import { H3Event, readBody, getQuery, getCookie, createError } from 'h3';
 import * as CDKModel from '../model/cdk';
 
 // ========== 管理端：CDK 类型 ==========
 export const createType = async (evt: H3Event) => {
   const body = await readBody(evt);
-  const { title, content, type, items } = body || {};
+  const { title, title_en, content, content_en, type, items } = body || {};
   if (!title || !content || !type || !items) {
     throw createError({ status: 400, message: '缺少必要参数' });
   }
@@ -20,7 +20,14 @@ export const createType = async (evt: H3Event) => {
   if (validItems.length === 0) {
     throw createError({ status: 400, message: '物品列表无有效条目' });
   }
-  const ret = await CDKModel.createType({ title, content, type, items: validItems });
+  const ret = await CDKModel.createType({
+    title,
+    title_en: title_en || null,
+    content,
+    content_en: content_en || null,
+    type,
+    items: validItems,
+  });
   return { code: 200, data: ret, message: '创建成功' };
 };
 
@@ -98,21 +105,26 @@ const OP_ADMIN_BASE = process.env.OP_ADMIN_BASE_URL || 'http://localhost:3003';
 
 export const redeem = async (evt: H3Event) => {
   const body = await readBody(evt);
-  console.log(`[CDK][redeem][proxy] 转发请求到 op-admin`, { body });
+  const lang = body?.lang || getCookie(evt, 'user_lang') || 'zh';
+  const forwardBody = { ...(body || {}), lang };
+  console.log(`[CDK][redeem][proxy] 转发请求到 op-admin`, { body: forwardBody });
 
   let result: any;
   try {
     const resp = await fetch(`${OP_ADMIN_BASE}/api/client/cdk/redeem`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(forwardBody),
     });
 
     result = await resp.json();
     console.log(`[CDK][redeem][proxy] op-admin 响应`, result);
   } catch (e: any) {
     console.error(`[CDK][redeem][proxy] 请求 op-admin 失败`, e);
-    throw createError({ status: 502, message: '兑换服务暂时不可用，请稍后重试' });
+    throw createError({
+      status: 502,
+      message: lang === 'en' ? 'Redemption service is temporarily unavailable, please try again later' : '兑换服务暂时不可用，请稍后重试',
+    });
   }
 
   return result;

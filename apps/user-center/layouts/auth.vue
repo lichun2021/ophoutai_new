@@ -1,5 +1,6 @@
 <template>
   <div class="auth-layout">
+    <LanguageSwitcher floating />
     <NuxtPage />
   </div>
 </template>

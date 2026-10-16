@@ -5,26 +5,26 @@
       <div class="info-header">
         <div class="avatar-lg">{{ userInitial }}</div>
         <div class="info-meta">
-          <h2 class="info-name">{{ authStore.userInfo?.username || authStore.name || '未设置' }}</h2>
+          <h2 class="info-name">{{ authStore.userInfo?.username || authStore.name || tt('未设置', 'Not Set') }}</h2>
           <p class="info-uid">UID: {{ authStore.userInfo?.thirdparty_uid || '-' }}</p>
         </div>
       </div>
 
       <div class="info-grid">
         <div class="info-item">
-          <span class="info-label">用户ID</span>
+          <span class="info-label">{{ tt('用户ID', 'User ID') }}</span>
           <span class="info-value">{{ authStore.userInfo?.id || authStore.id }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">手机号</span>
-          <span class="info-value">{{ authStore.userInfo?.iphone || '未绑定' }}</span>
+          <span class="info-label">{{ tt('手机号', 'Phone') }}</span>
+          <span class="info-value">{{ authStore.userInfo?.iphone || tt('未绑定', 'Unbound') }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">渠道</span>
-          <span class="info-value badge">{{ authStore.userInfo?.channel_code || '默认' }}</span>
+          <span class="info-label">{{ tt('渠道', 'Channel') }}</span>
+          <span class="info-value badge">{{ authStore.userInfo?.channel_code || tt('默认', 'Default') }}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">注册时间</span>
+          <span class="info-label">{{ tt('注册时间', 'Registered At') }}</span>
           <span class="info-value">{{ formatDate(authStore.userInfo?.created_at) }}</span>
         </div>
       </div>
@@ -35,41 +35,41 @@
       <div class="stat-card stat-primary">
         <span class="stat-emoji">💰</span>
         <div>
-          <p class="stat-label">平台币余额</p>
+          <p class="stat-label">{{ tt('平台币余额', 'Coins Balance') }}</p>
           <p class="stat-value">{{ formatBalance(authStore.userInfo?.platform_coins) }}</p>
         </div>
       </div>
       <div class="stat-card stat-secondary">
         <span class="stat-emoji">📊</span>
         <div>
-          <p class="stat-label">总充值</p>
+          <p class="stat-label">{{ tt('总充值', 'Total Top-Up') }}</p>
           <p class="stat-value">¥{{ formatAmount(userStats?.total_recharge || 0) }}</p>
         </div>
       </div>
       <div class="stat-card stat-accent">
         <span class="stat-emoji">🎁</span>
         <div>
-          <p class="stat-label">购买次数</p>
-          <p class="stat-value">{{ userStats?.total_purchases || 0 }}<small>次</small></p>
+          <p class="stat-label">{{ tt('购买次数', 'Purchases') }}</p>
+          <p class="stat-value">{{ userStats?.total_purchases || 0 }}<small>{{ tt('次', '') }}</small></p>
         </div>
       </div>
     </div>
 
     <!-- 快捷操作 -->
     <div class="actions-card">
-      <h3 class="card-title">快捷操作</h3>
+      <h3 class="card-title">{{ tt('快捷操作', 'Quick Actions') }}</h3>
       <div class="actions-grid">
         <button class="action-item" @click="goToRecharge">
           <span class="action-icon">💳</span>
-          <span class="action-text">充值平台币</span>
+          <span class="action-text">{{ tt('充值平台币', 'Top Up Coins') }}</span>
         </button>
         <button class="action-item" @click="goToGiftShop">
           <span class="action-icon">🎁</span>
-          <span class="action-text">礼包商店</span>
+          <span class="action-text">{{ tt('礼包商店', 'Gift Mall') }}</span>
         </button>
         <button class="action-item" @click="viewOrders">
           <span class="action-icon">📦</span>
-          <span class="action-text">我的订单</span>
+          <span class="action-text">{{ tt('我的订单', 'My Orders') }}</span>
         </button>
       </div>
     </div>
@@ -84,12 +84,14 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
 import FeatureNotReady from '@/components/FeatureNotReady.vue';
+import { useI18n } from '~/composables/useI18n';
 
 definePageMeta({ middleware: 'auth', layout: 'user' });
 
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const { isEn, tt } = useI18n();
 
 const userStats = ref<{ total_recharge?: number; total_purchases?: number }>({});
 const loading = ref(false);
@@ -116,7 +118,7 @@ const fetchUserStats = async () => {
 
 const formatBalance = (v: any) => { if (!v) return '0'; return Math.floor(Number(v)).toString(); };
 const formatAmount = (v: any) => { if (!v) return '0.00'; return Number(v).toFixed(2); };
-const formatDate = (d: any) => { if (!d) return '-'; try { return new Date(d).toLocaleDateString('zh-CN'); } catch { return '-'; } };
+const formatDate = (d: any) => { if (!d) return '-'; try { return new Date(d).toLocaleDateString(isEn.value ? 'en-US' : 'zh-CN'); } catch { return '-'; } };
 
 const goToRecharge = () => router.push('/user/cashier');
 const goToGiftShop = () => router.push('/user/mall');

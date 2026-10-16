@@ -1,4 +1,4 @@
-﻿import * as UserModel from '../model/user';
+import * as UserModel from '../model/user';
 import * as PlatformCoinRechargeModel from '../model/platformCoinRecharge';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import * as PaymentModel from '../model/payment';
@@ -266,7 +266,8 @@ export const getGiftPackageCategories = defineEventHandler(async (event) => {
 export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
     try {
         const body = await readBody(event);
-        const { user_id, package_id, character_uuid } = body;
+        const { user_id, package_id, character_uuid, lang } = body;
+        const isEn = lang === 'en';
         console.log(body);
         
         // 🔒 安全限制：强制购买数量为1，防止刷单
@@ -275,7 +276,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         if (!user_id || !package_id) {
             return {
                 code: 400,
-                message: '缺少必要参数'
+                message: isEn ? 'Missing required parameters' : '缺少必要参数'
             };
         }
         
@@ -289,7 +290,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         if (!character_uuid) {
             return {
                 code: 400,
-                message: '请选择要发放的角色'
+                message: isEn ? 'Please select a character for delivery' : '请选择要发放的角色'
             };
         }
         
@@ -298,7 +299,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         if (!user) {
             return {
                 code: 404,
-                message: '用户不存在'
+                message: isEn ? 'User not found' : '用户不存在'
             };
         }
         
@@ -313,7 +314,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         if (character.length === 0) {
             return {
                 code: 400,
-                message: '角色不存在或不属于该用户'
+                message: isEn ? 'Character not found or does not belong to you' : '角色不存在或不属于该用户'
             };
         }
         
@@ -325,7 +326,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         console.log(`========================================`);
         
         // 检查用户是否可以购买该礼包（使用角色UUID进行限购检查）
-        const checkResult = await ExternalGiftPackageModel.checkUserCanPurchase(selectedCharacter.uuid, package_id, quantity);
+        const checkResult = await ExternalGiftPackageModel.checkUserCanPurchase(selectedCharacter.uuid, package_id, quantity, lang);
         if (!checkResult.canPurchase) {
             console.log(`❌ 限购检查失败: ${checkResult.reason}`);
             return {
@@ -341,7 +342,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         if (!giftPackage) {
             return {
                 code: 404,
-                message: '礼包不存在'
+                message: isEn ? 'Gift pack not found' : '礼包不存在'
             };
         }
         
@@ -353,7 +354,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         if (currentBalance < totalAmount) {
             return {
                 code: 400,
-                message: '平台币余额不足'
+                message: isEn ? 'Insufficient Platform Coins' : '平台币余额不足'
             };
         }
         
@@ -362,10 +363,12 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
         if (!deductResult.success) {
             return {
                 code: 400,
-                message: deductResult.message || '扣除平台币失败'
+                message: deductResult.message || (isEn ? 'Failed to deduct Platform Coins' : '扣除平台币失败')
             };
         }
         
+        const displayPkgName = isEn ? (giftPackage.package_name_en || giftPackage.package_name) : giftPackage.package_name;
+
         // 生成订单号（用于 PaymentRecords 和礼包购买记录）
         const mchOrderId = `${Date.now()}`;
         
@@ -381,8 +384,8 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             payment_way: '平台币',
             payment_id: 0,
             world_id: selectedCharacter.server_id || 1,
-            product_name: giftPackage.package_name,
-            product_des: '礼包购买',
+            product_name: displayPkgName,
+            product_des: isEn ? 'Gift Pack Purchase' : '礼包购买',
             ip: '',
             amount: totalAmount,
             mch_order_id: mchOrderId, // 使用相同的订单号
@@ -415,7 +418,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             mch_order_id: mchOrderId, // 使用生成的订单号
             package_id: package_id,
             package_code: giftPackage.package_code,
-            package_name: giftPackage.package_name,
+            package_name: displayPkgName,
             quantity: quantity,
             unit_price: giftPackage.price_platform_coins,
             total_amount: totalAmount,
@@ -423,7 +426,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             balance_after: deductResult.newBalance!,
             gift_items: giftPackage.gift_items,
             status: 'paid' as const,
-            remark: `平台币购买 - 服务器${selectedCharacter.server_id || 1}`
+            remark: `平台币购买 - 服务器${selectedCharacter.server_id || 1}${isEn ? ' [LANG:en]' : ''}`
         };
         
         console.log(`[userPurchaseGiftPackage] 创建购买记录, 用户ID: ${user_id}, 礼包ID: ${package_id}, 角色: ${selectedCharacter.uuid}`);
@@ -439,7 +442,8 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             const deliveryResult = await ExternalGiftPackageModel.deliverPackageToGameViaIDIP(
                 purchaseRecordId,
                 selectedCharacter.server_id?.toString() || '1',
-                selectedCharacter.uuid
+                selectedCharacter.uuid,
+                lang
             );
             
             if (deliveryResult.success) {
@@ -459,7 +463,7 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
                         new_balance: deductResult.newBalance,
                         purchase_amount: totalAmount
                     },
-                    message: '礼包购买成功'
+                    message: isEn ? 'Gift pack purchased successfully!' : '礼包购买成功'
                 };
             } else if ((deliveryResult as any).timeout) {
                 console.warn(`[userPurchaseGiftPackage] ⏳ 礼包发放超时，等待确认. 购买记录ID: ${purchaseRecordId}`);
@@ -782,7 +786,8 @@ export const getUserPlatformCoinSpendHistory = defineEventHandler(async (event) 
         const whereClauseSql = baseWhereClauses.join(' AND ');
         
         const records = await sql({
-            query: `SELECT pr.*, gc.character_name as role_name
+            query: `SELECT pr.*, gc.character_name as role_name,
+                           (SELECT egp.package_name_en FROM externalgiftpackages egp WHERE egp.package_name = pr.product_name OR egp.package_name_en = pr.product_name LIMIT 1) as product_name_en
                    FROM paymentrecords pr
                    LEFT JOIN gamecharacters gc ON pr.role_id = gc.uuid
                    WHERE ${whereClauseSql}
@@ -900,8 +905,10 @@ export const getUserHomeStats = defineEventHandler(async (event) => {
         
         // 获取最近3次购买记录（payment_way是"平台币"的记录）
         const recentOrdersResult = await sql({
-            query: `SELECT * FROM paymentrecords 
-                   WHERE user_id = ? AND payment_way = '平台币'
+            query: `SELECT pr.*,
+                           (SELECT egp.package_name_en FROM externalgiftpackages egp WHERE egp.package_name = pr.product_name OR egp.package_name_en = pr.product_name LIMIT 1) as product_name_en
+                   FROM paymentrecords pr
+                   WHERE pr.user_id = ? AND pr.payment_way = '平台币'
                    ORDER BY created_at DESC 
                    LIMIT 3`,
             values: [user_id],

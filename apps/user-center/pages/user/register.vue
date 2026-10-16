@@ -10,31 +10,31 @@
       <div class="register-logo">
         <!-- logo removed -->
 
-        <h1 class="logo-title">用户注册</h1>
-        <p class="logo-sub">创建您的账户</p>
+        <h1 class="logo-title">{{ tt('用户注册', 'Create Account') }}</h1>
+        <p class="logo-sub">{{ tt('创建您的账户', 'Register your game account') }}</p>
       </div>
 
       <!-- 代理验证状态 -->
       <div v-if="channelValidating" class="status-bar status-loading">
         <span class="status-icon">⏳</span>
-        <span>正在验证注册链接...</span>
+        <span>{{ tt('正在验证注册链接...', 'Validating registration link...') }}</span>
       </div>
 
       <div v-if="!channelValid && !channelValidating" class="status-bar status-error">
         <span class="status-icon">⚠️</span>
-        <span>{{ channelError || '该注册链接无效或代理账号已被禁用' }}</span>
+        <span>{{ channelError || tt('该注册链接无效或代理账号已被禁用', 'Invalid registration link or agent account disabled') }}</span>
       </div>
 
       <!-- 注册表单 -->
       <form class="register-form" @submit.prevent="handleRegister">
         <div class="form-field">
-          <label class="field-label">用户名</label>
+          <label class="field-label">{{ tt('用户名', 'Username') }}</label>
           <div class="input-wrap">
             <span class="input-icon">👤</span>
             <input
               v-model="formState.username"
               class="field-input"
-              placeholder="请输入用户名"
+              :placeholder="tt('请输入用户名', 'Enter username')"
               :disabled="loading || !channelValid"
               autocomplete="username"
             />
@@ -42,14 +42,14 @@
         </div>
 
         <div class="form-field">
-          <label class="field-label">密码</label>
+          <label class="field-label">{{ tt('密码', 'Password') }}</label>
           <div class="input-wrap">
             <span class="input-icon">🔒</span>
             <input
               v-model="formState.password"
               type="password"
               class="field-input"
-              placeholder="请输入密码"
+              :placeholder="tt('请输入密码', 'Enter password')"
               :disabled="loading || !channelValid"
               autocomplete="new-password"
             />
@@ -57,14 +57,14 @@
         </div>
 
         <div class="form-field">
-          <label class="field-label">确认密码</label>
+          <label class="field-label">{{ tt('确认密码', 'Confirm Password') }}</label>
           <div class="input-wrap">
             <span class="input-icon">🔒</span>
             <input
               v-model="formState.confirmPassword"
               type="password"
               class="field-input"
-              placeholder="请再次输入密码"
+              :placeholder="tt('请再次输入密码', 'Re-enter password')"
               :disabled="loading || !channelValid"
               autocomplete="new-password"
             />
@@ -73,32 +73,32 @@
 
         <!-- 图形验证码 -->
         <div class="form-field">
-          <label class="field-label">验证码</label>
+          <label class="field-label">{{ tt('验证码', 'Captcha') }}</label>
           <div class="captcha-row">
             <div class="input-wrap captcha-input-wrap">
               <span class="input-icon">🔑</span>
               <input
                 v-model="formState.captchaInput"
                 class="field-input"
-                placeholder="请输入验证码"
+                :placeholder="tt('请输入验证码', 'Enter code')"
                 maxlength="4"
                 :disabled="loading || !channelValid || captchaLoading"
                 style="text-transform: uppercase; letter-spacing: 4px;"
               />
             </div>
-            <div class="captcha-img-wrap" :title="captchaError ? '点击重试' : '点击刷新验证码'" @click="fetchCaptcha">
-              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" alt="验证码" draggable="false" />
+            <div class="captcha-img-wrap" :title="captchaError ? tt('点击重试', 'Click to retry') : tt('点击刷新验证码', 'Click to refresh')" @click="fetchCaptcha">
+              <img v-if="captchaImage" :src="captchaImage" class="captcha-img" :alt="tt('验证码', 'Captcha')" draggable="false" />
               <div v-else class="captcha-loading">
-                <span v-if="captchaError" class="captcha-retry-text">点击重试</span>
-                <span v-else>加载中...</span>
+                <span v-if="captchaError" class="captcha-retry-text">{{ tt('点击重试', 'Retry') }}</span>
+                <span v-else>{{ tt('加载中...', 'Loading...') }}</span>
               </div>
-              <span class="captcha-refresh-hint">🔄 点击刷新</span>
+              <span class="captcha-refresh-hint">🔄 {{ tt('点击刷新', 'Refresh') }}</span>
             </div>
           </div>
         </div>
 
         <button type="submit" class="register-btn" :disabled="!isFormValid || loading || channelValidating">
-          <span v-if="!loading">注 册</span>
+          <span v-if="!loading">{{ tt('注 册', 'Sign Up') }}</span>
           <span v-else class="loading-dots">
             <span></span><span></span><span></span>
           </span>
@@ -114,11 +114,11 @@
           <span v-else>❌</span>
         </div>
         <h3 class="modal-title" :class="modalSuccess ? 'text-success' : 'text-danger'">
-          {{ modalSuccess ? '注册成功' : '注册失败' }}
+          {{ modalSuccess ? tt('注册成功', 'Registration Successful') : tt('注册失败', 'Registration Failed') }}
         </h3>
         <p class="modal-message">{{ modalMessage }}</p>
         <button class="modal-btn" :class="modalSuccess ? 'btn-success' : 'btn-gray'" @click="handleModalClose">
-          {{ modalSuccess ? '去登录' : '知道了' }}
+          {{ modalSuccess ? tt('去登录', 'Go to Sign In') : tt('知道了', 'Got it') }}
         </button>
       </div>
     </div>
@@ -128,6 +128,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from '~/composables/useI18n';
 
 // 定义页面元数据，使用独立的布局
 definePageMeta({
@@ -136,6 +137,7 @@ definePageMeta({
 
 const route = useRoute();
 const router = useRouter();
+const { tt } = useI18n();
 
 // 表单状态
 const formState = reactive({
@@ -206,7 +208,7 @@ const isFormValid = computed(() => {
 const validateChannel = async (channelCode: string) => {
   if (!channelCode) {
     channelValid.value = false;
-    channelError.value = '缺少渠道代码参数';
+    channelError.value = tt('缺少渠道代码参数', 'Missing channel code parameter');
     return;
   }
   
@@ -222,7 +224,7 @@ const validateChannel = async (channelCode: string) => {
       channelError.value = '';
     } else {
       channelValid.value = false;
-      channelError.value = result.message || '该代理账号已被禁用，无法注册';
+      channelError.value = result.message || tt('该代理账号已被禁用，无法注册', 'This agent channel is disabled');
     }
   } catch (error) {
     console.error('验证代理账号状态失败:', error);
@@ -264,7 +266,7 @@ onMounted(async () => {
     await validateChannel(urlParams.channel_code);
   } else {
     channelValid.value = false;
-    channelError.value = '缺少渠道代码参数';
+    channelError.value = tt('缺少渠道代码参数', 'Missing channel code parameter');
   }
 
   // 加载图形验证码
@@ -274,7 +276,7 @@ onMounted(async () => {
 // 处理注册
 const handleRegister = async () => {
   if (!isFormValid.value) {
-    showError('请正确填写所有字段');
+    showError(tt('请正确填写所有字段', 'Please fill in all fields correctly'));
     return;
   }
   
@@ -283,12 +285,12 @@ const handleRegister = async () => {
   try {
     // 验证必需参数
     if (!urlParams.channel_code) {
-      showError('缺少必需参数，请检查注册链接');
+      showError(tt('缺少必需参数，请检查注册链接', 'Missing required parameters in registration link'));
       return;
     }
     
     if (!urlParams.game_code) {
-      showError('缺少必需参数，请检查注册链接');
+      showError(tt('缺少必需参数，请检查注册链接', 'Missing required parameters in registration link'));
       return;
     }
     
@@ -321,28 +323,28 @@ const handleRegister = async () => {
     console.log('注册结果:', result);
     
     if (response.ok && result.status === 'success') {
-      showSuccess('注册成功！即将跳转到登录页面...');
+      showSuccess(tt('注册成功！即将跳转到登录页面...', 'Registration successful! Redirecting to login...'));
     } else {
       // 验证码错误或其他错误，刷新验证码
       fetchCaptcha();
       if (!response.ok) {
-        showError(result.message || result.statusMessage || '注册失败，请检查参数是否正确');
+        showError(result.message || result.statusMessage || tt('注册失败，请检查参数是否正确', 'Registration failed, please check parameters'));
       } else if (result.message && result.message.includes('Duplicate')) {
         // 数据库重复键错误
         if (result.message.includes('username')) {
-          showError('用户名已存在，请更换用户名');
+          showError(tt('用户名已存在，请更换用户名', 'Username already exists, please choose another'));
         } else if (result.message.includes('thirdparty_uid')) {
-          showError('该第三方账号已注册');
+          showError(tt('该第三方账号已注册', 'This third-party account is already registered'));
         } else {
-          showError('该账号已存在');
+          showError(tt('该账号已存在', 'This account already exists'));
         }
       } else {
-        showError(result.message || '注册失败，请稍后重试');
+        showError(result.message || tt('注册失败，请稍后重试', 'Registration failed, please try again later'));
       }
     }
   } catch (error) {
     console.error('注册错误:', error);
-    showError('网络错误，请检查网络连接');
+    showError(tt('网络错误，请检查网络连接', 'Network error, please check your connection'));
   } finally {
     loading.value = false;
   }

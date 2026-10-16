@@ -3,20 +3,20 @@
 
     <!-- 卡片信息 -->
     <div class="card-info" :class="cardType">
-      <div class="card-badge">{{ cardType === 'lifetime' ? '✨ 终身卡' : '🌙 月卡' }}</div>
+      <div class="card-badge">{{ cardType === 'lifetime' ? tt('✨ 终身卡', '✨ Lifetime Pass') : tt('🌙 月卡', '🌙 Monthly Pass') }}</div>
       <div class="card-price">¥ {{ cardConfig.price }}</div>
-      <div class="card-perday">每天 {{ cardConfig.dailyCoins }} 平台币</div>
-      <div class="card-duration">{{ cardType === 'lifetime' ? '永久有效' : '有效期 30 天' }}</div>
+      <div class="card-perday">{{ tt(`每天 ${cardConfig.dailyCoins} 平台币`, `${cardConfig.dailyCoins} Coins / day`) }}</div>
+      <div class="card-duration">{{ cardType === 'lifetime' ? tt('永久有效', 'Valid Forever') : tt('有效期 30 天', 'Valid for 30 Days') }}</div>
     </div>
 
     <!-- 支付方式选择 -->
     <div class="pay-methods-section">
-      <h3 class="pay-title">选择支付方式</h3>
+      <h3 class="pay-title">{{ tt('选择支付方式', 'Payment Method') }}</h3>
 
-      <div v-if="loading" class="pay-loading">加载支付方式...</div>
+      <div v-if="loading" class="pay-loading">{{ tt('加载支付方式...', 'Loading payment methods...') }}</div>
 
       <div v-else-if="methods.length === 0" class="pay-empty">
-        暂无可用支付方式，请联系客服
+        {{ tt('暂无可用支付方式，请联系客服', 'No payment methods available, please contact support') }}
       </div>
 
       <div v-else class="pay-methods">
@@ -27,8 +27,8 @@
           :class="{ active: selectedMethod === m.id }"
           @click="selectedMethod = m.id"
         >
-          <img :src="m.icon" :alt="m.name" class="method-icon" />
-          <span class="method-name">{{ m.name }}</span>
+          <img :src="m.icon" :alt="getMethodName(m.id)" class="method-icon" />
+          <span class="method-name">{{ getMethodName(m.id) }}</span>
           <span class="method-check" v-if="selectedMethod === m.id">✓</span>
         </div>
       </div>
@@ -37,19 +37,19 @@
     <!-- 订单摘要 -->
     <div class="order-summary">
       <div class="summary-row">
-        <span>商品</span>
-        <span>{{ cardType === 'lifetime' ? '终身卡' : '月卡' }}</span>
+        <span>{{ tt('商品', 'Item') }}</span>
+        <span>{{ cardType === 'lifetime' ? tt('终身卡', 'Lifetime Pass') : tt('月卡', 'Monthly Pass') }}</span>
       </div>
       <div class="summary-row">
-        <span>权益</span>
-        <span>每天 {{ cardConfig.dailyCoins }} 平台币</span>
+        <span>{{ tt('权益', 'Perks') }}</span>
+        <span>{{ tt(`每天 ${cardConfig.dailyCoins} 平台币`, `${cardConfig.dailyCoins} Coins / day`) }}</span>
       </div>
       <div class="summary-row">
-        <span>有效期</span>
-        <span>{{ cardType === 'lifetime' ? '永久' : '30天' }}</span>
+        <span>{{ tt('有效期', 'Validity') }}</span>
+        <span>{{ cardType === 'lifetime' ? tt('永久', 'Forever') : tt('30天', '30 Days') }}</span>
       </div>
       <div class="summary-row total">
-        <span>应付金额</span>
+        <span>{{ tt('应付金额', 'Amount Payable') }}</span>
         <span class="total-price">¥ {{ cardConfig.price }}</span>
       </div>
     </div>
@@ -61,11 +61,11 @@
       :disabled="!selectedMethod || paying || methods.length === 0"
       @click="doPay"
     >
-      <template v-if="paying">支付处理中...</template>
-      <template v-else>立即支付 ¥{{ cardConfig.price }}</template>
+      <template v-if="paying">{{ tt('支付处理中...', 'Processing...') }}</template>
+      <template v-else>{{ tt(`立即支付 ¥${cardConfig.price}`, `Pay Now ¥${cardConfig.price}`) }}</template>
     </button>
 
-    <p class="pay-hint">支付成功后月卡即时生效，可在权益中心领取每日平台币</p>
+    <p class="pay-hint">{{ tt('支付成功后月卡即时生效，可在权益中心领取每日平台币', 'Pass activates immediately after payment. Claim daily coins in VIP Benefits.') }}</p>
 
   </div>
 </template>
@@ -75,6 +75,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 definePageMeta({ middleware: 'auth', layout: 'user' });
 
@@ -82,10 +83,11 @@ const route  = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const { tt } = useI18n();
 
 const cardType = computed(() => route.query.type === 'lifetime' ? 'lifetime' : 'monthly');
 
-// 卡片配置
+// 卡片配置（保持 productName 为中文 '月卡' / '终身卡' 以匹配回调激活关键字）
 const CARD_CONFIG = {
   monthly:  { price: 328, dailyCoins: 328, productName: '月卡' },
   lifetime: { price: 980, dailyCoins: 500, productName: '终身卡' },
@@ -98,7 +100,11 @@ const loading   = ref(true);
 const selectedMethod = ref('');
 const paying    = ref(false);
 
-const METHOD_NAMES = { wx: '微信支付', zfb: '支付宝' };
+const getMethodName = (id) => {
+  if (id === 'wx') return tt('微信支付', 'WeChat Pay');
+  if (id === 'zfb') return tt('支付宝', 'Alipay');
+  return id;
+};
 // 固定用 public 目录下的本地图片，不依赖数据库 icon_url
 const METHOD_ICONS = { wx: '/wx.png', zfb: '/zfb.png' };
 
@@ -109,12 +115,12 @@ const loadMethods = async () => {
     const active = (res.data || []).filter(s => s.payment_method === 'wx' || s.payment_method === 'zfb');
     methods.value = active.map(s => ({
       id: s.payment_method,
-      name: METHOD_NAMES[s.payment_method] || s.payment_method,
+      name: getMethodName(s.payment_method),
       icon: METHOD_ICONS[s.payment_method],   // 只用本地图片
     }));
     if (methods.value.length > 0) selectedMethod.value = methods.value[0].id;
   } catch {
-    tips.error('加载支付方式失败');
+    tips.error(tt('加载支付方式失败', 'Failed to load payment methods'));
   } finally {
     loading.value = false;
   }
@@ -127,7 +133,7 @@ const doPay = async () => {
   try {
     const userInfo = authStore.userInfo;
     if (!userInfo?.username) {
-      tips.error('用户信息获取失败，请重新登录');
+      tips.error(tt('用户信息获取失败，请重新登录', 'Failed to load user info, please sign in again'));
       return;
     }
 
@@ -163,14 +169,14 @@ const doPay = async () => {
       // 直接跳转到支付页面
       window.location.href = res.data;
     } else if (res.code === 1) {
-      tips.success('订单创建成功，请等待支付确认');
+      tips.success(tt('订单创建成功，请等待支付确认', 'Order created, awaiting payment confirmation'));
       setTimeout(() => router.push('/user/benefits'), 1500);
     } else {
-      tips.error(res.msg || '支付失败，请重试');
+      tips.error(res.msg || tt('支付失败，请重试', 'Payment failed, please try again'));
     }
   } catch (err) {
     console.error('月卡支付失败:', err);
-    tips.error('支付失败，请稍后重试');
+    tips.error(tt('支付失败，请稍后重试', 'Payment failed, please try again later'));
   } finally {
     paying.value = false;
   }

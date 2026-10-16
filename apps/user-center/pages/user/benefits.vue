@@ -5,8 +5,8 @@
     <div class="banner">
       <div class="banner-orb"></div>
       <div class="banner-content">
-        <h2 class="banner-title">⭐ 权益中心</h2>
-        <p class="banner-sub">每日领取专属平台币，让你的游戏更精彩</p>
+        <h2 class="banner-title">⭐ {{ tt('权益中心', 'VIP Benefits') }}</h2>
+        <p class="banner-sub">{{ tt('每日领取专属平台币，让你的游戏更精彩', 'Claim daily Platform Coins and enjoy exclusive perks') }}</p>
       </div>
     </div>
 
@@ -14,7 +14,7 @@
     <div class="section-card">
       <div class="section-head">
         <span class="section-icon">🃏</span>
-        <h3 class="section-title">月卡权益</h3>
+        <h3 class="section-title">{{ tt('月卡权益', 'Membership Passes') }}</h3>
       </div>
 
       <!-- 始终并列 2 张卡 -->
@@ -23,26 +23,26 @@
         <!-- 月卡 -->
         <div class="mc-card" :class="monthlyCard ? 'monthly active-card' : 'monthly inactive-card'">
           <div class="mc-card-top">
-            <div class="mc-card-badge">🌙 月卡</div>
-            <div v-if="monthlyCard" class="mc-status-tag on">已开通</div>
-            <div v-else class="mc-status-tag off">未开通</div>
+            <div class="mc-card-badge">🌙 {{ tt('月卡', 'Monthly Pass') }}</div>
+            <div v-if="monthlyCard" class="mc-status-tag on">{{ tt('已开通', 'Active') }}</div>
+            <div v-else class="mc-status-tag off">{{ tt('未开通', 'Inactive') }}</div>
           </div>
           <div class="mc-card-coins" v-if="monthlyCard">
             <span class="coin-num">{{ monthlyCard.daily_coins }}</span>
-            <span class="coin-unit">平台币/天</span>
+            <span class="coin-unit">{{ tt('平台币/天', 'Coins/day') }}</span>
           </div>
           <div class="mc-card-coins inactive" v-else>
             <span class="coin-num">328</span>
-            <span class="coin-unit">平台币/天</span>
+            <span class="coin-unit">{{ tt('平台币/天', 'Coins/day') }}</span>
           </div>
           <div class="mc-card-meta">
             <template v-if="monthlyCard">
               <span class="mc-expire">
-                到期：{{ monthlyCard.expire_date }}
-                <span v-if="getDaysLeft(monthlyCard.expire_date) <= 3" class="expire-warn">（即将到期）</span>
+                {{ tt('到期：', 'Expires: ') }}{{ monthlyCard.expire_date }}
+                <span v-if="getDaysLeft(monthlyCard.expire_date) <= 3" class="expire-warn">{{ tt('（即将到期）', ' (Expiring soon)') }}</span>
               </span>
             </template>
-            <span v-else class="mc-expire dim">30 天有效</span>
+            <span v-else class="mc-expire dim">{{ tt('30 天有效', 'Valid for 30 days') }}</span>
           </div>
           <button
             v-if="monthlyCard"
@@ -51,31 +51,31 @@
             :disabled="isCardClaimed(monthlyCard) || cardClaiming"
             @click="claimCard"
           >
-            <template v-if="isCardClaimed(monthlyCard)">✅ 今日已领取</template>
-            <template v-else-if="cardClaiming">领取中...</template>
-            <template v-else>领取 {{ monthlyCard.daily_coins }} 平台币</template>
+            <template v-if="isCardClaimed(monthlyCard)">✅ {{ tt('今日已领取', 'Claimed Today') }}</template>
+            <template v-else-if="cardClaiming">{{ tt('领取中...', 'Claiming...') }}</template>
+            <template v-else>{{ tt(`领取 ${monthlyCard.daily_coins} 平台币`, `Claim ${monthlyCard.daily_coins} Coins`) }}</template>
           </button>
-          <button v-else class="card-claim-btn buy" @click="purchaseCard('monthly')">立即购买</button>
+          <button v-else class="card-claim-btn buy" @click="purchaseCard('monthly')">{{ tt('立即购买', 'Buy Now') }}</button>
         </div>
 
         <!-- 终身卡 -->
         <div class="mc-card" :class="lifetimeCard ? 'lifetime active-card' : 'lifetime inactive-card'">
           <div class="mc-card-top">
-            <div class="mc-card-badge">✨ 终身卡</div>
-            <div v-if="lifetimeCard" class="mc-status-tag on">已开通</div>
-            <div v-else class="mc-status-tag off">未开通</div>
+            <div class="mc-card-badge">✨ {{ tt('终身卡', 'Lifetime Pass') }}</div>
+            <div v-if="lifetimeCard" class="mc-status-tag on">{{ tt('已开通', 'Active') }}</div>
+            <div v-else class="mc-status-tag off">{{ tt('未开通', 'Inactive') }}</div>
           </div>
           <div class="mc-card-coins" v-if="lifetimeCard">
             <span class="coin-num">{{ lifetimeCard.daily_coins }}</span>
-            <span class="coin-unit">平台币/天</span>
+            <span class="coin-unit">{{ tt('平台币/天', 'Coins/day') }}</span>
           </div>
           <div class="mc-card-coins inactive" v-else>
             <span class="coin-num">500</span>
-            <span class="coin-unit">平台币/天</span>
+            <span class="coin-unit">{{ tt('平台币/天', 'Coins/day') }}</span>
           </div>
           <div class="mc-card-meta">
-            <span v-if="lifetimeCard" class="mc-expire lifetime">永久有效</span>
-            <span v-else class="mc-expire dim">永久有效</span>
+            <span v-if="lifetimeCard" class="mc-expire lifetime">{{ tt('永久有效', 'Valid Forever') }}</span>
+            <span v-else class="mc-expire dim">{{ tt('永久有效', 'Valid Forever') }}</span>
           </div>
           <button
             v-if="lifetimeCard"
@@ -84,11 +84,11 @@
             :disabled="isCardClaimed(lifetimeCard) || cardClaiming"
             @click="claimCard"
           >
-            <template v-if="isCardClaimed(lifetimeCard)">✅ 今日已领取</template>
-            <template v-else-if="cardClaiming">领取中...</template>
-            <template v-else>领取 {{ lifetimeCard.daily_coins }} 平台币</template>
+            <template v-if="isCardClaimed(lifetimeCard)">✅ {{ tt('今日已领取', 'Claimed Today') }}</template>
+            <template v-else-if="cardClaiming">{{ tt('领取中...', 'Claiming...') }}</template>
+            <template v-else>{{ tt(`领取 ${lifetimeCard.daily_coins} 平台币`, `Claim ${lifetimeCard.daily_coins} Coins`) }}</template>
           </button>
-          <button v-else class="card-claim-btn buy gold" @click="purchaseCard('lifetime')">立即购买</button>
+          <button v-else class="card-claim-btn buy gold" @click="purchaseCard('lifetime')">{{ tt('立即购买', 'Buy Now') }}</button>
         </div>
 
       </div>
@@ -96,7 +96,7 @@
       <!-- 本月领取日历（有任意卡时显示） -->
       <template v-if="cardStatus.cards.length > 0">
         <div class="mini-calendar">
-          <div class="mini-cal-title">本月领取记录</div>
+          <div class="mini-cal-title">{{ tt('本月领取记录', 'Monthly Claim Calendar') }}</div>
           <div class="mini-cal-grid">
             <div
               v-for="day in monthDays"
@@ -122,9 +122,9 @@
           <div class="reward-icon">🎉</div>
           <div class="reward-title">{{ rewardPopup.title }}</div>
           <div class="reward-coins">+{{ rewardPopup.coins }}</div>
-          <div class="reward-sub">平台币</div>
-          <div class="reward-new-bal">当前余额：{{ formatBalance(rewardPopup.newBalance) }}</div>
-          <div class="reward-hint">点击任意处关闭</div>
+          <div class="reward-sub">{{ tt('平台币', 'Platform Coins') }}</div>
+          <div class="reward-new-bal">{{ tt('当前余额：', 'Balance: ') }}{{ formatBalance(rewardPopup.newBalance) }}</div>
+          <div class="reward-hint">{{ tt('点击任意处关闭', 'Tap anywhere to close') }}</div>
         </div>
       </div>
     </Transition>
@@ -137,12 +137,14 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 definePageMeta({ middleware: 'auth', layout: 'user' });
 
 const router = useRouter();
 const authStore = useAuthStore();
 const tips = useTips();
+const { tt } = useI18n();
 
 // ─── 状态 ───
 const cardStatus = ref({
@@ -226,24 +228,24 @@ const claimCard = async () => {
         unclaimedCards: [],
         claimedDates: [...cardStatus.value.claimedDates, cardStatus.value.today],
       };
-      // 立即更新为颟
+      // 立即更新余额
       authStore.platformCoins = res.data.new_balance;
       if (authStore.userInfo) {
         authStore.userInfo = { ...authStore.userInfo, platform_coins: res.data.new_balance };
       }
       rewardPopup.value = {
         show: true,
-        title: '月卡权益领取成功！',
+        title: tt('月卡权益领取成功！', 'Daily Perks Claimed!'),
         coins: res.data.coins_claimed,
         newBalance: res.data.new_balance,
       };
-      // 异步刷新（不阅塞 UI）
+      // 异步刷新（不阻塞 UI）
       loadCardStatus();
     } else {
-      tips.warning(res.message || '领取失败');
+      tips.warning(res.message || tt('领取失败', 'Claim failed'));
     }
   } catch {
-    tips.error('网络错误，请稍后重试');
+    tips.error(tt('网络错误，请稍后重试', 'Network error, please try again later'));
   } finally {
     cardClaiming.value = false;
   }

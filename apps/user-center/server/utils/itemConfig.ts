@@ -5,24 +5,89 @@ import path from 'path';
 export type ItemConfigMap = Record<string, string>;
 
 let itemConfigCache: ItemConfigMap | null = null;
+let itemConfigEnCache: ItemConfigMap | null = null;
 let configLastModified = 0;
+let configEnLastModified = 0;
 
-// 获取配置文件路径 - 支持开发和生产环境
+// 自动转换常见游戏道具名称为英文（当未单独配置英文名时作为默认展示）
+export function autoTranslateItemName(zhName: string): string {
+  if (!zhName) return '';
+  const exactMap: Record<string, string> = {
+    '宝石': 'Gems',
+    'W币': 'W Coins',
+    '金币': 'Gold Coins',
+    '黄金': 'Gold',
+    '金条': 'Gold Bars',
+    '体力': 'Stamina',
+    '经验': 'EXP',
+    'VIP点数': 'VIP Points',
+    '随机迁城': 'Random Teleport',
+    '高级迁城': 'Advanced Teleport',
+    '驻地迁城': 'Garrison Teleport',
+    '领地迁城': 'Territory Teleport',
+    '时空迁城': 'Space-Time Teleport',
+    '跨服活动迁城': 'Cross-Server Teleport',
+    '行军加速': 'March Speedup',
+    '高级行军加速': 'Adv. March Speedup',
+    '行军召回': 'March Recall',
+    '撤兵牌': 'Troop Recall',
+    '集结撤军': 'Rally Recall',
+    '队伍扩编': 'March Size Boost',
+    '高级队伍扩编': 'Adv. March Size Boost',
+    '魔法之眼': 'Magic Eye',
+    '狩猎急行军': 'Monster March Speedup',
+    '高级狩猎急行军': 'Adv. Monster March Speedup',
+  };
+  if (exactMap[zhName]) return exactMap[zhName];
+
+  let en = zhName
+    .replace(/木材包/g, 'Wood Pack ')
+    .replace(/石料包/g, 'Stone Pack ')
+    .replace(/铁矿包/g, 'Iron Pack ')
+    .replace(/粮食包/g, 'Food Pack ')
+    .replace(/资源宝箱(\d+)级/g, 'Lv.$1 Resource Chest')
+    .replace(/粮食抵扣券/g, 'Food Voucher ')
+    .replace(/木材抵扣券/g, 'Wood Voucher ')
+    .replace(/石料抵扣券/g, 'Stone Voucher ')
+    .replace(/铁矿抵扣券/g, 'Iron Voucher ')
+    .replace(/和平守护/g, 'Peace Shield ')
+    .replace(/战争迷雾/g, 'Anti-Scout ')
+    .replace(/高级攻击加成/g, 'Adv. Attack Boost ')
+    .replace(/高级血量加成/g, 'Adv. HP Boost ')
+    .replace(/攻击加成/g, 'Attack Boost ')
+    .replace(/血量加成/g, 'HP Boost ')
+    .replace(/防御加成/g, 'Defense Boost ')
+    .replace(/伐木场提升/g, 'Sawmill Boost ')
+    .replace(/采石场提升/g, 'Quarry Boost ')
+    .replace(/铁矿场提升/g, 'Iron Mine Boost ')
+    .replace(/农田提升/g, 'Farm Boost ')
+    .replace(/建筑加速/g, 'Building Speedup ')
+    .replace(/研究加速/g, 'Research Speedup ')
+    .replace(/科技加速/g, 'Tech Speedup ')
+    .replace(/训练加速/g, 'Training Speedup ')
+    .replace(/治疗加速/g, 'Healing Speedup ')
+    .replace(/通用加速/g, 'General Speedup ')
+    .replace(/加速/g, 'Speedup ')
+    .replace(/碎片/g, ' Shard')
+    .replace(/宝箱/g, ' Chest')
+    .replace(/礼包/g, ' Pack')
+    .replace(/小时/g, 'h')
+    .replace(/分钟/g, 'm')
+    .replace(/天/g, 'd')
+    .replace(/级/g, ' Lv.');
+  return en.trim();
+}
+
+// 获取配置文件路径 - 支持开发和生产环境（优先读取 op-admin 的配置以保持一致）
 function getConfigFilePath(): string {
-  // 尝试多个可能的路径
   const possiblePaths = [
-    // 开发环境路径
+    path.resolve(process.cwd(), '../op-admin/server/config/itemConfig.json'),
     path.join(process.cwd(), 'server/config/itemConfig.json'),
-    // 生产环境路径（相对于.output）
     path.join(process.cwd(), '../server/config/itemConfig.json'),
-    path.join(process.cwd(), 'server/config/itemConfig.json'),
-    // 生产环境实际路径（基于诊断结果）
     path.join(process.cwd(), 'nuxt3/server/config/itemConfig.json'),
     '/data/nuxt3/server/config/itemConfig.json',
-    // 用户指定的兼容路径
     '/data/config/itemConfig.json',
     path.join(process.cwd(), 'config/itemConfig.json'),
-    // 绝对路径（如果设置了环境变量）
     process.env.ITEM_CONFIG_PATH || ''
   ];
   
@@ -32,9 +97,19 @@ function getConfigFilePath(): string {
     }
   }
   
-  // 如果都找不到，返回默认路径
-  const defaultPath = path.join(process.cwd(), 'server/config/itemConfig.json');
-  return defaultPath;
+  return path.join(process.cwd(), 'server/config/itemConfig.json');
+}
+
+function getConfigEnFilePath(): string {
+  const possiblePaths = [
+    path.resolve(process.cwd(), '../op-admin/server/config/itemConfigEn.json'),
+    path.join(process.cwd(), 'server/config/itemConfigEn.json'),
+    path.join(path.dirname(getConfigFilePath()), 'itemConfigEn.json'),
+  ];
+  for (const p of possiblePaths) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  return path.join(path.dirname(getConfigFilePath()), 'itemConfigEn.json');
 }
 
 // 检查配置文件是否需要重新加载
@@ -45,96 +120,67 @@ function needsReload(): boolean {
       return true;
     }
     const stats = fs.statSync(configPath);
-    return stats.mtimeMs > configLastModified;
+    const enPath = getConfigEnFilePath();
+    const enMtime = fs.existsSync(enPath) ? fs.statSync(enPath).mtimeMs : 0;
+    return stats.mtimeMs > configLastModified || enMtime > configEnLastModified;
   } catch (error) {
     return true;
   }
+}
+
+function loadConfigEn(): ItemConfigMap {
+  try {
+    const enPath = getConfigEnFilePath();
+    if (!fs.existsSync(enPath)) {
+      itemConfigEnCache = {};
+      configEnLastModified = 0;
+      return {};
+    }
+    const data = fs.readFileSync(enPath, 'utf8');
+    const stats = fs.statSync(enPath);
+    itemConfigEnCache = JSON.parse(data);
+    configEnLastModified = stats.mtimeMs;
+    return itemConfigEnCache || {};
+  } catch (e) {
+    itemConfigEnCache = {};
+    return {};
+  }
+}
+
+export function getItemConfigEn(): ItemConfigMap {
+  if (!itemConfigEnCache || needsReload()) {
+    loadConfigEn();
+  }
+  return itemConfigEnCache || {};
 }
 
 // 加载配置文件
 function loadConfig(): ItemConfigMap {
   try {
     const configPath = getConfigFilePath();
-    
     if (!fs.existsSync(configPath)) {
-      console.error(`[itemConfig] 配置文件不存在: ${configPath}`);
-      
-      // 列出当前目录内容进行调试
-      try {
-        const currentDir = process.cwd();
-        console.log('[itemConfig] 📁 当前目录内容:');
-        const files = fs.readdirSync(currentDir);
-        files.forEach(file => {
-          console.log(`[itemConfig]   - ${file}`);
-        });
-        
-        // 检查是否有server目录
-        const serverDir = path.join(currentDir, 'server');
-        if (fs.existsSync(serverDir)) {
-          console.log('[itemConfig] 📁 server目录内容:');
-          const serverFiles = fs.readdirSync(serverDir);
-          serverFiles.forEach(file => {
-            console.log(`[itemConfig]   - server/${file}`);
-          });
-          
-          // 检查config目录
-          const configDir = path.join(serverDir, 'config');
-          if (fs.existsSync(configDir)) {
-            console.log('[itemConfig] 📁 server/config目录内容:');
-            const configFiles = fs.readdirSync(configDir);
-            configFiles.forEach(file => {
-              console.log(`[itemConfig]   - server/config/${file}`);
-            });
-          } else {
-            console.log('[itemConfig] ❌ server/config目录不存在');
-          }
-        } else {
-          console.log('[itemConfig] ❌ server目录不存在');
-        }
-      } catch (dirError) {
-        console.error('[itemConfig] 列出目录失败:', dirError);
-      }
-      
       return {};
     }
-    
-    console.log('[itemConfig] ✅ 配置文件存在，开始读取...');
     const configData = fs.readFileSync(configPath, 'utf8');
     const stats = fs.statSync(configPath);
-    
-    console.log('[itemConfig] 📄 文件大小:', stats.size, 'bytes');
-    console.log('[itemConfig] 📄 文件修改时间:', stats.mtime);
-    console.log('[itemConfig] 📄 文件内容预览:', configData.substring(0, 100) + '...');
-    
-    console.log('[itemConfig] 🔄 开始解析JSON...');
-    itemConfigCache = JSON.parse(configData);
-    configLastModified = stats.mtimeMs;
-    
-    const itemCount = Object.keys(itemConfigCache || {}).length;
-    console.log(`[itemConfig] ✅ 物品配置加载成功！共 ${itemCount} 个物品`);
-    console.log('[itemConfig] 📝 示例物品:', Object.keys(itemConfigCache || {}).slice(0, 3));
-    
-    // 验证数据质量 - 新格式验证
-    let invalidItems = 0;
-    Object.keys(itemConfigCache || {}).forEach(itemId => {
-      const itemName = itemConfigCache![itemId];
-      if (!itemName || typeof itemName !== 'string' || !itemName.trim()) {
-        invalidItems++;
-        if (invalidItems <= 5) { // 只显示前5个有问题的物品
-          console.warn(`[itemConfig] ⚠️ 物品${itemId}缺少名称: ${itemName}`);
-        }
-      }
-    });
-    
-    if (invalidItems > 0) {
-      console.warn(`[itemConfig] ⚠️ 发现 ${invalidItems} 个物品缺少名称信息`);
+    const primaryMap = JSON.parse(configData) || {};
+
+    // 同时合并 user-center 自身的 itemConfig.json（防止遗漏旧ID）
+    const localPath = path.join(process.cwd(), 'server/config/itemConfig.json');
+    let mergedMap: ItemConfigMap = { ...primaryMap };
+    if (localPath !== configPath && fs.existsSync(localPath)) {
+      try {
+        const localMap = JSON.parse(fs.readFileSync(localPath, 'utf8')) || {};
+        mergedMap = { ...localMap, ...primaryMap };
+      } catch {}
     }
-    
+
+    itemConfigCache = mergedMap;
+    configLastModified = stats.mtimeMs;
+    loadConfigEn();
     return itemConfigCache || {};
   } catch (error: any) {
     console.error('[itemConfig] ❌ 加载物品配置失败:', error);
-    console.error('[itemConfig] 错误详情:', error.message);
-    console.error('[itemConfig] 错误堆栈:', error.stack);
     return {};
   }
 }
@@ -154,6 +200,14 @@ export function getItemById(itemId: string | number): string | null {
   return config[id] || null;
 }
 
+export function getItemEnById(itemId: string | number): string {
+  const configEn = getItemConfigEn();
+  const id = String(itemId);
+  if (configEn[id]) return configEn[id];
+  const zhName = getItemById(id);
+  return zhName ? autoTranslateItemName(zhName) : '';
+}
+
 // 根据物品ID批量获取物品信息
 export function getItemsByIds(itemIds: (string | number)[]): Record<string, string> {
   const config = getItemConfig();
@@ -170,10 +224,14 @@ export function getItemsByIds(itemIds: (string | number)[]): Record<string, stri
 }
 
 // 获取物品名称
-export function getItemName(itemId: string | number): string {
+export function getItemName(itemId: string | number, lang: string = 'zh'): string {
+  if (lang === 'en') {
+    const enName = getItemEnById(itemId);
+    if (enName) return enName;
+  }
   const itemName = getItemById(itemId);
-  if (!itemName) return `未知物品${itemId}`;
-  return itemName.trim() || `物品${itemId}`;
+  if (!itemName) return lang === 'en' ? `Item ${itemId}` : `未知物品${itemId}`;
+  return itemName.trim() || (lang === 'en' ? `Item ${itemId}` : `物品${itemId}`);
 }
 
 // 获取物品名称映射表（直接返回配置）
@@ -182,18 +240,21 @@ export function getItemNameMap(): Record<string, string> {
 }
 
 // 搜索物品（根据名称）
-export function searchItems(searchTerm: string): Array<{ id: string; name: string }> {
+export function searchItems(searchTerm: string): Array<{ id: string; name: string; en: string }> {
   const config = getItemConfig();
-  const results: Array<{ id: string; name: string }> = [];
+  const configEn = getItemConfigEn();
+  const results: Array<{ id: string; name: string; en: string }> = [];
   const term = searchTerm.toLowerCase();
   
   Object.keys(config).forEach(itemId => {
     const itemName = config[itemId];
+    const itemEn = configEn[itemId] || autoTranslateItemName(itemName);
     if (
       itemName.toLowerCase().includes(term) ||
+      itemEn.toLowerCase().includes(term) ||
       itemId.includes(term)
     ) {
-      results.push({ id: itemId, name: itemName });
+      results.push({ id: itemId, name: itemName, en: itemEn });
     }
   });
   
@@ -201,11 +262,13 @@ export function searchItems(searchTerm: string): Array<{ id: string; name: strin
 }
 
 // 获取所有物品（简化版）
-export function getAllItems(): Array<{ id: string; name: string }> {
+export function getAllItems(): Array<{ id: string; name: string; en: string }> {
   const config = getItemConfig();
+  const configEn = getItemConfigEn();
   return Object.keys(config).map(id => ({
     id,
-    name: config[id]
+    name: config[id],
+    en: configEn[id] || autoTranslateItemName(config[id])
   }));
 }
 

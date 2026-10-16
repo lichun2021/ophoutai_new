@@ -1,5 +1,6 @@
 <template>
   <div class="cdk-page">
+    <LanguageSwitcher floating />
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
     <div class="bg-grid"></div>
@@ -8,17 +9,17 @@
       <!-- Logo -->
       <div class="cdk-header">
         <div class="header-icon">🎁</div>
-        <h1 class="header-title">CDK 领取</h1>
-        <p class="header-sub">输入领取码获取您的奖励</p>
+        <h1 class="header-title">{{ tt('CDK 领取', 'Redeem CDK') }}</h1>
+        <p class="header-sub">{{ tt('输入领取码获取您的奖励', 'Enter your redemption code to claim rewards') }}</p>
       </div>
 
       <!-- 表单 -->
       <form class="cdk-form" @submit.prevent="submit">
         <div class="form-field">
-          <label class="field-label">服务器</label>
+          <label class="field-label">{{ tt('服务器', 'Server') }}</label>
           <div class="select-wrap">
             <select v-model="form.server" class="field-select" :disabled="loadingServers">
-              <option value="" disabled>{{ loadingServers ? '加载中...' : '请选择服务器' }}</option>
+              <option value="" disabled>{{ loadingServers ? tt('加载中...', 'Loading...') : tt('请选择服务器', 'Select a server') }}</option>
               <option v-for="s in serverOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
             </select>
             <span class="select-arrow">▾</span>
@@ -26,27 +27,27 @@
         </div>
 
         <div class="form-field">
-          <label class="field-label">角色ID</label>
+          <label class="field-label">{{ tt('角色ID', 'Character ID') }}</label>
           <div class="input-wrap">
             <span class="input-icon">🎮</span>
-            <input v-model="form.playerId" class="field-input" placeholder="输入角色ID / UUID" />
+            <input v-model="form.playerId" class="field-input" :placeholder="tt('输入角色ID / UUID', 'Enter Character ID / UUID')" />
           </div>
         </div>
 
         <div class="form-field">
-          <label class="field-label">CDK 码</label>
+          <label class="field-label">{{ tt('CDK 码', 'CDK Code') }}</label>
           <div class="input-wrap">
             <span class="input-icon">🔑</span>
-            <input v-model="form.code" class="field-input" placeholder="输入领取码" />
+            <input v-model="form.code" class="field-input" :placeholder="tt('输入领取码', 'Enter CDK code')" />
           </div>
         </div>
 
         <div class="btn-row">
           <button type="submit" class="submit-btn" :disabled="loading || !form.server || !form.playerId || !form.code">
-            <span v-if="!loading">🎉 立即领取</span>
+            <span v-if="!loading">🎉 {{ tt('立即领取', 'Redeem Now') }}</span>
             <span v-else class="loading-dots"><span></span><span></span><span></span></span>
           </button>
-          <button type="button" class="reset-btn" @click="reset">重置</button>
+          <button type="button" class="reset-btn" @click="reset">{{ tt('重置', 'Reset') }}</button>
         </div>
       </form>
 
@@ -54,7 +55,7 @@
       <div v-if="message" class="result-bar" :class="ok ? 'result-success' : 'result-error'">
         <span class="result-icon">{{ ok ? '✅' : '❌' }}</span>
         <div>
-          <div class="result-title">{{ ok ? '领取成功' : '领取结果' }}</div>
+          <div class="result-title">{{ ok ? tt('领取成功', 'Redeemed Successfully') : tt('领取结果', 'Redemption Result') }}</div>
           <div class="result-msg">{{ message }}</div>
         </div>
       </div>
@@ -65,8 +66,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { useI18n } from '~/composables/useI18n';
 
 definePageMeta({ layout: false, auth: false })
+
+const { locale, tt } = useI18n();
 
 const form = ref({ server: '', playerId: '', code: '' });
 const loading = ref(false);
@@ -79,15 +83,18 @@ const serverOptions = computed(() => servers.value);
 
 async function submit() {
   if (!form.value.server || !form.value.playerId || !form.value.code) {
-    message.value = '请填写完整信息'; ok.value = false; return;
+    message.value = tt('请填写完整信息', 'Please fill in all fields'); ok.value = false; return;
   }
   loading.value = true; message.value = ''; ok.value = false;
   try {
-    const res = await $fetch('/api/client/cdk/redeem', { method: 'POST', body: form.value });
-    if ((res as any).code === 200) { ok.value = true; message.value = (res as any).message || '领取成功'; }
-    else { ok.value = false; message.value = (res as any).message || '领取失败'; }
+    const res = await $fetch('/api/client/cdk/redeem', {
+      method: 'POST',
+      body: { ...form.value, lang: locale.value }
+    });
+    if ((res as any).code === 200) { ok.value = true; message.value = (res as any).message || tt('领取成功', 'Redeemed successfully'); }
+    else { ok.value = false; message.value = (res as any).message || tt('领取失败', 'Redemption failed'); }
   } catch (e: any) {
-    ok.value = false; message.value = e?.data?.message || e?.message || '领取失败';
+    ok.value = false; message.value = e?.data?.message || e?.message || tt('领取失败', 'Redemption failed');
   } finally {
     loading.value = false;
   }
@@ -103,13 +110,13 @@ async function fetchServers() {
       if (!form.value.server && servers.value.length > 0) {
         form.value.server = servers.value[0].value;
       } else if (servers.value.length === 0) {
-        message.value = '暂无可用服务器，请联系管理员';
+        message.value = tt('暂无可用服务器，请联系管理员', 'No available servers, please contact administrator');
         ok.value = false;
       }
     }
   } catch (e: any) {
     console.error('获取服务器列表失败:', e);
-    message.value = '获取服务器列表失败: ' + (e?.data?.message || e?.message || '网络错误');
+    message.value = tt('获取服务器列表失败: ', 'Failed to load servers: ') + (e?.data?.message || e?.message || tt('网络错误', 'Network error'));
     ok.value = false;
   } finally {
     loadingServers.value = false;

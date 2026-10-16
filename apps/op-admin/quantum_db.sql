@@ -229,7 +229,9 @@ DROP TABLE IF EXISTS `cdktypes`;
 CREATE TABLE `cdktypes` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `title_en` varchar(255) COLLATE utf8mb4_general_ci DEFAULT '' COMMENT '英文标题',
   `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `content_en` text COLLATE utf8mb4_general_ci COMMENT '英文内容',
   `type` enum('universal','unique','data') COLLATE utf8mb4_general_ci NOT NULL,
   `items` json NOT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -244,7 +246,7 @@ CREATE TABLE `cdktypes` (
 
 LOCK TABLES `cdktypes` WRITE;
 /*!40000 ALTER TABLE `cdktypes` DISABLE KEYS */;
-INSERT INTO `cdktypes` VALUES (1,'测试CDK','112233','universal','[]','2025-09-30 09:27:04','2025-09-30 09:27:04'),(2,'测试 123','4123123','unique','[{\"ItemId\": 1002, \"ItemNum\": 1000}]','2025-09-30 09:48:15','2025-09-30 09:48:15');
+INSERT INTO `cdktypes` (`id`, `title`, `title_en`, `content`, `content_en`, `type`, `items`, `created_at`, `updated_at`) VALUES (1,'测试CDK','Test CDK','112233','112233','universal','[]','2025-09-30 09:27:04','2025-09-30 09:27:04'),(2,'测试 123','Test 123','4123123','4123123','unique','[{\"ItemId\": 1002, \"ItemNum\": 1000}]','2025-09-30 09:48:15','2025-09-30 09:48:15');
 /*!40000 ALTER TABLE `cdktypes` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -317,7 +319,9 @@ CREATE TABLE `externalgiftpackages` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '礼包ID,主键,自增',
   `package_code` varchar(100) NOT NULL COMMENT '礼包代码,唯一标识',
   `package_name` varchar(200) NOT NULL COMMENT '礼包名称',
+  `package_name_en` varchar(200) DEFAULT '' COMMENT '礼包英文名称',
   `description` text COMMENT '礼包描述',
+  `description_en` text COMMENT '礼包英文描述',
   `price_platform_coins` decimal(15,2) NOT NULL COMMENT '平台币价格',
   `price_real_money` decimal(10,2) DEFAULT '0.00' COMMENT '现金价格(仅展示用)',
   `gift_items` json NOT NULL COMMENT '礼包内容(JSON格式)',
@@ -920,3 +924,22 @@ CREATE TABLE IF NOT EXISTS `AdminLoginLogs` (
   KEY `idx_login_time` (`login_time`),
   KEY `idx_ip` (`ip_address`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='管理员登录日志';
+
+-- ==================================================
+-- 多语言支持（中/英）增量迁移脚本
+-- ==================================================
+-- 1. 商城礼包表新增英文名称与英文描述字段
+ALTER TABLE `externalgiftpackages`
+  ADD COLUMN `package_name_en` VARCHAR(200) DEFAULT '' COMMENT '礼包英文名称' AFTER `package_name`,
+  ADD COLUMN `description_en` TEXT COMMENT '礼包英文描述' AFTER `description`;
+
+-- 2. CDK 类型表新增英文标题与英文内容字段
+ALTER TABLE `cdktypes`
+  ADD COLUMN `title_en` VARCHAR(255) COLLATE utf8mb4_general_ci DEFAULT '' COMMENT '英文标题' AFTER `title`,
+  ADD COLUMN `content_en` TEXT COLLATE utf8mb4_general_ci COMMENT '英文内容' AFTER `content`;
+
+-- 3. 系统参数表新增英文支付说明参数（可选）
+INSERT INTO `systemparams` (`key`, `content`)
+VALUES ('payment_message_en', '*Platform Coin Info: 1 CNY = 1 Platform Coin (never expires). You can recharge via the app or official website.\nDear Player: After recharging in-game, you can claim bonus rewards in the center!')
+ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP;
+

@@ -44,6 +44,13 @@
         :loading="loading"
         @select="handleSelect"
       >
+        <template #package_name-data="{ row }">
+          <div>
+            <div class="font-medium text-gray-900">{{ row.package_name }}</div>
+            <div v-if="row.package_name_en" class="text-xs text-blue-600">EN: {{ row.package_name_en }}</div>
+          </div>
+        </template>
+
         <template #is_active-data="{ row }">
           <UBadge :color="row.is_active ? 'green' : 'red'">
             {{ row.is_active ? '启用' : '禁用' }}
@@ -105,8 +112,16 @@
               <UInput v-model="giftPackageForm.package_code" placeholder="礼包代码" />
             </UFormGroup>
             
+            <UFormGroup label="分类">
+              <USelect v-model="giftPackageForm.category" :options="categoryOptions" />
+            </UFormGroup>
+
             <UFormGroup label="礼包名称" required>
-              <UInput v-model="giftPackageForm.package_name" placeholder="礼包名称" />
+              <UInput v-model="giftPackageForm.package_name" placeholder="请输入礼包名称" />
+            </UFormGroup>
+
+            <UFormGroup label="英文名称">
+              <UInput v-model="giftPackageForm.package_name_en" placeholder="选填，英文版商城与邮件展示" />
             </UFormGroup>
             
             <UFormGroup label="平台币价格" required>
@@ -115,10 +130,6 @@
             
             <UFormGroup label="现金价格">
               <UInput v-model.number="giftPackageForm.price_real_money" type="number" placeholder="现金价格（展示用）" />
-            </UFormGroup>
-            
-            <UFormGroup label="分类">
-              <USelect v-model="giftPackageForm.category" :options="categoryOptions" />
             </UFormGroup>
             
             <!-- 限时礼包的时间选择器 -->
@@ -168,9 +179,14 @@
             </UFormGroup>
           </div>
           
-          <UFormGroup label="描述" class="mt-4">
-            <UTextarea v-model="giftPackageForm.description" placeholder="礼包描述" />
-          </UFormGroup>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <UFormGroup label="描述">
+              <UTextarea v-model="giftPackageForm.description" placeholder="礼包描述" />
+            </UFormGroup>
+            <UFormGroup label="英文描述">
+              <UTextarea v-model="giftPackageForm.description_en" placeholder="选填，英文版商城礼包描述" />
+            </UFormGroup>
+          </div>
 
           <!-- 礼包图片 -->
           <UFormGroup label="礼包图片" class="mt-4">
@@ -292,7 +308,7 @@
           />
         </div>
 
-        <!-- 物品列表 -->
+        <!-- 物品列表（只读） -->
         <UTable
           :rows="items"
           :columns="itemColumnsReadonly"
@@ -476,7 +492,9 @@ const pagination = reactive({
 const giftPackageForm = reactive({
   package_code: '',
   package_name: '',
+  package_name_en: '',
   description: '',
+  description_en: '',
   icon_url: '',
   price_platform_coins: 0,
   price_real_money: 0,
@@ -499,8 +517,6 @@ const limitedTimeRange = ref({
   start: new Date(),
   end: new Date()
 });
-
-// itemForm 已移除，物品配置现在是只读的
 
 // 选项配置
 const categoryOptions = [
@@ -530,8 +546,6 @@ const weekdayOptions = [
   { label: '周六', value: 6 },
   { label: '周日', value: 7 }
 ];
-
-// 物品类型和稀有度选项已移除，因为物品配置现在是只读的
 
 // 表格列配置
 const columns = [
@@ -620,8 +634,6 @@ watch(() => giftPackageForm.category, (newCategory, oldCategory) => {
   }
 });
 
-// getRarityColor 函数已移除，因为不再显示稀有度
-
 const getItemNameById = (itemId) => {
   if (!itemId) return '';
   
@@ -696,10 +708,6 @@ const loadItems = async () => {
     if (response.success) {
       items.value = response.data.list;
       console.log(`物品配置加载成功: ${items.value.length} 个物品`);
-      // 调试：检查普通列表的数据结构
-      if (items.value.length > 0) {
-        console.log('前端列表结果示例:', items.value.slice(0, 2));
-      }
     }
   } catch (error) {
     console.error('加载物品配置失败:', error);
@@ -711,7 +719,10 @@ const loadItems = async () => {
 // 供下拉使用的全量选项（本地过滤）
 const itemOptions = computed(() => {
   // value 保留原始字符串，兼容纯数字 ID 和 gid+level 格式（如 "67240092_1"）
-  return (items.value || []).map((it) => ({ value: it.id, label: `${it.id} - ${it.cn || it.n || ''}` }));
+  return (items.value || []).map((it) => ({
+    value: it.id,
+    label: `${it.id} - ${it.cn || it.n || ''}`
+  }));
 });
 
 function searchItems(query) {
@@ -743,11 +754,6 @@ const searchItemsDebounced = useDebounceFn(async () => {
     
     if (response.success) {
       items.value = response.data.list;
-      console.log(`搜索到 ${items.value.length} 个匹配的物品`);
-      // 调试：检查搜索结果的数据结构
-      if (items.value.length > 0) {
-        console.log('前端搜索结果示例:', items.value.slice(0, 2));
-      }
     }
   } catch (error) {
     console.error('搜索物品失败:', error);
@@ -828,6 +834,8 @@ const editGiftPackage = (row) => {
   
   Object.assign(giftPackageForm, {
     ...row,
+    package_name_en: row.package_name_en || '',
+    description_en: row.description_en || '',
     gift_items: items.length > 0 ? items : [{ i: 0, a: 1 }],
     available_weekdays: weekday
   });
@@ -920,7 +928,9 @@ const closeGiftPackageModal = () => {
   Object.assign(giftPackageForm, {
     package_code: '',
     package_name: '',
+    package_name_en: '',
     description: '',
+    description_en: '',
     icon_url: '',
     price_platform_coins: 0,
     price_real_money: 0,
@@ -938,8 +948,6 @@ const closeGiftPackageModal = () => {
   // 重置限时时间选择器（保持范围选择模式）
   limitedTimeRange.value = { start: new Date(), end: new Date() };
 };
-
-// 物品配置现在是只读的，移除了编辑功能
 
 // 图片选择相关方法
 const loadImages = async () => {

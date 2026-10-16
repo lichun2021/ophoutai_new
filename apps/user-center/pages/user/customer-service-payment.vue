@@ -1,5 +1,6 @@
 <template>
   <div class="cs-page">
+    <LanguageSwitcher floating />
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
     <div class="bg-grid"></div>
@@ -8,15 +9,15 @@
       <!-- 加载中 -->
       <div v-if="loading" class="state-block">
         <div class="state-icon loading-spin">⏳</div>
-        <h2 class="state-title">查询订单信息中...</h2>
-        <p class="state-sub">请稍候</p>
+        <h2 class="state-title">{{ tt('查询订单信息中...', 'Checking order status...') }}</h2>
+        <p class="state-sub">{{ tt('请稍候', 'Please wait') }}</p>
       </div>
 
       <!-- 订单不存在 -->
       <div v-else-if="!paymentInfo" class="state-block">
         <div class="state-icon">❌</div>
-        <h2 class="state-title">订单不存在</h2>
-        <p class="state-sub">未找到对应的订单信息</p>
+        <h2 class="state-title">{{ tt('订单不存在', 'Order Not Found') }}</h2>
+        <p class="state-sub">{{ tt('未找到对应的订单信息', 'Could not find matching order information') }}</p>
       </div>
 
       <!-- 订单信息 -->
@@ -24,8 +25,8 @@
         <!-- 头部 -->
         <div class="state-block">
           <div class="state-icon">💬</div>
-          <h1 class="state-title">客服支付</h1>
-          <p class="state-sub">您的订单已提交，请联系客服完成支付</p>
+          <h1 class="state-title">{{ tt('客服支付', 'Customer Service Payment') }}</h1>
+          <p class="state-sub">{{ tt('您的订单已提交，请联系客服完成支付', 'Your order has been submitted. Please contact customer support to complete payment.') }}</p>
         </div>
 
         <!-- LINE 联系区域 -->
@@ -35,65 +36,65 @@
               <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
             </svg>
           </div>
-          <h3 class="line-title">添加 LINE 客服</h3>
-          <p class="line-sub">请点击下方按钮添加我们的 LINE 客服，完成支付流程</p>
+          <h3 class="line-title">{{ tt('添加 LINE 客服', 'Add LINE Support') }}</h3>
+          <p class="line-sub">{{ tt(paymentMsgZh || '请点击下方按钮添加我们的 LINE 客服，完成支付流程', paymentMsgEn || 'Click the button below to add our LINE support and complete payment') }}</p>
           <div class="line-btns">
             <a :href="lineUrl" target="_blank" class="line-btn line-btn-primary">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zM15.51 12.879c0 .27-.174.51-.432.596a.68.68 0 01-.199.031.62.62 0 01-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zM9.769 12.879c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zM7.303 13.508H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg>
-              添加 LINE 客服
+              {{ tt('添加 LINE 客服', 'Add LINE Support') }}
             </a>
-            <button @click="copyLineUrl" class="line-btn line-btn-outline">📋 复制 LINE 链接</button>
+            <button @click="copyLineUrl" class="line-btn line-btn-outline">📋 {{ tt('复制 LINE 链接', 'Copy LINE Link') }}</button>
           </div>
         </div>
 
         <!-- 订单详情 -->
         <div class="detail-list">
           <div class="detail-row">
-            <span class="detail-label">商品名称</span>
+            <span class="detail-label">{{ tt('商品名称', 'Item') }}</span>
             <span class="detail-value">{{ paymentInfo.product_name || '-' }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">支付金额</span>
+            <span class="detail-label">{{ tt('支付金额', 'Amount') }}</span>
             <span class="detail-value amount">¥{{ formatAmount(paymentInfo.amount) }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">支付方式</span>
-            <span class="detail-value"><img src="/customer-service.png" alt="" class="pay-icon" /> 客服支付</span>
+            <span class="detail-label">{{ tt('支付方式', 'Method') }}</span>
+            <span class="detail-value"><img src="/customer-service.png" alt="" class="pay-icon" /> {{ tt('客服支付', 'Customer Service') }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">订单状态</span>
+            <span class="detail-label">{{ tt('订单状态', 'Status') }}</span>
             <span class="detail-value text-processing">{{ getStatusText() }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">交易号</span>
+            <span class="detail-label">{{ tt('交易号', 'Transaction ID') }}</span>
             <span class="detail-value mono">
               {{ paymentInfo.transaction_id }}
               <button class="copy-btn" @click="copyTransactionId">📋</button>
             </span>
           </div>
           <div v-if="paymentInfo.mch_order_id" class="detail-row">
-            <span class="detail-label">商户订单号</span>
+            <span class="detail-label">{{ tt('商户订单号', 'Order No.') }}</span>
             <span class="detail-value mono">{{ paymentInfo.mch_order_id }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">创建时间</span>
+            <span class="detail-label">{{ tt('创建时间', 'Created At') }}</span>
             <span class="detail-value">{{ formatTime(paymentInfo.created_at) }}</span>
           </div>
         </div>
 
         <!-- 操作说明 -->
         <div class="steps-box">
-          <h4 class="steps-title">💡 接下来的操作步骤：</h4>
+          <h4 class="steps-title">💡 {{ tt('接下来的操作步骤：', 'Next Steps:') }}</h4>
           <ol class="steps-list">
-            <li>点击上方"添加 LINE 客服"或"复制 LINE 链接"</li>
-            <li>在 LINE 中添加我们的客服帐号</li>
-            <li>发送您的交易号给客服</li>
-            <li>按照客服指引完成支付</li>
-            <li>支付完成后请保留支付凭证</li>
+            <li>{{ tt('点击上方"添加 LINE 客服"或"复制 LINE 链接"', 'Click "Add LINE Support" or "Copy LINE Link" above') }}</li>
+            <li>{{ tt('在 LINE 中添加我们的客服帐号', 'Add our customer support account on LINE') }}</li>
+            <li>{{ tt('发送您的交易号给客服', 'Send your Transaction ID to our support agent') }}</li>
+            <li>{{ tt('按照客服指引完成支付', 'Follow the agent\'s instructions to complete payment') }}</li>
+            <li>{{ tt('支付完成后请保留支付凭证', 'Please keep your payment receipt after paying') }}</li>
           </ol>
         </div>
 
-        <button class="action-btn" @click="refreshOrder">🔄 刷新订单状态</button>
+        <button class="action-btn" @click="refreshOrder">🔄 {{ tt('刷新订单状态', 'Refresh Order Status') }}</button>
       </div>
     </div>
 
@@ -102,22 +103,39 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '~/composables/useI18n';
+
 definePageMeta({ layout: false, auth: false });
 
 const route = useRoute();
+const { isEn, tt } = useI18n();
 const loading = ref(true);
 const paymentInfo = ref<any>(null);
 const showCopySuccess = ref(false);
 const copySuccessMessage = ref('');
 const lineUrl = ref('https://lin.ee/vG027VR');
+const paymentMsgZh = ref('');
+const paymentMsgEn = ref('');
 const transactionId = computed(() => route.query.transaction_id as string || '');
 
 const fetchSystemConfig = async () => {
   try {
-    const response = await fetch('/api/user/system-params/kefu_line');
-    if (response.ok) {
-      const result = await response.json();
-      if (result.code === 200 && result.data && result.data.content) lineUrl.value = result.data.content;
+    const [lineRes, msgZhRes, msgEnRes] = await Promise.allSettled([
+      fetch('/api/user/system-params/kefu_line'),
+      fetch('/api/user/system-params/payment_message'),
+      fetch('/api/user/system-params/payment_message_en')
+    ]);
+    if (lineRes.status === 'fulfilled' && lineRes.value.ok) {
+      const result = await lineRes.value.json();
+      if (result.code === 200 && result.data?.content) lineUrl.value = result.data.content;
+    }
+    if (msgZhRes.status === 'fulfilled' && msgZhRes.value.ok) {
+      const result = await msgZhRes.value.json();
+      if (result.code === 200 && result.data?.content) paymentMsgZh.value = result.data.content;
+    }
+    if (msgEnRes.status === 'fulfilled' && msgEnRes.value.ok) {
+      const result = await msgEnRes.value.json();
+      if (result.code === 200 && result.data?.content) paymentMsgEn.value = result.data.content;
     }
   } catch {}
 };
@@ -136,27 +154,33 @@ const fetchOrderInfo = async () => {
 };
 
 const getStatusText = () => {
-  if (!paymentInfo.value) return '未知';
-  return { 0: '待支付', 1: '处理中', 2: '支付失败', 3: '支付成功', 4: '已完成' }[paymentInfo.value.payment_status] || '未知状态';
+  if (!paymentInfo.value) return tt('未知', 'Unknown');
+  return {
+    0: tt('待支付', 'Unpaid'),
+    1: tt('处理中', 'Processing'),
+    2: tt('支付失败', 'Failed'),
+    3: tt('支付成功', 'Paid'),
+    4: tt('已完成', 'Completed')
+  }[paymentInfo.value.payment_status] || tt('未知状态', 'Unknown');
 };
 const formatAmount = (a: any) => (!a && a !== 0) ? '0.00' : parseFloat(a).toFixed(2);
-const formatTime = (t: string) => { if (!t) return '-'; try { return new Date(t).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return t; } };
+const formatTime = (t: string) => { if (!t) return '-'; try { return new Date(t).toLocaleString(isEn.value ? 'en-US' : 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return t; } };
 const refreshOrder = () => fetchOrderInfo();
 
 const showToast = (msg: string) => { copySuccessMessage.value = msg; showCopySuccess.value = true; setTimeout(() => { showCopySuccess.value = false; }, 2000); };
 
 const copyLineUrl = async () => {
   try { await navigator.clipboard.writeText(lineUrl.value); } catch { const t = document.createElement('textarea'); t.value = lineUrl.value; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
-  showToast('LINE 链接已复制！');
+  showToast(tt('LINE 链接已复制！', 'LINE link copied!'));
 };
 const copyTransactionId = async () => {
   if (!paymentInfo.value?.transaction_id) return;
   try { await navigator.clipboard.writeText(paymentInfo.value.transaction_id); } catch { const t = document.createElement('textarea'); t.value = paymentInfo.value.transaction_id; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
-  showToast('交易号已复制！');
+  showToast(tt('交易号已复制！', 'Transaction ID copied!'));
 };
 
 onMounted(async () => { await Promise.all([fetchSystemConfig(), fetchOrderInfo()]); });
-useHead({ title: '客服支付 - 订单详情' });
+useHead({ title: computed(() => tt('客服支付 - 订单详情', 'Customer Service Payment')) });
 </script>
 
 <style scoped>

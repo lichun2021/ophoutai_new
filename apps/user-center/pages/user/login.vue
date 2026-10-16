@@ -7,20 +7,20 @@
     <div class="login-box">
       <!-- Logo -->
       <div class="login-logo">
-        <h1 class="logo-title">会员中心</h1>
-        <p class="logo-sub">登录以管理您的账户</p>
+        <h1 class="logo-title">{{ tt('会员中心', 'Member Center') }}</h1>
+        <p class="logo-sub">{{ tt('登录以管理您的账户', 'Sign in to manage your account') }}</p>
       </div>
 
       <!-- 登录表单 -->
       <form class="login-form" @submit.prevent="login">
         <div class="form-field">
-          <label class="field-label">用户名</label>
+          <label class="field-label">{{ tt('用户名', 'Username') }}</label>
           <div class="input-wrap">
             <span class="input-icon">👤</span>
             <input
               v-model="state.username"
               class="field-input"
-              placeholder="请输入用户名"
+              :placeholder="tt('请输入用户名', 'Enter your username')"
               :disabled="loading"
               autocomplete="username"
             />
@@ -28,14 +28,14 @@
         </div>
 
         <div class="form-field">
-          <label class="field-label">密码</label>
+          <label class="field-label">{{ tt('密码', 'Password') }}</label>
           <div class="input-wrap">
             <span class="input-icon">🔒</span>
             <input
               v-model="state.password"
               type="password"
               class="field-input"
-              placeholder="请输入密码"
+              :placeholder="tt('请输入密码', 'Enter your password')"
               :disabled="loading"
               autocomplete="current-password"
             />
@@ -43,7 +43,7 @@
         </div>
 
         <button type="submit" class="login-btn" :disabled="!isFormValid || loading">
-          <span v-if="!loading">登 录</span>
+          <span v-if="!loading">{{ tt('登 录', 'Sign In') }}</span>
           <span v-else class="loading-dots">
             <span></span><span></span><span></span>
           </span>
@@ -58,6 +58,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
+import { useI18n } from '~/composables/useI18n';
 
 definePageMeta({ layout: 'auth' });
 
@@ -69,6 +70,7 @@ const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const tips = useTips();
+const { tt } = useI18n();
 
 const isFormValid = computed(() => {
   const hasUsername = !!state.username?.trim();
@@ -82,22 +84,22 @@ const login = async () => {
   const tsParam = typeof route.query.ts === 'string' ? route.query.ts : undefined;
   const sigParam = typeof route.query.sig === 'string' ? route.query.sig : undefined;
   if (!state.username || (!state.password && !(tsParam && sigParam))) {
-    tips.error('缺少登录凭据');
+    tips.error(tt('缺少登录凭据', 'Missing login credentials'));
     return;
   }
   loading.value = true;
   try {
     const isResult = await authStore.logInUser(state.username, state.password, tsParam, sigParam);
     if (isResult) {
-      tips.success('登录成功');
+      tips.success(tt('登录成功', 'Signed in successfully'));
       await new Promise(r => setTimeout(r, 500));
       const redirect = typeof route.query.redirect === 'string' && route.query.redirect ? route.query.redirect : '/user/home';
       await router.push(redirect);
     } else {
-      tips.error('登录失败，用户名或密码错误');
+      tips.error(tt('登录失败，用户名或密码错误', 'Login failed: incorrect username or password'));
     }
   } catch {
-    tips.error('登录失败，无法连接到服务器');
+    tips.error(tt('登录失败，无法连接到服务器', 'Login failed: unable to connect to server'));
   } finally {
     loading.value = false;
   }
@@ -108,7 +110,7 @@ const checkUrlParams = () => {
   if (q.username) state.username = q.username;
   if (q.password) state.password = q.password;
   if (q.auto_login === 'true' && state.username && (state.password || (q.ts && q.sig))) {
-    tips.success('正在自动登录...');
+    tips.success(tt('正在自动登录...', 'Signing in automatically...'));
     setTimeout(() => { login(); }, 1000);
   }
 };

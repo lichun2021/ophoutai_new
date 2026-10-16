@@ -1,5 +1,6 @@
 <template>
   <div class="success-page">
+    <LanguageSwitcher floating />
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
     <div class="bg-grid"></div>
@@ -8,15 +9,15 @@
       <!-- 加载中 -->
       <div v-if="loading" class="state-block">
         <div class="state-icon loading-spin">⏳</div>
-        <h2 class="state-title">查询订单信息中...</h2>
-        <p class="state-sub">请稍候</p>
+        <h2 class="state-title">{{ tt('查询订单信息中...', 'Checking order status...') }}</h2>
+        <p class="state-sub">{{ tt('请稍候', 'Please wait') }}</p>
       </div>
 
       <!-- 订单不存在 -->
       <div v-else-if="!paymentInfo" class="state-block">
         <div class="state-icon">❌</div>
-        <h2 class="state-title">订单不存在</h2>
-        <p class="state-sub">未找到对应的订单信息</p>
+        <h2 class="state-title">{{ tt('订单不存在', 'Order Not Found') }}</h2>
+        <p class="state-sub">{{ tt('未找到对应的订单信息', 'Could not find matching order information') }}</p>
       </div>
 
       <!-- 订单信息 -->
@@ -34,60 +35,63 @@
         <!-- 订单明细 -->
         <div class="detail-list">
           <div class="detail-row">
-            <span class="detail-label">商品名称</span>
+            <span class="detail-label">{{ tt('商品名称', 'Item') }}</span>
             <span class="detail-value">{{ paymentInfo.product_name || '-' }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">支付金额</span>
+            <span class="detail-label">{{ tt('支付金额', 'Amount') }}</span>
             <span class="detail-value amount" :class="'text-' + getPaymentStatus()">¥{{ formatAmount(paymentInfo.amount) }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">支付方式</span>
+            <span class="detail-label">{{ tt('支付方式', 'Method') }}</span>
             <span class="detail-value">
               <img v-if="getPaymentIcon(paymentInfo.payment_way)" :src="getPaymentIcon(paymentInfo.payment_way)" class="pay-icon" />
               {{ getPaymentMethodName(paymentInfo.payment_way) }}
             </span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">订单状态</span>
+            <span class="detail-label">{{ tt('订单状态', 'Status') }}</span>
             <span class="detail-value" :class="'text-' + getPaymentStatus()">{{ getStatusText() }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">交易号</span>
+            <span class="detail-label">{{ tt('交易号', 'Transaction ID') }}</span>
             <span class="detail-value mono">
               {{ paymentInfo.transaction_id }}
-              <button class="copy-btn" @click="copyTransactionId" title="复制">📋</button>
+              <button class="copy-btn" @click="copyTransactionId" :title="tt('复制', 'Copy')">📋</button>
             </span>
           </div>
           <div v-if="paymentInfo.mch_order_id" class="detail-row">
-            <span class="detail-label">商户订单号</span>
+            <span class="detail-label">{{ tt('商户订单号', 'Order No.') }}</span>
             <span class="detail-value mono">{{ paymentInfo.mch_order_id }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">创建时间</span>
+            <span class="detail-label">{{ tt('创建时间', 'Created At') }}</span>
             <span class="detail-value">{{ formatTime(paymentInfo.created_at) }}</span>
           </div>
           <div v-if="paymentInfo.updated_at && paymentInfo.updated_at !== paymentInfo.created_at" class="detail-row">
-            <span class="detail-label">更新时间</span>
+            <span class="detail-label">{{ tt('更新时间', 'Updated At') }}</span>
             <span class="detail-value">{{ formatTime(paymentInfo.updated_at) }}</span>
           </div>
         </div>
 
-        <button class="action-btn" @click="refreshOrder">🔄 刷新状态</button>
+        <button class="action-btn" @click="refreshOrder">🔄 {{ tt('刷新状态', 'Refresh Status') }}</button>
       </div>
     </div>
 
-    <div class="footer-hint">如有疑问，请联系客服</div>
+    <div class="footer-hint">{{ tt('如有疑问，请联系客服', 'If you have any questions, please contact support') }}</div>
 
     <!-- 复制提示 -->
-    <div v-if="showCopySuccess" class="toast-msg">复制成功！</div>
+    <div v-if="showCopySuccess" class="toast-msg">{{ tt('复制成功！', 'Copied!') }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '~/composables/useI18n';
+
 definePageMeta({ layout: false, auth: false });
 
 const route = useRoute();
+const { isEn, tt } = useI18n();
 const loading = ref(true);
 const paymentInfo = ref<any>(null);
 const showCopySuccess = ref(false);
@@ -114,16 +118,43 @@ const getPaymentStatus = () => {
   return 'failed';
 };
 
-const getStatusTitle = () => ({ success: '支付成功', processing: '支付处理中', failed: '支付失败' }[getPaymentStatus()] || '订单状态异常');
-const getStatusDescription = () => ({ success: '您的支付已完成，感谢您的购买！', processing: '您的支付正在处理中，请稍候...', failed: '支付失败，请联系客服或重新尝试' }[getPaymentStatus()] || '订单状态异常，请联系客服');
+const getStatusTitle = () => ({
+  success: tt('支付成功', 'Payment Successful'),
+  processing: tt('支付处理中', 'Processing Payment'),
+  failed: tt('支付失败', 'Payment Failed')
+}[getPaymentStatus()] || tt('订单状态异常', 'Abnormal Order Status'));
+
+const getStatusDescription = () => ({
+  success: tt('您的支付已完成，感谢您的购买！', 'Your payment is complete. Thank you for your purchase!'),
+  processing: tt('您的支付正在处理中，请稍候...', 'Your payment is being processed, please wait...'),
+  failed: tt('支付失败，请联系客服或重新尝试', 'Payment failed, please contact support or try again')
+}[getPaymentStatus()] || tt('订单状态异常，请联系客服', 'Order status abnormal, please contact support'));
+
 const getStatusText = () => {
-  if (!paymentInfo.value) return '未知';
-  return { 0: '未完成', 1: '处理中', 2: '失败', 3: '支付成功', 4: '扣款成功' }[paymentInfo.value.payment_status] || '未知状态';
+  if (!paymentInfo.value) return tt('未知', 'Unknown');
+  return {
+    0: tt('未完成', 'Unpaid'),
+    1: tt('处理中', 'Processing'),
+    2: tt('失败', 'Failed'),
+    3: tt('支付成功', 'Paid'),
+    4: tt('扣款成功', 'Completed')
+  }[paymentInfo.value.payment_status] || tt('未知状态', 'Unknown');
 };
 
 const getPaymentMethodName = (m: string) => {
-  if (!m) return '未知';
-  return { '客服': '客服支付', '平台币': '平台币支付', '支付宝': '支付宝', '微信': '微信支付', 'zfb': '支付宝', 'wx': '微信支付', 'ptb': '平台币', 'kf': '客服', 'alipay': '支付宝', 'wechat': '微信支付' }[m] || m;
+  if (!m) return tt('未知', 'Unknown');
+  return {
+    '客服': tt('客服支付', 'Customer Service'),
+    '平台币': tt('平台币支付', 'Platform Coins'),
+    '支付宝': tt('支付宝', 'Alipay'),
+    '微信': tt('微信支付', 'WeChat Pay'),
+    'zfb': tt('支付宝', 'Alipay'),
+    'wx': tt('微信支付', 'WeChat Pay'),
+    'ptb': tt('平台币', 'Platform Coins'),
+    'kf': tt('客服', 'Customer Service'),
+    'alipay': tt('支付宝', 'Alipay'),
+    'wechat': tt('微信支付', 'WeChat Pay')
+  }[m] || m;
 };
 
 const getPaymentIcon = (m: string): string | undefined => {
@@ -134,7 +165,7 @@ const getPaymentIcon = (m: string): string | undefined => {
 const formatAmount = (a: any) => (!a && a !== 0) ? '0.00' : parseFloat(a).toFixed(2);
 const formatTime = (t: string) => {
   if (!t) return '-';
-  try { return new Date(t).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return t; }
+  try { return new Date(t).toLocaleString(isEn.value ? 'en-US' : 'zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return t; }
 };
 
 const refreshOrder = () => fetchOrderInfo();
@@ -146,7 +177,7 @@ const copyTransactionId = async () => {
 };
 
 onMounted(() => { fetchOrderInfo(); });
-useHead({ title: '订单详情' });
+useHead({ title: computed(() => tt('订单详情', 'Order Details')) });
 </script>
 
 <style scoped>

@@ -91,11 +91,12 @@ async function getItemList(query: any) {
   const allItems = getAllItems();
   console.log(`[getItemList] 配置加载结果: ${allItems.length} 个物品`);
   
-  // 转换为旧格式以兼容前端
+  // 转换为旧格式以兼容前端，增加 en 字段支持中英文
   const items = allItems.map(item => ({
     id: item.id,
     n: item.name,
     cn: item.name,
+    en: item.en || '',
     d: '',
     type: 'general',
     rarity: 'common'
@@ -150,11 +151,12 @@ async function searchItemList(query: any) {
     const offset = (page - 1) * pageSize;
     const pagedResults = results.slice(offset, offset + pageSize);
     
-    // 转换为旧格式以兼容前端
+    // 转换为旧格式以兼容前端，增加 en 字段
     const formattedResults = pagedResults.map(result => ({
       id: result.id,
       n: result.name,
       cn: result.name,
+      en: result.en || '',
       d: '',
       type: 'general',
       rarity: 'common'
@@ -227,6 +229,8 @@ async function getItemDetail(query: any) {
       message: '物品不存在'
     });
   }
+  const { getItemEnById } = await import('../../utils/itemConfig');
+  const itemEn = getItemEnById(itemId);
   
   return {
     success: true,
@@ -234,6 +238,7 @@ async function getItemDetail(query: any) {
       id: itemId, 
       n: itemName,
       cn: itemName,
+      en: itemEn,
       d: '',
       type: 'general',
       rarity: 'common'
@@ -330,7 +335,7 @@ async function getHealthCheck() {
 async function handleCreateItem(event: any) {
   const body = await readBody(event);
   
-  const { item_id, n, cn } = body;
+  const { item_id, n, cn, en } = body;
   
   if (!item_id || (!n && !cn)) {
     throw createError({
@@ -340,7 +345,8 @@ async function handleCreateItem(event: any) {
   }
   
   const itemName = (cn || n).trim();
-  const success = addItem(String(item_id), itemName);
+  const itemNameEn = en ? String(en).trim() : undefined;
+  const success = addItem(String(item_id), itemName, itemNameEn);
   
   if (!success) {
     throw createError({
@@ -356,6 +362,7 @@ async function handleCreateItem(event: any) {
       id: item_id, 
       n: itemName,
       cn: itemName,
+      en: itemNameEn || '',
       d: '',
       type: 'general',
       rarity: 'common'
@@ -366,7 +373,7 @@ async function handleCreateItem(event: any) {
 // 更新物品
 async function handleUpdateItem(event: any) {
   const body = await readBody(event);
-  const { id } = body;
+  const { id, en } = body;
   
   if (!id) {
     throw createError({
@@ -385,7 +392,7 @@ async function handleUpdateItem(event: any) {
   }
   
   // 获取新的物品名称（支持 n 或 cn 字段，优先使用 cn）
-  const newName = (body.cn || body.n || body.name)?.trim();
+  const newName = (body.cn || body.n || body.name || existingItem)?.trim();
   
   if (!newName) {
     throw createError({
@@ -394,7 +401,8 @@ async function handleUpdateItem(event: any) {
     });
   }
   
-  const success = updateItem(String(id), newName);
+  const itemNameEn = en !== undefined ? String(en).trim() : undefined;
+  const success = updateItem(String(id), newName, itemNameEn);
   
   if (!success) {
     throw createError({
@@ -410,6 +418,7 @@ async function handleUpdateItem(event: any) {
       id: id, 
       n: newName,
       cn: newName,
+      en: itemNameEn ?? '',
       d: '',
       type: 'general',
       rarity: 'common'

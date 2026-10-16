@@ -120,7 +120,7 @@
           <UFormGroup label="参数键" required>
             <UInput
               v-model="formData.key"
-              placeholder="请输入参数键，如：payment_message"
+              placeholder="请输入参数键，如：payment_message 或 payment_message_en"
               icon="i-heroicons-key"
               :disabled="isEdit"
             />
@@ -129,6 +129,18 @@
                 参数键用于标识参数，创建后不可修改
               </span>
             </template>
+            <div v-if="!isEdit" class="flex flex-wrap gap-2 mt-2">
+              <span class="text-xs text-gray-500 self-center">常用多语言参数快捷填入：</span>
+              <UButton size="2xs" color="gray" variant="soft" @click="formData.key = 'payment_message'">
+                payment_message (中文支付说明)
+              </UButton>
+              <UButton size="2xs" color="blue" variant="soft" @click="formData.key = 'payment_message_en'">
+                payment_message_en (英文支付说明)
+              </UButton>
+              <UButton size="2xs" color="gray" variant="soft" @click="formData.key = 'kefu_line'">
+                kefu_line (客服链接)
+              </UButton>
+            </div>
           </UFormGroup>
 
           <UFormGroup label="参数值" required>

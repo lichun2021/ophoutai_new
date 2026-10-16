@@ -1,4 +1,4 @@
-﻿import {sql} from '../db';
+import {sql} from '../db';
 
 export type SystemParam = {
     id?: number;
@@ -59,10 +59,22 @@ export const getPaymentMessage = async () => {
     return param?.content || '';
 };
 
+// 获取英文支付说明
+export const getPaymentMessageEn = async () => {
+    const param = await getOrCreate('payment_message_en', '*Platform Coin Info: 1 CNY = 1 Platform Coin, never expires. You can top up on our official website.\nDear Player: After topping up in the game, you can claim bonus rewards in the Benefits Center!');
+    return param?.content || '';
+};
+
 // 设置支付说明
 export const setPaymentMessage = async (content: string) => {
     await getOrCreate('payment_message', ''); // 确保记录存在
     await update('payment_message', content);
+};
+
+// 设置英文支付说明
+export const setPaymentMessageEn = async (content: string) => {
+    await getOrCreate('payment_message_en', '');
+    await update('payment_message_en', content);
 };
 
 // 获取API到账开关

@@ -1,5 +1,6 @@
 <template>
   <div class="qr-page">
+    <LanguageSwitcher floating />
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
     <div class="bg-grid"></div>
@@ -8,24 +9,24 @@
       <!-- 加载中 -->
       <div v-if="loading" class="state-block">
         <div class="state-icon loading-spin">⏳</div>
-        <h2 class="state-title">生成二维码中...</h2>
-        <p class="state-sub">请稍候</p>
+        <h2 class="state-title">{{ tt('生成二维码中...', 'Generating QR Code...') }}</h2>
+        <p class="state-sub">{{ tt('请稍候', 'Please wait') }}</p>
       </div>
 
       <!-- 错误 -->
       <div v-else-if="error" class="state-block">
         <div class="state-icon">❌</div>
-        <h2 class="state-title">二维码生成失败</h2>
+        <h2 class="state-title">{{ tt('二维码生成失败', 'Failed to Generate QR Code') }}</h2>
         <p class="state-sub">{{ error }}</p>
-        <button class="action-btn mt-16" @click="retryGenerate">重试</button>
+        <button class="action-btn mt-16" @click="retryGenerate">{{ tt('重试', 'Retry') }}</button>
       </div>
 
       <!-- 二维码显示 -->
       <div v-else-if="qrCodeUrl" class="qr-content">
         <!-- 左侧：二维码 -->
         <div class="qr-left">
-          <h1 class="qr-heading">请扫码支付</h1>
-          <p class="qr-heading-sub">使用微信或支付宝扫描二维码</p>
+          <h1 class="qr-heading">{{ tt('请扫码支付', 'Scan QR Code to Pay') }}</h1>
+          <p class="qr-heading-sub">{{ tt('使用微信或支付宝扫描二维码', 'Scan with WeChat or Alipay') }}</p>
           <div class="qr-img-wrap">
             <img :src="qrCodeUrl" :alt="paymentMethod" class="qr-img" @error="handleImageError" />
           </div>
@@ -35,22 +36,22 @@
         <div class="qr-right">
           <div class="detail-list">
             <div class="detail-row">
-              <span class="detail-label">支付金额</span>
+              <span class="detail-label">{{ tt('支付金额', 'Amount') }}</span>
               <span class="detail-value amount text-success">¥{{ formatAmount(amount) }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">支付方式</span>
+              <span class="detail-label">{{ tt('支付方式', 'Method') }}</span>
               <span class="detail-value">
                 <img v-if="getPaymentIcon(paymentMethod)" :src="getPaymentIcon(paymentMethod)" class="pay-icon" />
                 {{ getPaymentMethodName(paymentMethod) }}
               </span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">商品名称</span>
+              <span class="detail-label">{{ tt('商品名称', 'Item') }}</span>
               <span class="detail-value">{{ productName }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">交易号</span>
+              <span class="detail-label">{{ tt('交易号', 'Transaction ID') }}</span>
               <span class="detail-value mono">
                 {{ transactionId }}
                 <button class="copy-btn" @click="copyTransactionId">📋</button>
@@ -59,8 +60,8 @@
           </div>
 
           <div class="qr-actions">
-            <button class="action-btn" @click="checkPaymentStatus">🔄 检查支付状态</button>
-            <button v-if="qrCodeText" class="action-btn-outline" @click="copyQRCodeText">📋 复制支付链接</button>
+            <button class="action-btn" @click="checkPaymentStatus">🔄 {{ tt('检查支付状态', 'Check Payment Status') }}</button>
+            <button v-if="qrCodeText" class="action-btn-outline" @click="copyQRCodeText">📋 {{ tt('复制支付链接', 'Copy Payment Link') }}</button>
           </div>
         </div>
       </div>
@@ -68,12 +69,12 @@
       <!-- 无二维码 -->
       <div v-else class="state-block">
         <div class="state-icon">📄</div>
-        <h2 class="state-title">未找到二维码</h2>
-        <p class="state-sub">请检查URL参数是否正确</p>
+        <h2 class="state-title">{{ tt('未找到二维码', 'QR Code Not Found') }}</h2>
+        <p class="state-sub">{{ tt('请检查URL参数是否正确', 'Please check the URL parameters') }}</p>
       </div>
     </div>
 
-    <div class="footer-hint">支付完成后请点击"检查支付状态"按钮</div>
+    <div class="footer-hint">{{ tt('支付完成后请点击"检查支付状态"按钮', 'Click "Check Payment Status" after completing payment') }}</div>
 
     <div v-if="showCopySuccess" class="toast-msg">{{ copySuccessMessage }}</div>
     <div v-if="paymentStatusResult" class="toast-msg" :class="paymentStatusResult.success ? '' : 'toast-warn'">{{ paymentStatusResult.message }}</div>
@@ -82,16 +83,18 @@
 
 <script setup lang="ts">
 import QRCode from 'qrcode'
+import { useI18n } from '~/composables/useI18n'
 
 definePageMeta({ layout: false, auth: false })
 
 const route = useRoute()
+const { tt } = useI18n()
 const loading = ref(true)
 const error = ref('')
 const qrCodeUrl = ref('')
 const qrCodeText = ref('')
 const showCopySuccess = ref(false)
-const copySuccessMessage = ref('复制成功！')
+const copySuccessMessage = ref('')
 const paymentStatusResult = ref<any>(null)
 const transactionId = computed(() => route.query.transaction_id as string || '')
 const qrcode = computed(() => route.query.qrcode as string || '')
@@ -100,21 +103,26 @@ const paymentMethod = ref('')
 const productName = ref('')
 
 const getPaymentIcon = (m: string) => ({ '支付宝': '/zfb.png', '微信': '/wx.png', 'alipay': '/zfb.png', 'wxpay': '/wx.png' }[m] || '')
-const getPaymentMethodName = (m: string) => ({ '支付宝': '支付宝', '微信': '微信支付', 'alipay': '支付宝', 'wxpay': '微信支付' }[m] || m)
+const getPaymentMethodName = (m: string) => ({
+  '支付宝': tt('支付宝', 'Alipay'),
+  '微信': tt('微信支付', 'WeChat Pay'),
+  'alipay': tt('支付宝', 'Alipay'),
+  'wxpay': tt('微信支付', 'WeChat Pay')
+}[m] || m)
 const formatAmount = (a: number) => a.toFixed(2)
 
 const copyTransactionId = async () => {
   try { await navigator.clipboard.writeText(transactionId.value) } catch { const t = document.createElement('textarea'); t.value = transactionId.value; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
-  copySuccessMessage.value = '交易号复制成功！'; showCopySuccess.value = true; setTimeout(() => { showCopySuccess.value = false }, 2000)
+  copySuccessMessage.value = tt('交易号复制成功！', 'Transaction ID copied!'); showCopySuccess.value = true; setTimeout(() => { showCopySuccess.value = false }, 2000)
 }
 const copyQRCodeText = async () => {
   try { await navigator.clipboard.writeText(qrCodeText.value) } catch { const t = document.createElement('textarea'); t.value = qrCodeText.value; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); }
-  copySuccessMessage.value = '支付链接复制成功！'; showCopySuccess.value = true; setTimeout(() => { showCopySuccess.value = false }, 2000)
+  copySuccessMessage.value = tt('支付链接复制成功！', 'Payment link copied!'); showCopySuccess.value = true; setTimeout(() => { showCopySuccess.value = false }, 2000)
 }
-const handleImageError = () => { error.value = '二维码图片加载失败' }
+const handleImageError = () => { error.value = tt('二维码图片加载失败', 'Failed to load QR code image') }
 
 const checkPaymentStatus = async () => {
-  if (!transactionId.value) { paymentStatusResult.value = { success: false, message: '交易号不存在' }; return }
+  if (!transactionId.value) { paymentStatusResult.value = { success: false, message: tt('交易号不存在', 'Transaction ID missing') }; return }
   try {
     const response = await fetch(`/api/payment/trans/${transactionId.value}`)
     if (response.ok) {
@@ -122,16 +130,16 @@ const checkPaymentStatus = async () => {
       if (result.code === 200 && result.data) {
         const status = result.data.payment_status
         if (status === 3 || status === 4) { await navigateTo(`/user/payment-success?transaction_id=${transactionId.value}`); return }
-        paymentStatusResult.value = { success: false, message: status === 1 ? '支付处理中，请稍后再试' : '支付未完成，请继续扫码支付' }
-      } else { paymentStatusResult.value = { success: false, message: '订单不存在' } }
-    } else { paymentStatusResult.value = { success: false, message: '查询失败，请稍后再试' } }
-  } catch { paymentStatusResult.value = { success: false, message: '网络错误，请稍后再试' } }
+        paymentStatusResult.value = { success: false, message: status === 1 ? tt('支付处理中，请稍后再试', 'Payment processing, please try again shortly') : tt('支付未完成，请继续扫码支付', 'Payment not completed yet, please scan to pay') }
+      } else { paymentStatusResult.value = { success: false, message: tt('订单不存在', 'Order not found') } }
+    } else { paymentStatusResult.value = { success: false, message: tt('查询失败，请稍后再试', 'Query failed, please try again') } }
+  } catch { paymentStatusResult.value = { success: false, message: tt('网络错误，请稍后再试', 'Network error, please try again') } }
   setTimeout(() => { paymentStatusResult.value = null }, 3000)
 }
 
 const generateQRCode = async (text: string) => {
   try { qrCodeUrl.value = await QRCode.toDataURL(text, { width: 200, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } }); qrCodeText.value = text }
-  catch { error.value = '二维码生成失败' }
+  catch { error.value = tt('二维码生成失败', 'Failed to generate QR code') }
 }
 
 const initPage = async () => {
@@ -144,8 +152,8 @@ const initPage = async () => {
       }
     } else if (transactionId.value) {
       try { const r = await fetch(`/api/payment/trans/${transactionId.value}`); if (r.ok) { const res = await r.json(); if (res.code === 200 && res.data) { amount.value = parseFloat(res.data.amount) || 0; paymentMethod.value = res.data.payment_way || ''; productName.value = res.data.product_name || '' } } } catch {}
-    } else { error.value = '缺少必要的参数' }
-  } catch { error.value = '页面初始化失败' }
+    } else { error.value = tt('缺少必要的参数', 'Missing required parameters') }
+  } catch { error.value = tt('页面初始化失败', 'Failed to initialize page') }
   finally { loading.value = false }
 }
 

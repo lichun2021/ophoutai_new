@@ -3,12 +3,16 @@
     <h2>CDK 管理</h2>
 
     <section class="card p-4 space-y-3">
-      <h3>创建/编辑 CDK 类型</h3>
+      <h3>创建 CDK 类型</h3>
       <div class="grid gap-3" style="grid-template-columns: 120px 1fr; align-items: center;">
         <label>标题</label>
         <input v-model="typeForm.title" placeholder="如：GM发放奖励" />
+        <label>英文标题</label>
+        <input v-model="typeForm.title_en" placeholder="选填，英文界面兑换时发送的邮件标题" />
         <label>内容</label>
         <input v-model="typeForm.content" placeholder="发放邮件内容" />
+        <label>英文内容</label>
+        <input v-model="typeForm.content_en" placeholder="选填，英文界面兑换时发送的邮件内容" />
         <label>类型</label>
         <select v-model="typeForm.type">
           <option value="universal">通码（每角色限领一次）</option>
@@ -49,6 +53,7 @@
           <tr>
             <th>ID</th>
             <th>标题</th>
+            <th>内容</th>
             <th>类型</th>
             <th>物品</th>
             <th>操作</th>
@@ -57,7 +62,14 @@
         <tbody>
           <tr v-for="t in types" :key="t.id">
             <td>{{ t.id }}</td>
-            <td>{{ t.title }}</td>
+            <td>
+              <div>{{ t.title }}</div>
+              <div v-if="t.title_en" style="font-size: 12px; color: #2563eb;">EN: {{ t.title_en }}</div>
+            </td>
+            <td>
+              <div>{{ t.content }}</div>
+              <div v-if="t.content_en" style="font-size: 12px; color: #2563eb;">EN: {{ t.content_en }}</div>
+            </td>
             <td>{{ t.type }}</td>
             <td><pre style="white-space: pre-wrap;">{{ tryStringify(t.items) }}</pre></td>
             <td>
@@ -182,13 +194,15 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 
-type CdkType = { id: number; title: string; content: string; type: 'universal'|'unique'|'data'; items: any };
+type CdkType = { id: number; title: string; title_en?: string; content: string; content_en?: string; type: 'universal'|'unique'|'data'; items: any };
 
 type ItemRow = { ItemId: number|string; ItemNum: number; _kw?: string };
 
-const typeForm = ref<{ id?: number; title: string; content: string; type: 'universal'|'unique'|'data'; items: Array<ItemRow> }>({
+const typeForm = ref<{ id?: number; title: string; title_en?: string; content: string; content_en?: string; type: 'universal'|'unique'|'data'; items: Array<ItemRow> }>({
   title: 'GM发放奖励',
+  title_en: 'GM Reward',
   content: '这是GM发放的奖励，请查收！',
+  content_en: 'Here is your reward from GM, please claim it!',
   type: 'unique',
   items: [{ ItemId: '' as any, ItemNum: 1 }]
 });
@@ -209,7 +223,14 @@ async function submitType() {
     // ItemId 统一存为字符串，防止后端写入数字
     .map(i => ({ ItemId: String(i.ItemId), ItemNum: Number(i.ItemNum) }));
   if (prepared.length === 0) { alert('物品列表不能为空'); return; }
-  const payload: any = { title: typeForm.value.title, content: typeForm.value.content, type: typeForm.value.type, items: prepared };
+  const payload: any = {
+    title: typeForm.value.title,
+    title_en: typeForm.value.title_en || '',
+    content: typeForm.value.content,
+    content_en: typeForm.value.content_en || '',
+    type: typeForm.value.type,
+    items: prepared
+  };
   if (typeForm.value.id) payload.id = typeForm.value.id;
   const url = typeForm.value.id ? '/api/admin/cdk/type/update' : '/api/admin/cdk/type/create';
   const res = await $fetch(url, { method: 'POST', body: payload });
@@ -223,11 +244,19 @@ function editType(t: any) {
     ItemId: String(row.ItemId ?? row.itemId ?? ''),
     ItemNum: Number(row.ItemNum ?? row.itemNum ?? 1),
   }));
-  typeForm.value = { id: t.id, title: t.title, content: t.content, type: t.type, items } as any;
+  typeForm.value = {
+    id: t.id,
+    title: t.title,
+    title_en: t.title_en || '',
+    content: t.content,
+    content_en: t.content_en || '',
+    type: t.type,
+    items
+  } as any;
 }
 
 function resetType() {
-  typeForm.value = { title: '', content: '', type: 'universal', items: [] } as any;
+  typeForm.value = { title: '', title_en: '', content: '', content_en: '', type: 'universal', items: [] } as any;
 }
 
 // 生成码
