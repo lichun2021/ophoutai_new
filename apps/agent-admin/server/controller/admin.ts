@@ -2535,6 +2535,9 @@ export const getPaymentRecords = async (evt: H3Event) => {
     }
 }
 
+// 代理端流水只展示最近一个自然月；独立于请求筛选，订单号查询和导出也不能绕过。
+const AGENT_PAYMENT_HISTORY_CONDITION = 'pr.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+
 // 支付方式筛选统一处理（兼容中文名称和代码）
 const applyPaymentMethodFilter = (filters: any, whereConditions: string[], values: any[]) => {
     if (!filters.payment_method) return;
@@ -2575,7 +2578,7 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
 
     console.log('getPaymentRecordsWithFilters 参数:', { page, pageSize, filters, allowedChannelCodes });
 
-    let whereConditions = [];
+    let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION];
     let values: any[] = [];
 
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -2713,7 +2716,7 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
 const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[] = []) => {
     console.log('getPaymentRecordsCount 参数:', { filters, allowedChannelCodes });
 
-    let whereConditions = [];
+    let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION];
     let values: any[] = [];
 
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -2804,7 +2807,7 @@ const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[
 const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] = []) => {
     console.log('getCurrentQueryStats 参数:', { filters, allowedChannelCodes });
 
-    let whereConditions = [];
+    let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION];
     let values: any[] = [];
 
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -2943,8 +2946,8 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
         };
     } else {
         // 查询范围统计：计算总的成功订单数和金额（排除平台币购买）
-        let whereConditions = ['pr.payment_status = 3', '(pr.payment_way NOT LIKE \'%平台币%\' OR pr.payment_way IS NULL OR pr.payment_way = \'\')'];
-        let whereConditionsAll = ['1=1'];
+        let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION, 'pr.payment_status = 3', '(pr.payment_way NOT LIKE \'%平台币%\' OR pr.payment_way IS NULL OR pr.payment_way = \'\')'];
+        let whereConditionsAll = [AGENT_PAYMENT_HISTORY_CONDITION];
         let values: any[] = [];
         let valuesAll: any[] = [];
 
