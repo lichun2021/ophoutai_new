@@ -1764,18 +1764,20 @@ const confirmSendMail = async () => {
 const handleOpenProtectShield = async (player: Player) => {
   try {
     // 二次确认
-    const confirmed = confirm(`确认要为玩家 ${player.name} (ID: ${player.id}) 开罩子吗？`);
+    const confirmed = confirm(`确认要为玩家 ${player.name} (ID: ${player.id}) 开启24小时保护罩吗？已有更长保护时间会保留。`);
     if (!confirmed) return;
     
-    await $fetch('/api/gm/open-protect-shield', {
+    const response: any = await $fetch('/api/gm/open-protect-shield', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: {
         server: selectedServer.value,
-        playerId: player.id
+        playerId: player.id,
+        minutes: 1440
       }
     });
     
+    if (!response.success) throw new Error(response.message || '开罩子失败');
     toast.add({
       title: '开罩子成功',
       description: `已为玩家 ${player.name} 开启罩子`,

@@ -936,6 +936,10 @@ export const openProtectShield = async (evt: H3Event) => {
   try {
     const body = await readBody(evt);
     const { server, playerId } = body;
+    const minutes = body.minutes === undefined ? 1440 : Number(body.minutes);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 43200) {
+      return { success: false, message: '保护时间必须为 1–43200 分钟' };
+    }
     const admin = await requireGMPermission(evt);
 
     if (!server || !playerId) {
@@ -955,36 +959,47 @@ export const openProtectShield = async (evt: H3Event) => {
         };
       }
 
-      // 调用游戏服务器接口
-      const url = `${gameServer.webhost}/script/openProtectShield?playerId=${playerId}`;
-      const response = await fetch(url);
-      const result = await response.json();
-
-      const playerName = await getPlayerName(server, playerId);
+      // 从实际游戏角色读取身份，不能用后台小号 ID 代替游戏 OpenId。
+      const players = await gameDbSql({
+        database: gameServer.bname,
+        query: 'SELECT id, name, openid, puid, platform, serverId FROM player WHERE id = ? AND invalid = 0 LIMIT 1',
+        values: [String(playerId)]
+      }) as any[];
+      const player = players[0];
+      if (!player) throw new Error('游戏服中没有找到该角色');
+      const platform = String(player.platform || '').toLowerCase();
+      if (!['android', 'ios'].includes(platform)) throw new Error('无法确认角色平台');
+      const openId = String(player.openid || '').trim();
+      const partition = String(player.serverId || '').trim();
+      if (!openId || !partition || ![openId, `${openId}#${platform}`].includes(String(player.puid))) {
+        throw new Error('角色账号映射不一致，停止开罩');
+      }
+      const matches = await gameDbSql({
+        database: gameServer.bname,
+        query: 'SELECT id FROM player WHERE puid = ? AND serverId = ? AND invalid = 0',
+        values: [player.puid, partition]
+      }) as any[];
+      if (matches.length !== 1 || String(matches[0].id) !== String(playerId)) throw new Error('账号映射存在多个角色，停止开罩');
+      const client = await createIdipClientForServer(server);
+      const startedAt = Math.floor(Date.now() / 1000);
+      const result = await client.openProtectShield({ partition, platId: platform === 'android' ? 1 : 2, openId, minutes });
+      const endTime = Number(result.body.EndTime);
+      if (!Number.isFinite(endTime) || endTime < startedAt + minutes * 60 - 60) throw new Error('游戏服未返回预期的保护结束时间，请核查后勿重复提交');
+      const playerName = player.name;
       await insertGmOperationLog({
         op_type: 'open_protect_shield',
         server,
         player_id: String(playerId),
         player_name: playerName || null,
-        request_params: { playerId },
+        request_params: { playerId, minutes, endpoint: 'idip/4423' },
         response_result: result,
-        success: result.success ? 1 : 0,
-        error_message: result.success ? null : result.message,
+        success: 1,
+        error_message: null,
         admin_id: admin?.id ?? null,
         admin_name: admin?.name ?? null
       });
 
-      if (result.success) {
-        return {
-          success: true,
-          message: result.message || '开罩子成功'
-        };
-      } else {
-        return {
-          success: false,
-          message: result.message || '开罩子失败'
-        };
-      }
+      return { success: true, message: '保护罩已开启，保留已有更长保护时间', data: { endTime, minutes } };
     } catch (error: any) {
       console.error('[GM] 调用开罩子接口失败:', error);
       const playerName = await getPlayerName(server, playerId);
@@ -993,7 +1008,7 @@ export const openProtectShield = async (evt: H3Event) => {
         server,
         player_id: String(playerId),
         player_name: playerName || null,
-        request_params: { playerId },
+        request_params: { playerId, minutes, endpoint: 'idip/4423' },
         response_result: null,
         success: 0,
         error_message: error?.message || '接口调用失败',
