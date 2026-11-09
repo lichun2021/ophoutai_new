@@ -3,7 +3,8 @@ import {H3Event, getHeaders, getQuery} from 'h3';
 import { User } from '../model/user';
 import * as AdminModel from '../model/admin';
 import * as ApisModel from '../model/apis';
-import {sql} from '../db';
+import {sql, pool} from '../db';
+import { manageSdkSubAccounts, SubAccountError } from '../utils/sdkSubAccounts';
 
 import * as auth from '../utils/auth';
 import * as crypto from 'crypto';
@@ -1047,6 +1048,7 @@ export const sdkLogin = async(evt: H3Event) => {
         const response = {
             z: 1,                                    // 成功状态码
             x: sdkMessages.login.success(),          // 消息
+            sdk_session: auth.signUserSession(userData.id!, 24 * 60 * 60),
             b: userData.username || "",              // 用户名
             c: userData.password || "",              // 密码（如果需要返回）
             d: sign,                                 // 签名
@@ -1057,7 +1059,7 @@ export const sdkLogin = async(evt: H3Event) => {
             mallUrl: mallUrl
         };
         
-        console.log("SDK登录返回数据:", response);
+        console.log("SDK登录成功", { username: userData.username, gameId });
 
         // 登录成功：清除该 IP / 账号的失败计数与失败锁（登录成功后不再限制同一 IP 重复登录）
         await recordLoginSuccess(ipAddress, username);
@@ -1205,154 +1207,15 @@ export const getSubAccountList = async(evt: H3Event) => {
  * SDK接口: POST /sdkapi/login/addxiaohao
  */
 export const addSubAccount = async(evt: H3Event) => {
+    const body = await readBody(evt);
+    if (!body?.z) return { code: '0', data: [], msg: '用户名不能为空' };
+    const users = await sql({ query: 'SELECT id FROM users WHERE username = ?', values: [body.z] }) as any[];
+    if (!users.length) return { code: '0', data: [], msg: '主用户不存在' };
     try {
-        const body = await readBody(evt);
-        console.log("添加子账号请求:", body);
-        
-        const {
-            z: username,        // 主用户名
-            c: gameId,          // 游戏ID
-            e: agentId,         // 代理ID
-            f: appId,           // APP ID
-            x: subAccountName   // 子账号名称
-        } = body;
-        
-        if (!username) {
-            setResponseStatus(evt, 200);
-            return {
-                code: "0",
-                data: [],
-                msg: "用户名不能为空",
-                djq: null,
-                ttb: null,
-                discount: null,
-                flb: 0
-            };
-        }
-        
-        // 通过用户名查找主用户
-        const user = await sql({
-            query: 'SELECT id FROM users WHERE username = ?',
-            values: [username],
-        }) as any[];
-        
-        if (user.length === 0) {
-            setResponseStatus(evt, 200);
-            return {
-                code: "0",
-                data: [],
-                msg: "主用户不存在",
-                djq: null,
-                ttb: null,
-                discount: null,
-                flb: 0
-            };
-        }
-        
-        const userId = user[0].id;
-        
-        // 获取该主用户的子账号数量，用于计算序号
-        const SubUsersModel = await import('../model/subUsers');
-        const subUserCount = await SubUsersModel.countByParentUserId(userId);
-        
-        if (subUserCount >= 10) {
-            setResponseStatus(evt, 200);
-            return {
-                code: "0",
-                data: [],
-                msg: "每个主账号最多只能创建10个子账号",
-                djq: null,
-                ttb: null,
-                discount: null,
-                flb: 0
-            };
-        }
-        
-        // 计算当前是第几个小号（从1开始）
-        const subAccountIndex = subUserCount + 1;
-        
-        // 生成子账号名称：小号{序号}_{昵称}
-        // 如果没有传入昵称，则默认为"小号{序号}"
-        const nickname = subAccountName || `小号${subAccountIndex}`;
-        const finalSubAccountName = `小号${subAccountIndex}_${nickname}`;
-        
-        // 检查生成的子账号名是否已存在（虽然概率很小，但为了安全起见）
-        const existingSubUser = await SubUsersModel.findByUsername(finalSubAccountName);
-        
-        if (existingSubUser) {
-            setResponseStatus(evt, 200);
-            return {
-                code: "0",
-                data: [],
-                msg: "子账号名已存在",
-                djq: null,
-                ttb: null,
-                discount: null,
-                flb: 0
-            };
-        }
-        
-        // 创建子账号
-        const result = await SubUsersModel.insert({
-            parent_user_id: userId,
-            username: finalSubAccountName
-        });
-        
-        // 获取插入后的完整子账号列表
-        const subUsers = await SubUsersModel.findByParentUserId(userId);
-        
-        // 转换为响应格式，username 字段返回 subusers 的 id
-        const currentTime = Math.floor(Date.now() / 1000);
-        const subAccountList = subUsers.map(subUser => {
-            const signString = `${subUser.id}${currentTime}${config.thirdPartyConfig?.accessKey || 'default_key'}`;
-            const sign = crypto.createHash('md5').update(signString).digest('hex');
-            
-            return {
-                username: subUser.id?.toString() || '',  // 返回 subusers 的 id
-                nickname: subUser.username,              // nickname 是子账号的完整名称
-                login_time: currentTime,
-                sign: sign
-            };
-        });
-        
-        setResponseStatus(evt, 200);
-        return {
-            code: "1",  // 成功返回字符串"1"
-            data: subAccountList,  // 返回完整的子账号列表
-            msg: "添加子账号成功",
-            djq: null,
-            ttb: null,
-            discount: null,
-            flb: 0
-        };
-        
-    } catch (e: any) {
-        console.error("添加子账号异常:", e);
-        
-        // 处理数据库触发器错误
-        if (e.message && e.message.includes('不能为单个主账号创建超过10个子账号')) {
-            setResponseStatus(evt, 200);
-            return {
-                code: "0",
-                data: [],
-                msg: "每个主账号最多只能创建10个子账号",
-                djq: null,
-                ttb: null,
-                discount: null,
-                flb: 0
-            };
-        }
-        
-        setResponseStatus(evt, 200);
-        return {
-            code: "0",
-            data: [],
-            msg: e.message || "添加子账号失败",
-            djq: null,
-            ttb: null,
-            discount: null,
-            flb: 0
-        };
+        return await manageSdkSubAccounts(pool, { userId: Number(users[0].id), action: 'create', nickname: body.x },
+            config.thirdPartyConfig?.accessKey || 'default_key');
+    } catch (error) {
+        return { code: '0', data: [], msg: error instanceof SubAccountError ? error.message : '添加小号失败，请稍后重试' };
     }
 };
 

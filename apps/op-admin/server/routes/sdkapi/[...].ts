@@ -40,7 +40,9 @@ const withLogging = (handler: Function, apiName: string) => {
     console.log(`[IN] 路径: ${method} ${url.pathname}${url.search}`);
     console.log(`[IN] IP: ${maskIpForPrivacy ? '[masked]' : ipAddress}, ${userAgent.split(' ')[0]}`);
     console.log(`[IN] 参数: 用户名=${(requestBody as any)?.z ?? 'N/A'}, 登录类型=${(requestBody as any)?.c ?? 'N/A'}, 游戏ID=${(requestBody as any)?.d ?? 'N/A'}, 代理ID=${(requestBody as any)?.f ?? 'N/A'}`);
-    console.log(`[IN] 请求体: ${JSON.stringify(requestBody)}`);
+    const safeBody = { ...requestBody };
+    for (const key of ['b', 'password', 'sign', 'sig', 'token', 'sdk_session']) { if (key in safeBody) safeBody[key] = '[redacted]'; }
+    console.log(`[IN] 请求体: ${JSON.stringify(safeBody)}`);
     console.log('=========================================');
 
     let response: any = {};
