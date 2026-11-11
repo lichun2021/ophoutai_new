@@ -1,6 +1,7 @@
 import { Bot, Context, InlineKeyboard } from 'grammy';
 import { telegramConfig, getTelegramAccessConfig } from './config';
 import * as TelegramService from './service';
+import { registerOperations } from './operations';
 
 // 创建 Bot 实例
 let bot: Bot | null = null;
@@ -61,6 +62,18 @@ const formatAmount = (amount: number | string | null | undefined): string => {
     return `¥${amt.toFixed(2)}`;
 };
 
+const mainMenuKeyboard = () => new InlineKeyboard()
+    .text('今日统计', 'action_stats')
+    .text('充值数据', 'action_recharge').row()
+    .text('在线人数', 'action_online')
+    .text('查询订单', 'action_order_prompt').row()
+    .text('渠道结算', 'ops:settlement')
+    .text('查玩家 / 发平台币', 'ops:grant');
+
+async function showMenu(ctx: Context) {
+    await ctx.reply('请选择功能：', { reply_markup: mainMenuKeyboard() });
+}
+
 // ==================== 初始化机器人 ====================
 
 export const initBot = () => {
@@ -85,11 +98,13 @@ export const initBot = () => {
     
     // 应用权限验证中间件
     bot.use(checkAccess);
+    const clearConversation = registerOperations(bot, showMenu);
     
     // ==================== 命令处理器 ====================
     
     // /start - 欢迎消息
     bot.command('start', async (ctx) => {
+        clearConversation(ctx);
         const welcomeMessage = `欢迎使用运营管理机器人！
 
 可用命令：
@@ -98,12 +113,14 @@ export const initBot = () => {
 /recharge - 查看今日充值数据
 /online - 查看在线人数
 /order - 查询订单状态
+/settlement - 查看渠道结算
+/grant - 查询玩家并发放平台币
 /menu - 显示快捷菜单
 /myid - 查看当前ID（用于配置白名单）
 
 提示：你也可以使用快捷菜单按钮来快速访问功能。`;
         
-        await ctx.reply(welcomeMessage);
+        await ctx.reply(welcomeMessage, { reply_markup: mainMenuKeyboard() });
     });
     
     // /help - 帮助信息
@@ -117,6 +134,9 @@ export const initBot = () => {
 /recharge - 今日充值详细数据
 /online - 查看在线人数
 /order <订单号> - 查询订单状态
+/settlement - 渠道结算汇总和全部明细
+/grant - 按账号查询玩家 ID，确认后发放平台币
+/cancel - 取消本次输入并返回主菜单
 /myid - 查看当前用户ID和群组ID
 
 使用示例：
@@ -131,19 +151,12 @@ export const initBot = () => {
     
     // /menu - 显示快捷菜单
     bot.command('menu', async (ctx) => {
-        const keyboard = new InlineKeyboard()
-            .text('今日统计', 'action_stats')
-            .text('充值数据', 'action_recharge').row()
-            .text('在线人数', 'action_online')
-            .text('查询订单', 'action_order_prompt');
-        
-        await ctx.reply('请选择功能：', {
-            reply_markup: keyboard
-        });
+        clearConversation(ctx);
+        await showMenu(ctx);
     });
     
     // /stats - 今日综合统计
-    bot.command('stats', async (ctx) => {
+    const showStats = async (ctx: Context) => {
         try {
             await ctx.reply('正在查询数据，请稍候...');
             
@@ -180,10 +193,11 @@ export const initBot = () => {
             console.error('查询统计数据失败:', error);
             await ctx.reply('查询失败，请稍后重试');
         }
-    });
-    
+    };
+    bot.command('stats', showStats);
+
     // /recharge - 今日充值数据
-    bot.command('recharge', async (ctx) => {
+    const showRecharge = async (ctx: Context) => {
         try {
             await ctx.reply('正在查询充值数据，请稍候...');
             
@@ -236,10 +250,11 @@ export const initBot = () => {
             console.error('查询充值数据失败:', error);
             await ctx.reply('查询失败，请稍后重试');
         }
-    });
-    
+    };
+    bot.command('recharge', showRecharge);
+
     // /online - 在线人数
-    bot.command('online', async (ctx) => {
+    const showOnline = async (ctx: Context) => {
         try {
             await ctx.reply('正在查询游戏服在线数据...');
             
@@ -279,8 +294,9 @@ export const initBot = () => {
             console.error('查询在线人数失败:', error);
             await ctx.reply('查询失败，请稍后重试');
         }
-    });
-    
+    };
+    bot.command('online', showOnline);
+
     // /order - 查询订单
     bot.command('order', async (ctx) => {
         const orderId = ctx.match?.toString().trim();
@@ -397,38 +413,13 @@ ${order.callback_at ? `回调时间：${order.callback_at}\n` : ''}`;
         
         switch (data) {
             case 'action_stats':
-                // 触发 /stats 命令
-                const statsCtx = { ...ctx, match: '' };
-                await bot!.handleUpdate({
-                    ...ctx.update,
-                    message: {
-                        ...ctx.callbackQuery.message,
-                        text: '/stats',
-                        from: ctx.from
-                    }
-                } as any);
+                await showStats(ctx);
                 break;
-                
             case 'action_recharge':
-                await bot!.handleUpdate({
-                    ...ctx.update,
-                    message: {
-                        ...ctx.callbackQuery.message,
-                        text: '/recharge',
-                        from: ctx.from
-                    }
-                } as any);
+                await showRecharge(ctx);
                 break;
-                
             case 'action_online':
-                await bot!.handleUpdate({
-                    ...ctx.update,
-                    message: {
-                        ...ctx.callbackQuery.message,
-                        text: '/online',
-                        from: ctx.from
-                    }
-                } as any);
+                await showOnline(ctx);
                 break;
                 
             case 'action_order_prompt':
@@ -489,6 +480,9 @@ export const startBot = async () => {
             { command: 'recharge', description: '充值数据' },
             { command: 'online', description: '在线人数' },
             { command: 'order', description: '查询订单' },
+            { command: 'settlement', description: '渠道结算数据' },
+            { command: 'grant', description: '查询玩家并发放平台币' },
+            { command: 'cancel', description: '取消并返回主菜单' },
             { command: 'myid', description: '查看当前ID（配置白名单）' }
         ]);
         

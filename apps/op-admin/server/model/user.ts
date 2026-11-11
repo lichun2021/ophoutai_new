@@ -35,6 +35,27 @@ export const findByThirdpartyUid = async (thirdparty_uid: string) => {
     return result.length === 1 ? result[0] as User : null;
 };
 
+type ExactAccountMatch = {
+    id: number;
+    username: string | null;
+    thirdparty_uid: string;
+    channel_code: string | null;
+    game_code: string | null;
+    platform_coins: number | string | null;
+    status: number | null;
+};
+
+export const findExactAccountMatches = async (account: string): Promise<ExactAccountMatch[]> => {
+    const rows = await sql({
+        query: `SELECT id, username, thirdparty_uid, channel_code, game_code, platform_coins, status
+                FROM Users WHERE CAST(username AS BINARY) = CAST(? AS BINARY)
+                    OR CAST(thirdparty_uid AS BINARY) = CAST(? AS BINARY)
+                LIMIT 2`,
+        values: [account, account],
+    });
+    return rows as ExactAccountMatch[];
+};
+
 // 用户登录验证
 export const login = async (username: string, password: string) => {
     try {
@@ -347,12 +368,12 @@ export const insert = async (userData: Omit<User, 'id' | 'created_at'>) => {
 // ========== 平台币相关操作方法 ==========
 
 // 获取用户平台币余额
-export const getPlatformCoins = async (user_id: number): Promise<number> => {
-    const result = await sql({
+export const getPlatformCoins = async (user_id: number, runQuery = sql): Promise<number> => {
+    const result = await runQuery({
         query: 'SELECT platform_coins FROM Users WHERE id = ?',
         values: [user_id],
     }) as any[];
-    return result.length > 0 ? parseFloat(result[0].platform_coins) : 0;
+    return Number(result[0]?.platform_coins) || 0;
 };
 
 // 通过第三方用户ID获取平台币余额
@@ -376,12 +397,14 @@ export const getPlatformCoinsByThirdpartyUid = async (thirdparty_uid: string): P
  *   5: 管理员发放
  *   6: 礼包失败退款
  *   7: 礼包异常退款
+ * @param runQuery 可选的事务查询函数
  * @returns { success: boolean, newBalance?: number, oldBalance?: number, message?: string }
  */
 export const updatePlatformCoinsUnified = async (
     userId: number,
     amount: number,
-    operationType: 1 | 2 | 3 | 4 | 5 | 6 | 7
+    operationType: 1 | 2 | 3 | 4 | 5 | 6 | 7,
+    runQuery = sql
 ): Promise<{ success: boolean; newBalance?: number; oldBalance?: number; message?: string }> => {
     const operationNames = {
         1: '游戏内购扣款',
@@ -397,7 +420,7 @@ export const updatePlatformCoinsUnified = async (
 
     try {
         // 获取当前余额
-        const oldBalance = await getPlatformCoins(userId);
+        const oldBalance = await getPlatformCoins(userId, runQuery);
 
         // 如果是扣款操作（负数），检查余额是否足够
         if (amount < 0 && oldBalance < Math.abs(amount)) {
@@ -409,7 +432,7 @@ export const updatePlatformCoinsUnified = async (
         const newBalance = oldBalance + amount;
 
         // 更新余额
-        await sql({
+        await runQuery({
             query: 'UPDATE Users SET platform_coins = ? WHERE id = ?',
             values: [newBalance, userId],
         });
