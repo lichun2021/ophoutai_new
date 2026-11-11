@@ -1,5 +1,5 @@
 import * as UserModel from '../model/user';
-import { H3Event, getHeaders, getQuery } from 'h3';
+import { H3Event, getHeader, getHeaders, getQuery, setResponseHeader, setResponseStatus } from 'h3';
 import { User } from '../model/user';
 import * as AdminModel from '../model/admin';
 import * as ApisModel from '../model/apis';
@@ -18,6 +18,7 @@ import { getRequestClientIp } from '../utils/requestIp';
 import { generateUserLoginUrl } from './payment';
 import { signJWT, setAuthCookie } from '@quantum/shared/server/utils/jwt';
 import { parseUserAutoLoginId, verifyUserAutoLoginToken } from '@quantum/shared/server/utils/userAutoLogin';
+import { createSdkGameSession, readSdkGameSession, signSdkGameTicket } from '../utils/sdkGameAuth';
 
 /**
  * 打印一行红色错误日志（不打印堆栈），保持终端输出整洁。
@@ -1155,6 +1156,18 @@ export const sdkLogin = async (evt: H3Event) => {
         // 登录成功：清除该 IP / 账号的失败计数与失败锁（登录成功后不再限制同一 IP 重复登录）
         await recordLoginSuccess(ipAddress, username);
 
+        if (gameId === 'op' && userId) {
+            try {
+                const sdkSession = await createSdkGameSession(userId);
+                if (sdkSession) {
+                    setResponseHeader(evt, 'Cache-Control', 'no-store');
+                    return { ...response, sdk_session: sdkSession };
+                }
+            } catch {
+                logError('SDK 游戏会话签发失败');
+            }
+        }
+
         return response;
 
     } catch (e: any) {
@@ -1191,6 +1204,55 @@ export const sdkLogin = async (evt: H3Event) => {
             sid: "",
             e: Date.now().toString()
         };
+    }
+};
+
+export const sdkGameTicket = async (evt: H3Event) => {
+    setResponseHeader(evt, 'Cache-Control', 'no-store');
+    const authorization = getHeader(evt, 'authorization') ?? '';
+    const session = /^Bearer ([a-f0-9]{64})$/i.exec(authorization)?.[1];
+    if (!session) {
+        setResponseStatus(evt, 401);
+        return { code: -1, msg: 'SDK 会话无效或已过期' };
+    }
+
+    let subAccountId: unknown;
+    try {
+        const body = await readBody(evt);
+        subAccountId = body?.subAccountId;
+    } catch {
+        setResponseStatus(evt, 400);
+        return { code: -1, msg: '请求格式无效' };
+    }
+    if (typeof subAccountId !== 'string' || !subAccountId || subAccountId[0] === '0' || /[^0-9]/.test(subAccountId)) {
+        setResponseStatus(evt, 400);
+        return { code: -1, msg: '小号 ID 无效' };
+    }
+
+    try {
+        const userId = await readSdkGameSession(session);
+        if (userId === null) {
+            setResponseStatus(evt, 401);
+            return { code: -1, msg: 'SDK 会话无效或已过期' };
+        }
+
+        const rows = await sql({
+            query: `SELECT CAST(s.id AS CHAR) AS subAccountId, u.status
+                    FROM SubUsers s JOIN Users u ON u.id = s.parent_user_id
+                    WHERE s.id = ? AND u.id = ? LIMIT 1`,
+            values: [subAccountId, userId],
+        }) as { subAccountId: string; status: number | null }[];
+        const account = rows[0];
+        if (!account || account.subAccountId !== subAccountId || Number(account.status) === 1) {
+            setResponseStatus(evt, 403);
+            return { code: -1, msg: '该小号无法进入游戏' };
+        }
+
+        return { code: 1, ticket: signSdkGameTicket(subAccountId) };
+    } catch {
+        logError('SDK 游戏票据签发失败');
+        setResponseStatus(evt, 503);
+        return { code: -1, msg: '游戏登录暂不可用' };
     }
 };
 // SDK子账号管理接口

@@ -230,6 +230,9 @@ const withLoginRateGuard = (handler: Function) => {
  */
 router.post('/login/dologin', withLoginRateGuard(withSignAndLogging(UserCtrl.sdkLogin, 'SDK登录接口')));
 
+// 游戏票据由玩家会话认证，独立处理以免记录凭证。
+router.post('/login/gameTicket', defineEventHandler(UserCtrl.sdkGameTicket));
+
 /**
  * 获取子账号列表接口
  * @route POST /sdkapi/login/xiaohao
