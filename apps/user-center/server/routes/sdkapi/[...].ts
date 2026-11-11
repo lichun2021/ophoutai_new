@@ -12,9 +12,10 @@ import { getRequestClientIp } from '../../utils/requestIp';
 import { logLoginResponse } from '@quantum/shared/server/utils/loginResponseLog';
 
 const router = createRouter();
+type LogOptions = { privatePayload?: boolean };
 
 // 日志包装函数
-const withLogging = (handler: Function, apiName: string) => {
+const withLogging = (handler: Function, apiName: string, options: LogOptions = {}) => {
   return defineEventHandler(async (event) => {
     const startTime = Date.now();
     const requestId = `req_${startTime}_${Math.random().toString(36).substr(2, 9)}`;
@@ -37,11 +38,13 @@ const withLogging = (handler: Function, apiName: string) => {
     
     // 访问日志
     const maskIpForPrivacy = apiName.includes('登录');
+    const hideRequestPayload = maskIpForPrivacy || options.privatePayload ||
+      ['sdk_session', 'gameLoginProof'].some(field => Object.hasOwn(requestBody, field) || url.searchParams.has(field));
     console.log(`[IN] 时间: ${new Date().toISOString()}`);
-    console.log(`[IN] 路径: ${method} ${url.pathname}${maskIpForPrivacy ? '' : url.search}`);
+    console.log(`[IN] 路径: ${method} ${url.pathname}${hideRequestPayload ? '' : url.search}`);
     console.log(`[IN] IP: ${maskIpForPrivacy ? '[masked]' : ipAddress}, ${userAgent.split(' ')[0]}`);
     console.log(`[IN] 参数: 用户名=${(requestBody as any)?.z ?? 'N/A'}, 登录类型=${(requestBody as any)?.c ?? 'N/A'}, 游戏ID=${(requestBody as any)?.d ?? 'N/A'}, 代理ID=${(requestBody as any)?.f ?? 'N/A'}`);
-    if (!maskIpForPrivacy) console.log(`[IN] 请求体: ${JSON.stringify(requestBody)}`);
+    if (!hideRequestPayload) console.log(`[IN] 请求体: ${JSON.stringify(requestBody)}`);
     console.log('=========================================');
 
     let response: any = {};
@@ -117,7 +120,7 @@ const withLogging = (handler: Function, apiName: string) => {
         : response && response.z !== undefined
         ? `码=${response.z}, ${response.z === 0 ? '成功' : '失败'}`
         : '未知'
-    }${error ? `, 错误: ${error.message}` : ''}`);
+    }${error ? `, 错误: ${hideRequestPayload ? '请求处理失败' : error.message}` : ''}`);
     
     // 写入结构化日志
     try {
@@ -182,7 +185,7 @@ const withSign = (handler: Function) => {
 };
 
 // 组合包装：签名校验 + 日志
-const withSignAndLogging = (handler: Function, apiName: string) => withLogging(withSign(handler), apiName);
+const withSignAndLogging = (handler: Function, apiName: string, options?: LogOptions) => withLogging(withSign(handler), apiName, options);
 
 /**
  * 登录限流守卫（最外层）：在签名校验与详细访问日志之前预检 IP/账号失败锁。
@@ -236,10 +239,10 @@ router.post('/login/gameTicket', defineEventHandler(UserCtrl.sdkGameTicket));
 /**
  * 获取子账号列表接口
  * @route POST /sdkapi/login/xiaohao
- * @body {z: string, c: string, e: string, f: string}
+ * @body {z: string, c: string, e: string, f: string, sdk_session?: string}
  * @returns {Object} 子账号列表结果
  */
-router.post('/login/xiaohao', withSignAndLogging(UserCtrl.getSubAccountList, '获取子账号列表接口'));
+router.post('/login/xiaohao', withSignAndLogging(UserCtrl.getSubAccountList, '获取子账号列表接口', { privatePayload: true }));
 
 /**
  * 添加子账号接口

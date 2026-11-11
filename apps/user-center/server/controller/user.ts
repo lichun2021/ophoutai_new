@@ -18,7 +18,7 @@ import { getRequestClientIp } from '../utils/requestIp';
 import { generateUserLoginUrl } from './payment';
 import { signJWT, setAuthCookie } from '@quantum/shared/server/utils/jwt';
 import { parseUserAutoLoginId, verifyUserAutoLoginToken } from '@quantum/shared/server/utils/userAutoLogin';
-import { createSdkGameSession, readSdkGameSession, signSdkGameTicket } from '../utils/sdkGameAuth';
+import { createSdkGameSession, readSdkGameSession, signSdkGameLoginProof, signSdkGameTicket } from '../utils/sdkGameAuth';
 
 /**
  * 打印一行红色错误日志（不打印堆栈），保持终端输出整洁。
@@ -1262,96 +1262,71 @@ export const sdkGameTicket = async (evt: H3Event) => {
  * SDK接口: POST /sdkapi/login/xiaohao
  */
 export const getSubAccountList = async (evt: H3Event) => {
+    const respond = (code: '0' | '1', msg: string, data: unknown[] = []) => {
+        setResponseStatus(evt, 200);
+        return { code, data, msg, djq: null, ttb: null, discount: null, flb: 0 };
+    };
+    let legacyRequest = false;
     try {
-        const body = await readBody(evt);
-        console.log("获取子账号列表请求:", body);
+        const body = (await readBody(evt)) ?? {};
+        const { z: username, sdk_session: session } = body;
+        const proofRequested = Object.hasOwn(body, 'sdk_session');
+        legacyRequest = !proofRequested;
+        let sessionUserId: number | null = null;
 
-        const {
-            z: username,     // 用户名
-            c: gameId,       // 游戏ID
-            e: agentId,      // 代理ID
-            f: appId         // APP ID
-        } = body;
-
-        if (!username) {
-            // 设置HTTP状态码为200，但业务code为失败
-            setResponseStatus(evt, 200);
-            return {
-                code: "0",
-                data: [],
-                msg: "用户名不能为空",
-                djq: null,
-                ttb: null,
-                discount: null,
-                flb: 0
-            };
+        if (proofRequested) {
+            setResponseHeader(evt, 'Cache-Control', 'no-store');
+            if (typeof username !== 'string' || !username.trim()) {
+                return respond('0', '用户名不能为空');
+            }
+            if (typeof session !== 'string' || session.length !== 64 || /[^a-f0-9]/.test(session)) {
+                return respond('0', 'SDK 会话无效或已过期');
+            }
+            sessionUserId = await readSdkGameSession(session);
+            if (sessionUserId === null) return respond('0', 'SDK 会话无效或已过期');
+        } else if (!username) {
+            return respond('0', '用户名不能为空');
         }
 
-        // 通过用户名查找主用户
-        const user = await sql({
-            query: 'SELECT id FROM Users WHERE username = ?',
-            values: [username],
-        }) as any[];
-
-        if (user.length === 0) {
-            setResponseStatus(evt, 200);
-            return {
-                code: "0",
-                data: [],
-                msg: "用户不存在",
-                djq: null,
-                ttb: null,
-                discount: null,
-                flb: 0
-            };
+        const users = await sql(sessionUserId === null ? {
+            query: 'SELECT id FROM Users WHERE username = ?', values: [username],
+        } : {
+            query: 'SELECT id, status FROM Users WHERE id = ? AND username = ? LIMIT 1',
+            values: [sessionUserId, username],
+        }) as { id: number; status?: number | null }[];
+        const owner = users[0];
+        if (sessionUserId !== null && owner?.id !== sessionUserId) {
+            return respond('0', 'SDK 会话无效或已过期');
+        }
+        if (!owner) return respond('0', '用户不存在');
+        if (sessionUserId !== null && Number(owner.status) === 1) {
+            return respond('0', '该账号无法登录游戏');
         }
 
-        const userId = user[0].id;
-
-        // 获取该用户的所有子账号
         const SubUsersModel = await import('../model/subUsers');
-        const subUsers = await SubUsersModel.findByParentUserId(userId);
-
-        // 转换为响应格式
-        const currentTime = Math.floor(Date.now() / 1000); // 当前时间戳（秒）
+        const subUsers = await SubUsersModel.findByParentUserId(owner.id);
+        const currentTime = Math.floor(Date.now() / 1000);
         const subAccountList = subUsers.map(subUser => {
-            // 生成签名 - 使用 subUser.id 来生成签名
+            const subAccountId = subUser.id?.toString() || '';
             const signString = `${subUser.id}${currentTime}${config.thirdPartyConfig?.accessKey || 'default_key'}`;
             const sign = crypto.createHash('md5').update(signString).digest('hex');
-
-            return {
-                username: subUser.id?.toString() || '',  // 返回 subusers 的 id
-                nickname: subUser.username,              // nickname 是子账号的完整名称
+            const item = {
+                username: subAccountId,
+                nickname: subUser.username,
                 login_time: currentTime,
-                sign: sign
+                sign,
             };
+            if (sessionUserId !== null && subUser.parent_user_id === sessionUserId &&
+                subAccountId && subAccountId[0] !== '0' && !/[^0-9]/.test(subAccountId)) {
+                return { ...item, gameLoginProof: signSdkGameLoginProof(subAccountId) };
+            }
+            return item;
         });
-
-        // 设置HTTP状态码为200
-        setResponseStatus(evt, 200);
-
-        return {
-            code: "1",  // 成功返回字符串"1"
-            data: subAccountList,
-            msg: "查询成功",
-            djq: null,
-            ttb: null,
-            discount: null,
-            flb: 0
-        };
-
-    } catch (e: any) {
-        logError('获取子账号列表异常', e);
-        setResponseStatus(evt, 200);
-        return {
-            code: "0",
-            data: [],
-            msg: e.message || "获取子账号列表失败",
-            djq: null,
-            ttb: null,
-            discount: null,
-            flb: 0
-        };
+        return respond('1', '查询成功', subAccountList);
+    } catch (error) {
+        logError('获取子账号列表异常');
+        const legacyMessage = legacyRequest && error instanceof Error ? error.message : '';
+        return respond('0', legacyMessage || '获取子账号列表失败');
     }
 };
 
@@ -1362,7 +1337,6 @@ export const getSubAccountList = async (evt: H3Event) => {
 export const addSubAccount = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("添加子账号请求:", body);
 
         const {
             z: username,        // 主用户名
@@ -1518,7 +1492,6 @@ export const addSubAccount = async (evt: H3Event) => {
 export const editSubAccountNickname = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
-        console.log("编辑子账号昵称请求:", body);
 
         const {
             username,           // 主用户名

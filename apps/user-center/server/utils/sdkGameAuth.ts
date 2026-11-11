@@ -61,12 +61,12 @@ export async function readSdkGameSession(token: string): Promise<number | null> 
     return Number.isSafeInteger(userId) && userId > 0 && String(userId) === stored ? userId : null;
 }
 
-export function signSdkGameTicket(subAccountId: string): string {
+function signSdkCredential(subAccountId: string, audience: 'op' | 'op-sdk-ownership'): string {
     const { environment, key } = requireSigner();
     const issuedAt = Math.floor(Date.now() / 1000);
     const claims = {
         iss: 'oph-sdk',
-        aud: 'op',
+        aud: audience,
         env: environment,
         sub: subAccountId,
         iat: issuedAt,
@@ -77,4 +77,12 @@ export function signSdkGameTicket(subAccountId: string): string {
     const message = `${JWS_HEADER}.${payload}`;
     const signature = sign('RSA-SHA256', Buffer.from(message), key).toString('base64url');
     return `${message}.${signature}`;
+}
+
+export function signSdkGameTicket(subAccountId: string): string {
+    return signSdkCredential(subAccountId, 'op');
+}
+
+export function signSdkGameLoginProof(subAccountId: string): string {
+    return signSdkCredential(subAccountId, 'op-sdk-ownership');
 }
