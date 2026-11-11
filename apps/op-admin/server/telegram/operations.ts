@@ -83,6 +83,9 @@ function settlementScope(admin: Admin) {
 }
 
 function settlementPages(report: SettlementReport) {
+    const agents = report.settlement_data.filter(row =>
+        row.yesterday_amount !== 0 || row.today_amount !== 0 || row.total_amount !== 0
+    );
     const totals = {
         yesterday_amount: 0,
         yesterday_settlement: 0,
@@ -92,7 +95,7 @@ function settlementPages(report: SettlementReport) {
         total_settlement: 0
     };
     const fields = Object.keys(totals) as (keyof typeof totals)[];
-    for (const row of report.settlement_data) {
+    for (const row of agents) {
         for (const field of fields) totals[field] += row[field];
     }
 
@@ -106,16 +109,15 @@ function settlementPages(report: SettlementReport) {
     );
 
     const blocks = [[
-        `管理员 ${report.current_admin.name}　级别 ${report.current_admin.level}　分成 ${report.current_admin.divide_rate ?? 0}%`,
-        `【汇总 · ${report.settlement_data.length} 个下级代理】`,
+        `管理员 ${report.current_admin.name}　级别 ${report.current_admin.level}`,
+        `【汇总 · ${agents.length} 个下级代理】`,
         ...formatTotals(totals)
     ].join('\n')];
-    if (!report.settlement_data.length) blocks.push('暂无下级代理结算数据。');
+    if (!agents.length) blocks.push('暂无产生流水的下级代理。');
 
-    for (const row of report.settlement_data) {
+    for (const row of agents) {
         blocks.push([
             `【${row.agent_name} · ${row.channel_code || '无渠道号'}】`,
-            `分成 ${row.divide_rate ?? 0}%`,
             ...formatTotals(row)
         ].join('\n'));
     }
