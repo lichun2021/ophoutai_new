@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { createRequire, Module } from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -15,161 +13,125 @@ const code = esbuild.transformSync(await fs.readFile(filename, 'utf8'), { loader
 const module = new Module(filename);
 module.paths = Module._nodeModulePaths(appRoot);
 module._compile(code, filename);
-const { normalizeServerlistConfig, buildServerlist, writeServerlistToPath } = module.exports;
-const now = Date.parse('2026-11-10T14:00:00+08:00');
-const config = {
+const {
+  applyWorldConfigFields, normalizeOpWorldConfig, normalizeServerlistConfig, toWorldConfigFields, WORLD_CONFIG_FIELDS,
+} = module.exports;
+
+const saved = {
   enabled: true, host: 'game.example.test', port: 8602, status: 1, visible: 1, maintain: 0,
-  opensAt: '2026-10-23T00:00', osType: 3, channelGroup: 'op3',
+  opensAt: '2026-10-23T00:00', osType: 3, channelGroup: 'op3', wssurl: 'wss://game.example.test/webSocketGate',
 };
-const row = (id = 111, changes = {}) => ({
-  id: 9000 + id, server_id: id, name: `区服${id}`, is_active: 1, serverlist_config: { ...config }, ...changes,
-});
-const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'op-serverlist-export-'));
-test.after(() => fs.rm(directory, { recursive: true, force: true }));
-let serial = 0;
-const targetPath = () => path.join(directory, `serverlist-${++serial}`);
+const world = {
+  _id: 111, n: 'OP38 Linux 隔离测试111', w: 1, v: 1, ostype: 3, fMaintain: 0,
+  start: [2026, 10, 23, 0, 0], game_db: 'gameDb', fighting_db: 'fightingDb',
+};
 
-test('drafts allow missing endpoint fields without inventing a channel group and unknown keys are stripped', () => {
-  const draft = normalizeServerlistConfig(null);
-  assert.deepEqual(draft, { enabled: false, host: '', port: null, status: 1, visible: 1, maintain: 0, opensAt: '', osType: 3, channelGroup: '' });
-  draft.host = 'changed';
-  assert.equal(normalizeServerlistConfig(undefined).host, '');
-  const normalized = normalizeServerlistConfig(JSON.stringify({ ...config, dbpass: 'must-not-export', interSecret: 'must-not-export', path: '/private/other' }));
-  assert.deepEqual(normalized, config);
-  for (const field of ['host', 'port', 'opensAt', 'channelGroup']) {
-    assert.throws(() => normalizeServerlistConfig({ ...config, [field]: field === 'port' ? null : '' }));
-  }
-  for (const value of ['not json', '[]', 12, true, { enabled: 'true' }]) assert.throws(() => normalizeServerlistConfig(value));
-});
-
-test('worldList projects only public fields, uses server_id rather than the database key, and sorts descending', () => {
-  const data = row(111, { dbpass: 'private-db-password', webhost: 'http://inter-only.example:8111' });
-  const payload = buildServerlist([data, row(112)], now);
-  assert.deepEqual(payload.worldList.map(world => world._id), [112, 111]);
-  assert.deepEqual(payload.worldList[1], {
-    _id: 111, w: 1, n: '区服111', start: Date.parse('2026-10-23T00:00:00+08:00') / 1000,
-    v: 1, ostype: 3, subChannelId: 'op3', game: { h: 'game.example.test', p: 8602 }, fMaintain: 0,
+test('legacy JSON preserves known configuration and allows previously published rows without static endpoint fields', () => {
+  const result = normalizeServerlistConfig(JSON.stringify({ enabled: true, unrelated: 'ignored' }));
+  assert.deepEqual(result, {
+    enabled: true, host: '', port: null, status: 1, visible: 1, maintain: 0,
+    opensAt: '', osType: 3, channelGroup: '',
   });
-  const serialized = JSON.stringify(payload);
-  assert.equal(serialized.includes('private-db-password'), false);
-  assert.equal(serialized.includes('inter-only.example'), false);
-  assert.equal(serialized.includes('9000'), false);
-  assert.deepEqual(data.serverlist_config, config);
-});
-
-test('Beijing local dates convert independently of process TZ and invalid calendar rollover is rejected', () => {
-  const original = process.env.TZ;
-  try {
-    for (const zone of ['UTC', 'America/New_York', 'Asia/Shanghai']) {
-      process.env.TZ = zone;
-      assert.equal(buildServerlist([row()], now).worldList[0].start, Date.parse('2026-10-23T00:00:00+08:00') / 1000);
-    }
-  } finally {
-    if (original === undefined) delete process.env.TZ;
-    else process.env.TZ = original;
+  const { wssurl, ...legacy } = saved;
+  assert.deepEqual(normalizeServerlistConfig(JSON.stringify({ ...legacy, wsurl: wssurl })), saved);
+  assert.deepEqual(normalizeServerlistConfig({ ...legacy, wss: wssurl }), saved);
+  assert.deepEqual(normalizeServerlistConfig({ ...saved, wsurl: 'old.invalid', wss: 'older.invalid' }), saved);
+  for (const value of ['not json', '[]', 12, true, { enabled: 'true' }]) {
+    assert.throws(() => normalizeServerlistConfig(value));
   }
-  assert.doesNotThrow(() => normalizeServerlistConfig({ ...config, opensAt: '2024-02-29T23:59:59' }));
-  for (const opensAt of ['2026-02-29T12:00', '2026-04-31T12:00', '2026-13-01T00:00', '2026-01-00T00:00', '2026-10-23T24:00', '2026-10-23T12:60', '2026-10-23T12:00:60', '2026-10-23T12:00Z']) {
-    assert.throws(() => normalizeServerlistConfig({ ...config, opensAt }));
+  for (const changes of [{ host: 'https://game.example.test' }, { port: 65536 }, { channelGroup: 'unknown' }]) {
+    assert.throws(() => normalizeServerlistConfig({ ...saved, ...changes }));
   }
 });
 
-test('inactive, draft and not-yet-open worlds are omitted, while hidden and maintained worlds retain their flags', () => {
-  const payload = buildServerlist([
-    row(110, { is_active: 0, serverlist_config: 'invalid legacy draft' }),
-    row(111),
-    row(112, { server_id: null, serverlist_config: null }),
-    row(113, { serverlist_config: { ...config, opensAt: '2026-11-10T14:00' } }),
-    row(114, { serverlist_config: { ...config, opensAt: '2027-01-01T00:00' } }),
-    row(115, { serverlist_config: { ...config, visible: 0, maintain: 1, status: 0 } }),
-  ], now);
-  assert.deepEqual(payload.worldList.map(world => world._id), [115, 111]);
-  assert.deepEqual([payload.worldList[0].v, payload.worldList[0].fMaintain, payload.worldList[0].w], [0, 1, 0]);
-  assert.throws(() => buildServerlist([row(114, { serverlist_config: { ...config, opensAt: '2027-01-01T00:00' } })], now), /没有已开服/);
-});
-
-test('invalid world IDs, duplicates, endpoints and enum values are rejected before publishing', () => {
-  for (const server_id of [null, 0, '01', -1, 1.5, 2147483648]) assert.throws(() => buildServerlist([row(111, { server_id })], now));
-  assert.throws(() => buildServerlist([row(), row()], now), /重复/);
-  for (const host of ['http://game.example.test', 'game.example.test:8602', 'name:password@game.example.test', 'game.example.test/path', 'game.example.test?token=private', 'game.example.test\\path', '999.1.1.1']) {
-    assert.throws(() => normalizeServerlistConfig({ ...config, host }));
-  }
-  for (const port of [0, 65536, 1.5, '8602']) assert.throws(() => normalizeServerlistConfig({ ...config, port }));
-  for (const changes of [{ status: 5 }, { status: -1 }, { visible: 2 }, { maintain: true }, { osType: 4 }, { channelGroup: 'unknown' }]) {
-    assert.throws(() => normalizeServerlistConfig({ ...config, ...changes }));
-  }
-  assert.doesNotThrow(() => normalizeServerlistConfig({ ...config, host: '[2001:db8::1]' }));
-});
-
-test('atomic replacement writes UTF-8 JSON without a BOM, ends in newline and sets public file mode', async () => {
-  const target = targetPath();
-  await fs.writeFile(target, 'previous complete file\n', { mode: 0o600 });
-  const oldFile = await fs.open(target, 'r');
-  try {
-    const result = await writeServerlistToPath(target, buildServerlist([row()], now));
-    const bytes = await fs.readFile(target);
-    assert.equal(bytes[0], 0x7b);
-    assert.equal(bytes.at(-1), 0x0a);
-    assert.equal(JSON.parse(bytes).worldList[0].n, '区服111');
-    assert.deepEqual(result, { path: target, count: 1, bytes: bytes.length });
-    assert.equal((await fs.stat(target)).mode & 0o777, 0o644);
-    assert.equal(await oldFile.readFile('utf8'), 'previous complete file\n');
-  } finally { await oldFile.close(); }
-});
-
-test('serialization reprojects the whitelist and invalid or empty exports never overwrite a previous file', async () => {
-  const target = targetPath();
-  const payload = buildServerlist([row()], now);
-  payload.privateSetting = 'private';
-  payload.worldList[0].dbpass = 'private';
-  payload.worldList[0].game.password = 'private';
-  await writeServerlistToPath(target, payload);
-  const before = await fs.readFile(target, 'utf8');
-  assert.equal(before.includes('private'), false);
-  for (const invalid of [{ worldList: [] }, { worldList: [{ ...payload.worldList[0], game: { h: 'http://bad', p: 1 } }] }]) {
-    await assert.rejects(writeServerlistToPath(target, invalid));
-    assert.equal(await fs.readFile(target, 'utf8'), before);
-  }
-  await assert.rejects(async () => writeServerlistToPath(target, buildServerlist([row(111, { serverlist_config: { ...config, opensAt: '2027-01-01T00:00' } })], now)));
-  assert.equal(await fs.readFile(target, 'utf8'), before);
-});
-
-test('failed rename preserves the old file and removes only its own temporary file', async () => {
-  const target = targetPath();
-  await fs.writeFile(target, 'previous\n');
-  const unrelated = path.join(directory, `.${path.basename(target)}.unrelated.tmp`);
-  await fs.writeFile(unrelated, 'other operation\n');
-  const original = fs.rename;
-  fs.rename = async (source, destination) => {
-    if (destination === target) {
-      assert.equal(JSON.parse(await fs.readFile(source, 'utf8')).worldList.length, 1);
-      const error = new Error('simulated rename failure');
-      error.code = 'EACCES';
-      throw error;
-    }
-    return original(source, destination);
+test('native OP fields round-trip through stored config, including zero flags and Beijing calendar values', () => {
+  const native = {
+    ...world, w: 0, v: 0, ostype: 2, fMaintain: 1, start: [2028, 2, 29, 3, 4],
+    wsurl: ' wss://game.example.test:8443/webSocketGate ',
   };
-  try {
-    await assert.rejects(writeServerlistToPath(target, buildServerlist([row()], now)), /simulated rename failure/);
-  } finally { fs.rename = original; }
-  assert.equal(await fs.readFile(target, 'utf8'), 'previous\n');
-  assert.equal(await fs.readFile(unrelated, 'utf8'), 'other operation\n');
-  assert.deepEqual((await fs.readdir(directory)).filter(name => name.startsWith(`.${path.basename(target)}.`)), [path.basename(unrelated)]);
+  const config = applyWorldConfigFields(JSON.stringify({ ...saved, status: 'bad legacy value' }), native);
+  assert.deepEqual(config, {
+    ...saved, status: 0, visible: 0, osType: 2, maintain: 1, opensAt: '2028-02-29T03:04',
+    game_db: 'gameDb', fighting_db: 'fightingDb', wssurl: native.wsurl.trim(),
+  });
+  assert.deepEqual(Object.keys(toWorldConfigFields(config)), WORLD_CONFIG_FIELDS);
+  const { _id, n, ...fields } = native;
+  assert.deepEqual(toWorldConfigFields(config), { ...fields, wsurl: native.wsurl.trim() });
+  assert.deepEqual(toWorldConfigFields({ ...config, opensAt: '2028-02-29T03:04:53' }).start, fields.start);
 });
 
-test('directories, symbolic links and special files are refused without touching their contents', async () => {
-  const payload = buildServerlist([row()], now);
-  const victim = targetPath();
-  await fs.writeFile(victim, 'unchanged\n');
-  const link = targetPath();
-  await fs.symlink(victim, link);
-  await assert.rejects(writeServerlistToPath(link, payload), /不是普通文件/);
-  assert.equal(await fs.readFile(victim, 'utf8'), 'unchanged\n');
-  assert.equal((await fs.lstat(link)).isSymbolicLink(), true);
-  const folder = targetPath();
-  await fs.mkdir(folder);
-  await assert.rejects(writeServerlistToPath(folder, payload), /不是普通文件/);
-  const fifo = targetPath();
-  execFileSync('mkfifo', [fifo]);
-  await assert.rejects(writeServerlistToPath(fifo, payload), /不是普通文件/);
+test('omitted fields keep saved values and explicit clear values remove them', () => {
+  const config = { ...saved, game_db: 'gameDb', fighting_db: 'fightingDb' };
+  assert.deepEqual(applyWorldConfigFields(config, { w: 3 }), { ...config, status: 3 });
+  const cleared = applyWorldConfigFields(config, {
+    start: null, wssurl: '', wsurl: 'older.example.test', wss: saved.wssurl, game_db: '', fighting_db: null,
+  });
+  assert.deepEqual(toWorldConfigFields(cleared), {
+    w: 1, v: 1, ostype: 3, fMaintain: 0, start: null, game_db: '', fighting_db: '', wsurl: '',
+  });
+  assert.equal(toWorldConfigFields(null).start, null);
+  assert.equal(Object.hasOwn(applyWorldConfigFields({}, { w: 0 }), 'wssurl'), false);
+});
+
+test('OP start requires five integers for a valid local calendar date', () => {
+  for (const start of [
+    1792684800, '2026-10-23T00:00', [2026, 10, 23, 0], [2026, 10, 23, 0, 0, 0],
+    [2026, 10, 23, 0, '0'], [2026, 10, 23, 0, 1.5], Array(5), [2026, 2, 29, 0, 0],
+    [2026, 4, 31, 0, 0], [2026, 13, 1, 0, 0], [2026, 1, 0, 0, 0], [2026, 10, 23, 24, 0],
+    [2026, 10, 23, 0, 60], [0, 1, 1, 0, 0], [10000, 1, 1, 0, 0],
+  ]) {
+    assert.throws(() => applyWorldConfigFields(saved, { start }), /开服时间/);
+  }
+});
+
+test('OP publishing requires numeric ID and flags, name, a five-part date, and database pool keys', () => {
+  for (const key of ['_id', 'n', 'w', 'v', 'ostype', 'fMaintain', 'start', 'game_db', 'fighting_db']) {
+    const incomplete = { ...world };
+    delete incomplete[key];
+    assert.throws(() => normalizeOpWorldConfig(incomplete));
+  }
+  for (const changes of [
+    { _id: '111' }, { _id: 0 }, { _id: 1.5 }, { _id: 2147483648 }, { n: ' ' },
+    { w: '1' }, { w: 3 }, { v: 2 }, { ostype: 4 }, { fMaintain: true }, { start: null },
+    { start: [2026, 10, 23, 9] },
+    { game_db: '' }, { fighting_db: null },
+  ]) {
+    assert.throws(() => normalizeOpWorldConfig({ ...world, ...changes }));
+  }
+  const result = normalizeOpWorldConfig({ ...world, unrelated: 'ignored' });
+  assert.deepEqual(result, world);
+  assert.notEqual(result.start, world.start);
+  assert.equal(Object.hasOwn(result, 'wsurl'), false);
+  assert.equal(normalizeOpWorldConfig({ ...world, wsurl: '' }).wsurl, '');
+  assert.deepEqual(normalizeOpWorldConfig({ ...world, wss: saved.wssurl }), { ...world, wsurl: saved.wssurl });
+  assert.deepEqual(normalizeOpWorldConfig({ ...world, wssurl: saved.wssurl, wsurl: 'old.invalid' }), { ...world, wsurl: saved.wssurl });
+});
+
+test('WSS normalizes a host or secure WebSocket URL and defaults the game path', () => {
+  for (const [wsurl, expected] of [
+    ['game.example.test', 'wss://game.example.test/webSocketGate'],
+    [' game.example.test:8443 ', 'wss://game.example.test:8443/webSocketGate'],
+    ['WSS://GAME.example.test:443/', 'wss://game.example.test/webSocketGate'],
+    ['wss://game.example.test', 'wss://game.example.test/webSocketGate'],
+    ['wss://game.example.test/game/custom', 'wss://game.example.test/game/custom'],
+    ['[2001:0DB8::1]:8443', 'wss://[2001:db8::1]:8443/webSocketGate'],
+  ]) {
+    assert.equal(normalizeOpWorldConfig({ ...world, wsurl }).wsurl, expected);
+    assert.equal(applyWorldConfigFields(saved, { wsurl }).wssurl, expected);
+    assert.equal(normalizeServerlistConfig({ ...saved, wssurl: wsurl }).wssurl, expected);
+  }
+  assert.equal(normalizeServerlistConfig({ wss: 'game.example.test' }).wssurl, saved.wssurl);
+});
+
+test('WSS rejects insecure schemes, malformed URLs, credentials, query, and hash', () => {
+  for (const wsurl of [
+    'ws://example.test', 'https://example.test', 'wss:example.test', 'wss:///example.test', 'wss://',
+    'wss://user:password@example.test', 'wss://@example.test', 'wss://example.test/webSocketGate?',
+    'wss://example.test/webSocketGate?uid=test', 'wss://example.test/webSocketGate#', 'wss://example.test/#frag',
+    'wss://example.test:65536', 'wss://game node.example.test', 'user:password@example.test',
+    'example.test:65536', 'example.test?uid=test', 'example.test#fragment', '//example.test',
+  ]) {
+    assert.throws(() => normalizeOpWorldConfig({ ...world, wsurl }), /WSS/);
+    assert.throws(() => applyWorldConfigFields(saved, { wsurl }), /WSS/);
+  }
 });

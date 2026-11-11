@@ -9,7 +9,7 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(path.join(appRoot, 'package.json'));
 const esbuild = require('esbuild');
 const { createApp, createError, defineEventHandler, toNodeListener } = require('h3');
-const fixture = { allowed: true, denialStatus: 401, writes: [], queries: 0, rows: [], files: [], fileError: null };
+const fixture = { allowed: true, denialStatus: 401, writes: [], queries: 0, rows: [], published: [], publishError: null };
 globalThis.__gmConfigFixture = fixture;
 const modelFixture = { rows: [], calls: [] };
 globalThis.__gmServerModelFixture = modelFixture;
@@ -19,23 +19,24 @@ async function loadController(filename) {
     './gm': 'import {createError} from "h3"; export async function requireGMPermission(){if(!globalThis.__gmConfigFixture.allowed)throw createError({statusCode:globalThis.__gmConfigFixture.denialStatus});}',
     '../model/gameServers': `
       export async function listAll(){globalThis.__gmConfigFixture.queries++;return globalThis.__gmConfigFixture.rows;}
+      export async function getById(id){const fixture=globalThis.__gmConfigFixture;fixture.queries++;return fixture.rows.find(row=>row.id===id)||null;}
       export async function createServer(value){globalThis.__gmConfigFixture.writes.push({action:'create',value});}
       export async function updateServer(id,value){globalThis.__gmConfigFixture.writes.push({action:'update',id,value});}
       export async function removeServer(id){globalThis.__gmConfigFixture.writes.push({action:'remove',id});}`,
     '../model/gmOperationLogs': 'export async function queryGmOperationLogs(){globalThis.__gmConfigFixture.queries++;return {rows:[],total:0,page:1,pageSize:20};}',
-    '../utils/serverlist': `
-      export {buildServerlist,normalizeServerlistConfig} from ${JSON.stringify(path.join(appRoot, 'server/utils/serverlist.ts'))};
-      export async function writeServerlist(payload){
-        if(globalThis.__gmConfigFixture.fileError)throw globalThis.__gmConfigFixture.fileError;
-        globalThis.__gmConfigFixture.files.push(payload);
-        return {path:'/data/serverlist',count:payload.worldList.length,bytes:Buffer.byteLength(JSON.stringify(payload))};
+    '../utils/opServerConfigPublish': `
+      import {createError} from "h3";
+      export async function publishOpServerConfig(value){
+        const fixture=globalThis.__gmConfigFixture;
+        if(fixture.publishError)throw createError({statusCode:fixture.publishError});
+        fixture.published.push(value);
       }`,
   };
   const bundle = await esbuild.build({
     entryPoints: [path.join(appRoot, 'server/controller', filename)],
     bundle: true, write: false, platform: 'node', format: 'cjs', external: ['h3'],
     plugins: [{ name: 'local-config-models', setup(build) {
-      build.onResolve({ filter: /^(\.\/gm|\.\.\/model\/(gameServers|gmOperationLogs)|\.\.\/utils\/serverlist)$/ }, args => ({ path: args.path, namespace: 'local-config-model' }));
+      build.onResolve({ filter: /^(\.\/gm|\.\.\/model\/(gameServers|gmOperationLogs)|\.\.\/utils\/opServerConfigPublish)$/ }, args => ({ path: args.path, namespace: 'local-config-model' }));
       build.onLoad({ filter: /.*/, namespace: 'local-config-model' }, args => ({ contents: mocks[args.path], loader: 'js', resolveDir: appRoot }));
     } }],
   });
@@ -66,8 +67,7 @@ const app = createApp();
 app.use(defineEventHandler(event => {
   const route = new URL(event.node.req.url, 'http://localhost').pathname.slice(1);
   if (route === 'logs') return logs.listLogs(event);
-  if (route === 'generate-serverlist') return config.generateServerlist(event);
-  if (['list', 'create', 'update', 'remove'].includes(route)) return config[route](event);
+  if (['list', 'create', 'update', 'remove', 'publish'].includes(route)) return config[route](event);
   throw createError({ statusCode: 404 });
 }));
 const server = createServer(toNodeListener(app));
@@ -79,19 +79,23 @@ test.after(async () => {
   delete globalThis.__gmConfigFixture;
   delete globalThis.__gmServerModelFixture;
 });
-test.beforeEach(() => { fixture.allowed = true; fixture.denialStatus = 401; fixture.writes = []; fixture.queries = 0; fixture.rows = []; fixture.files = []; fixture.fileError = null; modelFixture.rows = []; modelFixture.calls = []; });
+test.beforeEach(() => {
+  Object.assign(fixture, { allowed: true, denialStatus: 401, writes: [], queries: 0, rows: [], published: [], publishError: null });
+  Object.assign(modelFixture, { rows: [], calls: [] });
+});
 const post = (route, body) => fetch(url + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 test('server configuration and operation logs require the shared GM permission before database access', async () => {
   fixture.allowed = false;
   for (const route of ['/list', '/logs']) assert.equal((await fetch(url + route)).status, 401);
-  for (const route of ['/create', '/update?id=1', '/remove?id=1', '/generate-serverlist']) assert.equal((await post(route, {})).status, 401);
+  for (const route of ['/create', '/update?id=1', '/remove?id=1', '/publish']) assert.equal((await post(route, {})).status, 401);
   assert.equal(fixture.queries, 0);
   assert.equal(fixture.writes.length, 0);
-  assert.equal(fixture.files.length, 0);
+  assert.equal(fixture.published.length, 0);
   fixture.denialStatus = 403;
-  assert.equal((await post('/generate-serverlist', {})).status, 403);
+  assert.equal((await post('/publish', {})).status, 403);
   assert.equal(fixture.queries, 0);
+  assert.equal(fixture.published.length, 0);
 });
 
 test('new GM worlds need no MySQL credentials and do not activate old online/CDK operations', async () => {
@@ -123,49 +127,101 @@ test('client-list-only worlds accept an empty Inter URL and normalize JSON witho
   assert.equal(fixture.writes[2].value.serverlist_config, null);
 });
 
-test('enabled client-list configuration rejects missing fields before any database write', async () => {
-  for (const broken of [{ ...publicConfig, host: '' }, { ...publicConfig, port: null }, { ...publicConfig, opensAt: '' }, { ...publicConfig, channelGroup: '' }]) {
+test('invalid stored configuration fields are rejected before any database write', async () => {
+  for (const broken of [{ ...publicConfig, host: 'https://example.test' }, { ...publicConfig, port: -1 }, { ...publicConfig, opensAt: '2026-02-31T00:00' }, { ...publicConfig, channelGroup: 'invalid' }]) {
     assert.equal((await post('/create', { server_id: 111, name: '测试区服', serverlist_config: broken })).status, 400);
     assert.equal((await post('/update?id=1', { serverlist_config: broken })).status, 400);
   }
   assert.equal(fixture.writes.length, 0);
 });
 
-test('generation uses saved public fields, excludes legacy NULL records, and ignores request paths and rows', async () => {
-  fixture.rows = [
-    { server_id: 5, name: '旧记录', webhost: 'http://inter-only.example.test:8111', is_active: 1, serverlist_config: null },
-    { server_id: 111, name: '测试区服', webhost: 'http://private-inter.example.test:8111', dbuser: 'private-user', dbpass: 'private-db-password', is_active: 1, serverlist_config: publicConfig },
-  ];
-  const response = await post('/generate-serverlist?path=/tmp/unapproved', { path: '/etc/unapproved', rows: [] });
-  const result = await response.json();
-  assert.equal(result.success, true);
-  assert.equal(result.path, '/data/serverlist');
-  assert.equal(result.count, 1);
-  assert.ok(result.bytes > 0);
+const opWorld = {
+  _id: 111, n: '测试区服', w: 1, v: 1, ostype: 3, fMaintain: 0,
+  start: [2026, 10, 23, 0, 0], game_db: 'gameDb', fighting_db: 'fightingDb',
+};
+const wsurl = 'wss://game.example.test/webSocketGate';
+
+test('native OP aliases round trip alongside legacy IDs, flags, and MySQL fields', async () => {
+  const { status } = await post('/create', { ...opWorld, wssurl: wsurl, wsurl: 'other.invalid', bname: 'legacy_mysql_db' });
+  assert.equal(status, 200);
+  const saved = fixture.writes[0].value;
+  assert.equal(saved.server_id, 111);
+  assert.equal(saved.name, opWorld.n);
+  assert.equal(saved.bname, 'legacy_mysql_db');
+  assert.equal(saved.serverlist_config.opensAt, '2026-10-23T00:00');
+  assert.equal(saved.serverlist_config.wssurl, wsurl);
+  assert.equal(Object.hasOwn(saved.serverlist_config, 'wsurl'), false);
+  fixture.rows = [{ id: 9, ...saved }, { id: 10, server_id: null, name: '旧记录', serverlist_config: 'invalid' }];
+  const { data: [native, legacy] } = await (await fetch(url + '/list')).json();
+  for (const [key, value] of Object.entries({ ...opWorld, wsurl, wssurl: wsurl, id: 9, bname: 'legacy_mysql_db' })) {
+    assert.deepEqual(native[key], value);
+  }
+  assert.equal(legacy._id, null);
+  assert.equal(legacy.start, null);
+  assert.equal(native.serverlist_config.wssurl, wsurl);
+  assert.equal(native.serverlist_config.wsurl, wsurl);
+  assert.equal((await post('/update?id=9', { wss: '' })).status, 200);
+  assert.deepEqual(fixture.writes[1], {
+    action: 'update', id: 9,
+    value: { serverlist_config: { ...saved.serverlist_config, wssurl: '' } },
+  });
+  assert.equal((await post('/update?id=9', { wsurl: 'ws://game.example.test' })).status, 400);
+  assert.equal(fixture.writes.length, 2);
+});
+
+const publishableRow = {
+  id: 9, server_id: 111, name: opWorld.n,
+  webhost: 'http://private-inter.example.test:8111', dbpass: 'private-db-password',
+  serverlist_config: { ...publicConfig, opensAt: '2026-10-23T00:00', game_db: 'gameDb', fighting_db: 'fightingDb', wss: wsurl },
+};
+
+test('publish sends only the chosen saved world with native fields', async () => {
+  fixture.rows = [publishableRow, { ...publishableRow, id: 10, server_id: 112, name: '另一个区服' }];
+  const response = await post('/publish?id=10&url=https://example.test', {
+    id: 9, expectedServerId: 111, ...opWorld, _id: 112, n: '请求提供的名称', url: 'https://example.test',
+  });
+  assert.equal(response.status, 200);
+  const { success, id, server_id } = await response.json();
+  assert.deepEqual({ success, id, server_id }, { success: true, id: 9, server_id: 111 });
   assert.equal(fixture.queries, 1);
-  assert.equal(fixture.files.length, 1);
-  const payload = fixture.files[0];
-  assert.equal(payload.worldList[0]._id, 111);
-  assert.deepEqual(payload.worldList[0].game, { h: 'game.example.test', p: 8602 });
-  for (const sensitive of ['private-inter', 'private-user', 'private-db-password', 'inter-only']) assert.equal(JSON.stringify(payload).includes(sensitive), false);
+  assert.deepEqual(fixture.published, [{ ...opWorld, wsurl }]);
+  assert.equal(fixture.writes.length, 0);
 });
 
-test('no eligible rows or invalid stored config never reaches the file writer', async () => {
-  fixture.rows = [{ server_id: 5, name: '旧记录', is_active: 1, serverlist_config: null }];
-  assert.equal((await (await post('/generate-serverlist', {})).json()).success, false);
-  fixture.rows = [{ server_id: 111, name: '错误记录', is_active: 1, serverlist_config: { ...publicConfig, host: '' } }];
-  assert.equal((await (await post('/generate-serverlist', {})).json()).success, false);
-  assert.equal(fixture.files.length, 0);
+test('legacy stored address reads as wssurl and a canonical clear publishes only the native name', async () => {
+  fixture.rows = [publishableRow];
+  const { data: [legacy] } = await (await fetch(url + '/list')).json();
+  assert.equal(legacy.wssurl, wsurl);
+  assert.equal(legacy.serverlist_config.wssurl, wsurl);
+
+  assert.equal((await post('/update?id=9', { wssurl: '', wsurl })).status, 200);
+  fixture.rows = [{ ...publishableRow, serverlist_config: fixture.writes[0].value.serverlist_config }];
+  assert.equal((await post('/publish', { id: 9, expectedServerId: 111 })).status, 200);
+  assert.deepEqual(fixture.published, [{ ...opWorld, wsurl: '' }]);
 });
 
-test('file-system failure is reported without leaking raw database or operating-system details', async () => {
-  fixture.rows = [{ server_id: 111, name: '测试区服', is_active: 1, serverlist_config: publicConfig }];
-  fixture.fileError = Object.assign(new Error('private path and connection detail'), { code: 'EACCES' });
-  const result = await (await post('/generate-serverlist', {})).json();
-  assert.equal(result.success, false);
-  assert.match(result.message, /\/data\/serverlist/);
-  assert.equal(result.message.includes('private'), false);
-  assert.equal(fixture.files.length, 0);
+test('publish validates the saved row and propagates upstream errors', async () => {
+  const request = { id: 9, expectedServerId: 111 };
+  assert.equal((await post('/publish', { id: 1.5 })).status, 400);
+  assert.equal(fixture.queries, 0);
+  assert.equal((await post('/publish', request)).status, 404);
+  for (const serverlist_config of [null, { ...publishableRow.serverlist_config, opensAt: '' }, { ...publishableRow.serverlist_config, game_db: '' }]) {
+    fixture.rows = [{ ...publishableRow, serverlist_config }];
+    assert.equal((await post('/publish', request)).status, 400);
+  }
+  fixture.rows = [publishableRow];
+  assert.equal((await post('/publish', { ...request, expectedServerId: 112 })).status, 409);
+  fixture.publishError = 503;
+  assert.equal((await post('/publish', request)).status, 503);
+  assert.equal(fixture.published.length, 0);
+  assert.equal(fixture.writes.length, 0);
+});
+
+test('publishing an older configuration omits WSS unless it was saved explicitly', async () => {
+  const { wss: _omitted, ...legacyConfig } = publishableRow.serverlist_config;
+  fixture.rows = [{ ...publishableRow, serverlist_config: legacyConfig }];
+  assert.equal((await post('/publish', { id: 9, expectedServerId: 111 })).status, 200);
+  assert.deepEqual(fixture.published, [opWorld]);
 });
 
 test('server model hydrates JSON strings and objects while preserving legacy NULL values', async () => {
@@ -173,9 +229,10 @@ test('server model hydrates JSON strings and objects while preserving legacy NUL
     { id: 1, serverlist_config: JSON.stringify(publicConfig) },
     { id: 2, serverlist_config: publicConfig },
     { id: 3, serverlist_config: null },
+    { id: 4, serverlist_config: 'malformed' },
   ];
   const rows = await serverModel.listAll();
-  assert.deepEqual(rows.map(row => row.serverlist_config), [publicConfig, publicConfig, null]);
+  assert.deepEqual(rows.map(row => row.serverlist_config), [publicConfig, publicConfig, null, 'malformed']);
   assert.match(modelFixture.calls[0].query, /serverlist_config/);
 });
 

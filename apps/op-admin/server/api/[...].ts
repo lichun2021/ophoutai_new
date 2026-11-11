@@ -1285,7 +1285,7 @@ router.get('/admin/servers', adminWrap(ServerCfgCtrl.list, '服务器配置列�
 router.post('/admin/servers/create', adminWrap(ServerCfgCtrl.create, '服务器配置创建'));
 router.post('/admin/servers/update', adminWrap(ServerCfgCtrl.update, '服务器配置更新'));
 router.post('/admin/servers/remove', adminWrap(ServerCfgCtrl.remove, '服务器配置删除'));
-router.post('/admin/servers/generate-serverlist', adminWrap(ServerCfgCtrl.generateServerlist, '生成客户端服务器列表'));
+router.post('/admin/servers/publish', adminWrap(ServerCfgCtrl.publish, '向 OP 发布区服配置'));
 
 /**
  * 获取游戏服状态（注册数/在线数）

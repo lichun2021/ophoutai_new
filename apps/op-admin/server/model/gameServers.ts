@@ -11,7 +11,7 @@ export interface GameServerConfig {
   bname: string;       // 数据库名，例如 game_1
   dbuser: string;      // MySQL 用户
   dbpass: string;      // MySQL 密码
-  serverlist_config?: ServerlistConfig | string | null; // 客户端公开列表配置，与运营接口地址独立
+  serverlist_config?: ServerlistConfig | string | null; // OP 区服配置，与运营接口地址独立
   is_active?: number;  // 1=启用 0=停用
   allow_cdk_redeem?: number;  // 1=允许CDK领取 0=不允许
   count_online?: number; // 1=计入在线统计 0=忽略（合服共用接口时可关闭）
@@ -20,11 +20,11 @@ export interface GameServerConfig {
 }
 
 function hydrateServer(row: any): GameServerConfig {
-  const value = row.serverlist_config;
-  return {
-    ...row,
-    serverlist_config: typeof value === 'string' ? JSON.parse(value) : value ?? null,
-  } as GameServerConfig;
+  let value = row.serverlist_config;
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { /* 保留旧值供管理端修复 */ }
+  }
+  return { ...row, serverlist_config: value ?? null } as GameServerConfig;
 }
 
 function serializeServerlistConfig(value: GameServerConfig['serverlist_config']): string | null {

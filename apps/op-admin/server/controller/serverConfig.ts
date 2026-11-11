@@ -1,7 +1,10 @@
 import { H3Event, readBody, getQuery, createError } from 'h3';
-import { listAll, createServer, updateServer, removeServer } from '../model/gameServers';
+import { listAll, getById, createServer, updateServer, removeServer } from '../model/gameServers';
 import { requireGMPermission } from './gm';
-import { buildServerlist, normalizeServerlistConfig, writeServerlist } from '../utils/serverlist';
+import { publishOpServerConfig } from '../utils/opServerConfigPublish';
+import { applyWorldConfigFields, normalizeOpWorldConfig, normalizeServerlistConfig, toWorldConfigFields, WORLD_CONFIG_FIELDS } from '../utils/serverlist';
+
+const WORLD_CONFIG_INPUT_FIELDS = [...WORLD_CONFIG_FIELDS, 'wssurl', 'wss'];
 
 const worldId = (value: unknown): number => {
   const raw = String(value ?? '').trim();
@@ -47,11 +50,44 @@ const clientListConfig = (value: unknown) => {
   }
 };
 
+const worldFieldsConfig = (base: unknown, input: Record<string, unknown>) => {
+  try {
+    return applyWorldConfigFields(base, input);
+  } catch (error) {
+    throw createError({ statusCode: 400, message: error instanceof Error ? error.message : '区服配置无效' });
+  }
+};
+
+const listWorldFields = (value: unknown) => {
+  try {
+    return toWorldConfigFields(value);
+  } catch {
+    return toWorldConfigFields(null);
+  }
+};
+
 export const list = async (evt: H3Event) => {
   await requireGMPermission(evt);
   try {
     const rows = await listAll();
-    return { success: true, data: rows };
+    return {
+      success: true,
+      data: rows.map(row => {
+        const stored = row.serverlist_config;
+        const fields = listWorldFields(stored);
+        const wssurl = fields.wsurl;
+        return {
+          ...row,
+          _id: row.server_id ?? null,
+          n: row.name,
+          serverlist_config: wssurl !== undefined && stored && typeof stored === 'object'
+            ? { ...stored, wssurl, wsurl: wssurl }
+            : stored,
+          ...fields,
+          wssurl,
+        };
+      }),
+    };
   } catch (e: any) {
     return { success: false, message: e?.message || '获取失败' };
   }
@@ -59,15 +95,17 @@ export const list = async (evt: H3Event) => {
 
 export const create = async (evt: H3Event) => {
   await requireGMPermission(evt);
-  const body = await readBody(evt);
-  const { server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, count_online, allow_cdk_redeem, serverlist_config } = body || {};
+  const body = (await readBody(evt)) || {};
+  const { server_id = body._id, name = body.n, webhost, dbip, bname, dbuser, dbpass, is_active, count_online, allow_cdk_redeem, serverlist_config } = body;
   const parsedServerId = worldId(server_id);
   const parsedName = serverName(name);
   const parsedWebhost = interfaceUrl(webhost);
   const active = flag(is_active, 1);
   const cdk = flag(allow_cdk_redeem, 0);
   const online = flag(count_online, 0);
-  const clientConfig = serverlist_config == null ? null : clientListConfig(serverlist_config);
+  const clientConfig = WORLD_CONFIG_INPUT_FIELDS.some(field => Object.hasOwn(body, field))
+    ? worldFieldsConfig(serverlist_config, body)
+    : serverlist_config == null ? null : clientListConfig(serverlist_config);
   try {
     await createServer({
       server_id: parsedServerId,
@@ -92,19 +130,33 @@ export const update = async (evt: H3Event) => {
   await requireGMPermission(evt);
   const q = getQuery(evt);
   const id = worldId(q.id);
-  const body = await readBody(evt);
-  const payload = { ...(body || {}) };
+  const body = (await readBody(evt)) || {};
+  const { _id, n, ...payload } = body;
+  if (payload.server_id === undefined && _id !== undefined) payload.server_id = _id;
+  if (payload.name === undefined && n !== undefined) payload.name = n;
   if (payload.server_id !== undefined) payload.server_id = worldId(payload.server_id);
   if (payload.name !== undefined) payload.name = serverName(payload.name);
   if (payload.webhost !== undefined) payload.webhost = interfaceUrl(payload.webhost);
   if (payload.is_active !== undefined) payload.is_active = flag(payload.is_active, 1);
   if (payload.allow_cdk_redeem !== undefined) payload.allow_cdk_redeem = flag(payload.allow_cdk_redeem, 0);
   if (payload.count_online !== undefined) payload.count_online = flag(payload.count_online, 0);
-  if (payload.serverlist_config !== undefined) payload.serverlist_config = payload.serverlist_config === null ? null : clientListConfig(payload.serverlist_config);
   try {
+    if (WORLD_CONFIG_INPUT_FIELDS.some(field => Object.hasOwn(body, field))) {
+      let config = payload.serverlist_config;
+      if (config === undefined) {
+        const row = await getById(id);
+        if (!row) throw createError({ statusCode: 404, message: '区服不存在' });
+        config = row.serverlist_config;
+      }
+      payload.serverlist_config = worldFieldsConfig(config, body);
+      for (const field of WORLD_CONFIG_INPUT_FIELDS) delete payload[field];
+    } else if (payload.serverlist_config != null) {
+      payload.serverlist_config = clientListConfig(payload.serverlist_config);
+    }
     await updateServer(id, payload);
     return { success: true };
   } catch (e: any) {
+    if (e?.statusCode === 400 || e?.statusCode === 404) throw e;
     return { success: false, message: e?.message || '更新失败' };
   }
 };
@@ -121,23 +173,24 @@ export const remove = async (evt: H3Event) => {
   }
 };
 
-export const generateServerlist = async (evt: H3Event) => {
+export const publish = async (evt: H3Event) => {
   await requireGMPermission(evt);
-  try {
-    // Only saved server records are used. Request-provided paths or rows are ignored.
-    const rows = await listAll();
-    const payload = buildServerlist(rows);
-    const result = await writeServerlist(payload);
-    return { success: true, ...result, message: `已生成 /data/serverlist，共 ${result.count} 个区服` };
-  } catch (error: any) {
-    if (typeof error?.code === 'string') {
-      const message = error.code.startsWith('ER_')
-        ? '读取服务器列表配置失败，请确认已执行 serverlist_config 字段迁移'
-        : '无法写入 /data/serverlist，请检查目录权限后重试';
-      return { success: false, message };
-    }
-    return { success: false, message: error?.message || '生成服务器列表失败' };
+  const body = await readBody(evt);
+  const id = worldId(body?.id);
+  const expectedServerId = worldId(body?.expectedServerId);
+  const row = await getById(id);
+  if (!row) throw createError({ statusCode: 404, message: '区服不存在' });
+  if (row.server_id !== expectedServerId) {
+    throw createError({ statusCode: 409, message: '游戏区服 ID 已变更，请刷新列表后重新发布' });
   }
+  let config;
+  try {
+    config = normalizeOpWorldConfig({ _id: row.server_id, n: row.name, ...toWorldConfigFields(row.serverlist_config) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '字段无效';
+    throw createError({ statusCode: 400, message: `请完善并保存区服配置，${message}` });
+  }
+  await publishOpServerConfig(config);
+  return { success: true, id, server_id: config._id, message: `已向 OP 发布区服 ${config._id}` };
 };
-
 
