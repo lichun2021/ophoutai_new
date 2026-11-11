@@ -65,13 +65,12 @@ definePageMeta({
 
 const router = useRouter();
 const authStore = useAuthStore();
+let redirectTimer;
 
 // 退出登录并返回管理员登录页
 const logoutToAdminLogin = () => {
-  // 清除登录状态
-  authStore.logOut();
-  // 跳转到管理员登录页
-  router.push('/admin/login');
+  clearTimeout(redirectTimer);
+  return authStore.logOut('/admin/login');
 };
 
 // 页面加载时检查登录状态并重定向
@@ -80,7 +79,7 @@ onMounted(() => {
   authStore.init();
   
   // 添加最小显示时间，避免闪屏
-  setTimeout(() => {
+  redirectTimer = setTimeout(() => {
     // 检查登录状态并重定向
     if (authStore.isLoggedIn) {
       if (authStore.isUser) {
@@ -96,6 +95,8 @@ onMounted(() => {
     }
   }, 1500); // 最少显示1.5秒，让用户看到美化的界面
 });
+
+onUnmounted(() => clearTimeout(redirectTimer));
 </script>
 
 <style scoped>

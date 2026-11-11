@@ -1,5 +1,6 @@
 import { sql } from '../db';
 import { getRedisCluster } from '../utils/redis-cluster';
+import type { ServerlistConfig } from '../utils/serverlist';
 
 export interface GameServerConfig {
   id?: number;
@@ -10,6 +11,7 @@ export interface GameServerConfig {
   bname: string;       // 数据库名，例如 game_1
   dbuser: string;      // MySQL 用户
   dbpass: string;      // MySQL 密码
+  serverlist_config?: ServerlistConfig | string | null; // 客户端公开列表配置，与运营接口地址独立
   is_active?: number;  // 1=启用 0=停用
   allow_cdk_redeem?: number;  // 1=允许CDK领取 0=不允许
   count_online?: number; // 1=计入在线统计 0=忽略（合服共用接口时可关闭）
@@ -17,58 +19,71 @@ export interface GameServerConfig {
   updated_at?: string;
 }
 
+function hydrateServer(row: any): GameServerConfig {
+  const value = row.serverlist_config;
+  return {
+    ...row,
+    serverlist_config: typeof value === 'string' ? JSON.parse(value) : value ?? null,
+  } as GameServerConfig;
+}
+
+function serializeServerlistConfig(value: GameServerConfig['serverlist_config']): string | null {
+  if (value == null) return null;
+  return JSON.stringify(typeof value === 'string' ? JSON.parse(value) : value);
+}
+
 export async function listAll(): Promise<GameServerConfig[]> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers ORDER BY id ASC'
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers ORDER BY id ASC'
   }) as any[];
-  return rows as GameServerConfig[];
+  return rows.map(hydrateServer);
 }
 
 export async function listActive(): Promise<GameServerConfig[]> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE is_active = 1 ORDER BY id ASC'
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE is_active = 1 ORDER BY id ASC'
   }) as any[];
-  return rows as GameServerConfig[];
+  return rows.map(hydrateServer);
 }
 
 // 获取允许CDK领取的活跃服务器
 export async function listCdkRedeemable(): Promise<GameServerConfig[]> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, created_at, updated_at FROM GameServers WHERE is_active = 1 AND allow_cdk_redeem = 1 ORDER BY id ASC'
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, created_at, updated_at FROM GameServers WHERE is_active = 1 AND allow_cdk_redeem = 1 ORDER BY id ASC'
   }) as any[];
-  return rows as GameServerConfig[];
+  return rows.map(hydrateServer);
 }
 
 export async function getById(id: number): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE id = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE id = ? LIMIT 1',
     values: [id]
   }) as any[];
-  return rows.length ? rows[0] as GameServerConfig : null;
+  return rows.length ? hydrateServer(rows[0]) : null;
 }
 
 export async function getByBName(bname: string): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE bname = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE bname = ? LIMIT 1',
     values: [bname]
   }) as any[];
-  return rows.length ? rows[0] as GameServerConfig : null;
+  return rows.length ? hydrateServer(rows[0]) : null;
 }
 
 export async function getByName(name: string): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE name = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE name = ? LIMIT 1',
     values: [name]
   }) as any[];
-  return rows.length ? rows[0] as GameServerConfig : null;
+  return rows.length ? hydrateServer(rows[0]) : null;
 }
 
 export async function getByServerId(serverId: number): Promise<GameServerConfig | null> {
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE server_id = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE server_id = ? LIMIT 1',
     values: [serverId]
   }) as any[];
-  return rows.length ? rows[0] as GameServerConfig : null;
+  return rows.length ? hydrateServer(rows[0]) : null;
 }
 
 // 兼容使用 server_id 或 bname 进行查找
@@ -99,7 +114,7 @@ export async function getByWorldId(worldId: number): Promise<GameServerConfig | 
     
     if (cachedData) {
       console.log(`[getByWorldId] Redis 缓存命中: world_id=${worldId}`);
-      return JSON.parse(cachedData) as GameServerConfig;
+      return hydrateServer(JSON.parse(cachedData));
     }
     
     console.log(`[getByWorldId] Redis 缓存未命中，查询数据库: world_id=${worldId}`);
@@ -109,12 +124,12 @@ export async function getByWorldId(worldId: number): Promise<GameServerConfig | 
   
   // 2. Redis 没有，从数据库查询
   const rows = await sql({
-    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE server_id = ? OR bname = ? OR name = ? LIMIT 1',
+    query: 'SELECT id, server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online, created_at, updated_at FROM GameServers WHERE server_id = ? OR bname = ? OR name = ? LIMIT 1',
     values: [worldId, `game_${worldId}`, `game_${worldId}`]
   }) as any[];
   
   if (rows.length > 0) {
-    const serverConfig = rows[0] as GameServerConfig;
+    const serverConfig = hydrateServer(rows[0]);
     
     // 3. 存入 Redis 缓存，设置 1 小时过期
     try {
@@ -135,8 +150,8 @@ export async function getByWorldId(worldId: number): Promise<GameServerConfig | 
 
 export async function createServer(cfg: Omit<GameServerConfig, 'id' | 'created_at' | 'updated_at'>): Promise<any> {
   return await sql({
-    query: 'INSERT INTO GameServers (server_id, name, webhost, dbip, bname, dbuser, dbpass, is_active, allow_cdk_redeem, count_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    values: [cfg.server_id ?? null, cfg.name, cfg.webhost, cfg.dbip, cfg.bname, cfg.dbuser, cfg.dbpass, cfg.is_active ?? 1, cfg.allow_cdk_redeem ?? 1, cfg.count_online ?? 1]
+    query: 'INSERT INTO GameServers (server_id, name, webhost, dbip, bname, dbuser, dbpass, serverlist_config, is_active, allow_cdk_redeem, count_online) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    values: [cfg.server_id ?? null, cfg.name, cfg.webhost, cfg.dbip, cfg.bname, cfg.dbuser, cfg.dbpass, serializeServerlistConfig(cfg.serverlist_config), cfg.is_active ?? 1, cfg.allow_cdk_redeem ?? 1, cfg.count_online ?? 1]
   });
 }
 
@@ -150,6 +165,7 @@ export async function updateServer(id: number, cfg: Partial<Omit<GameServerConfi
   if (cfg.bname !== undefined) { fields.push('bname = ?'); values.push(cfg.bname); }
   if (cfg.dbuser !== undefined) { fields.push('dbuser = ?'); values.push(cfg.dbuser); }
   if (cfg.dbpass !== undefined) { fields.push('dbpass = ?'); values.push(cfg.dbpass); }
+  if (cfg.serverlist_config !== undefined) { fields.push('serverlist_config = ?'); values.push(serializeServerlistConfig(cfg.serverlist_config)); }
   if (cfg.is_active !== undefined) { fields.push('is_active = ?'); values.push(cfg.is_active); }
   if (cfg.allow_cdk_redeem !== undefined) { fields.push('allow_cdk_redeem = ?'); values.push(cfg.allow_cdk_redeem); }
   if (cfg.count_online !== undefined) { fields.push('count_online = ?'); values.push(cfg.count_online); }

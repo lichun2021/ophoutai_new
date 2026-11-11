@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================
-# 三套应用一键构建 + 部署脚本 7wAvqMlFsNY3vT87
+# 三套应用一键构建 + 部署脚本
 # 用法:
 #   ./deploy.sh              # 部署全部三个应用
 #   ./deploy.sh user         # 只部署 user-center
@@ -11,9 +11,10 @@
 # =====================================================
 
 # ============ 服务器配置（按需修改）============
-SERVER_IP="27.124.40.42"
+SERVER_IP="118.107.9.181"
 USERNAME="root"
-SSH_PORT="52022"
+SSH_PORT="22"
+SSH_KEY="${HOME}/.ssh/ophoutai_op_ed25519"
 
 # 各应用在服务器上的路径和重启脚本
 USER_REMOTE_PATH="/data/user-center"
@@ -30,8 +31,8 @@ OP_PM2_NAME="op-admin"
 
 # SSH/SCP 公共选项：保活 + 连接超时
 # ssh 用小写 -p 指定端口，scp 用大写 -P
-SSH_OPTS="-p $SSH_PORT -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15"
-SCP_OPTS="-P $SSH_PORT -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15"
+SSH_OPTS=(-p "$SSH_PORT" -i "$SSH_KEY" -o IdentitiesOnly=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15)
+SCP_OPTS=(-P "$SSH_PORT" -i "$SSH_KEY" -o IdentitiesOnly=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=15)
 # =================================================
 
 # 颜色输出
@@ -53,7 +54,7 @@ log_step()    { echo -e "\n${BOLD}${CYAN}>>> $1${NC}"; }
 START_TIME=$(date +%s)
 
 # =====================================================
-# 解析参数 → 确定要部署哪些应用 7wAvqMlFsNY3vT87
+# 解析参数 → 确定要部署哪些应用
 # =====================================================
 DEPLOY_USER=false
 DEPLOY_AGENT=false
@@ -155,8 +156,8 @@ deploy_app() {
   # --- 步骤4: 上传 ---
   log_info "[3/6] 上传 $ZIP_NAME 到服务器..."
   # 先确保远程目录存在
-  ssh $SSH_OPTS $USERNAME@$SERVER_IP "mkdir -p $REMOTE_PATH"
-  scp $SCP_OPTS "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
+  ssh "${SSH_OPTS[@]}" "$USERNAME@$SERVER_IP" "mkdir -p $REMOTE_PATH"
+  scp "${SCP_OPTS[@]}" "$ZIP_NAME" "$USERNAME@$SERVER_IP:$REMOTE_PATH/"
   if [ $? -ne 0 ]; then
     log_error "上传失败"
     cd - > /dev/null
@@ -167,7 +168,7 @@ deploy_app() {
   # --- 步骤5: 服务器上解压 ---
   log_info "[4/6] 服务器解压..."
   # unzip：必须把选项放在压缩包名前；-o 与 -q 合并为 -oq；勿在包名后再写 -q（否则会被当成「要解压的文件名」）
-  ssh $SSH_OPTS $USERNAME@$SERVER_IP "
+  ssh "${SSH_OPTS[@]}" "$USERNAME@$SERVER_IP" "
     cd $REMOTE_PATH &&
     find . -maxdepth 1 -mindepth 1 ! -name '$ZIP_NAME' ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true;
     unzip -oq $ZIP_NAME -d . &&
@@ -184,18 +185,18 @@ deploy_app() {
   #   - server/node_modules 不存在时自动安装（首次部署 / 手动清理后）
   #   - 传入 --install 时强制重装（新增 npm 包时用）
   #   - grammy 无论何时都额外确保安装（因为是 external 依赖，Nitro 不会打包它）
-  if ssh $SSH_OPTS $USERNAME@$SERVER_IP "[ -f $REMOTE_PATH/server/package.json ]"; then
+  if ssh "${SSH_OPTS[@]}" "$USERNAME@$SERVER_IP" "[ -f $REMOTE_PATH/server/package.json ]"; then
     NEED_INSTALL=false
     if [ "$INSTALL_DEPS" = true ]; then
       NEED_INSTALL=true
       log_info "[4.5/6] --install 强制重装依赖 (server/)..."
-    elif ssh $SSH_OPTS $USERNAME@$SERVER_IP "[ ! -d $REMOTE_PATH/server/node_modules ]"; then
+    elif ssh "${SSH_OPTS[@]}" "$USERNAME@$SERVER_IP" "[ ! -d $REMOTE_PATH/server/node_modules ]"; then
       NEED_INSTALL=true
       log_info "[4.5/6] server/node_modules 不存在，自动安装依赖..."
     fi
 
     if [ "$NEED_INSTALL" = true ]; then
-      ssh $SSH_OPTS $USERNAME@$SERVER_IP "
+      ssh "${SSH_OPTS[@]}" "$USERNAME@$SERVER_IP" "
         cd $REMOTE_PATH/server &&
         npm install --omit=dev --ignore-scripts 2>&1 | tail -10
       "
@@ -208,7 +209,7 @@ deploy_app() {
 
     # grammy 是 external 依赖（Nitro 不打包），每次部署后在当前 SSH 中异步安装，不阻塞 PM2 重启
     log_info "[4.6/6] 确保 grammy 已安装 (server/)，后台安装..."
-    ssh $SSH_OPTS $USERNAME@$SERVER_IP "
+    ssh "${SSH_OPTS[@]}" "$USERNAME@$SERVER_IP" "
       cd $REMOTE_PATH/server &&
       node -e \"require('grammy')\" 2>/dev/null ||
       nohup npm install grammy --save --ignore-scripts >/tmp/grammy-install.log 2>&1 &
@@ -220,7 +221,7 @@ deploy_app() {
 
   # --- 步骤6: 重启服务 ---
   log_info "[5/6] 重启 PM2 服务 ($PM2_NAME)..."
-  ssh $SSH_OPTS $USERNAME@$SERVER_IP "
+  ssh "${SSH_OPTS[@]}" "$USERNAME@$SERVER_IP" "
     if command -v pm2 &>/dev/null; then
       if pm2 list | grep -q '$PM2_NAME'; then
         pm2 restart $PM2_NAME

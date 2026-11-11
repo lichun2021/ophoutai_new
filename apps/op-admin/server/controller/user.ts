@@ -15,6 +15,7 @@ import { sdkMessages } from '../utils/i18n';
 import { selectGameIpByAmount } from '../utils/gameIp';
 import { getClientIp, checkGlobalBlacklist, checkLoginLimits, recordLoginFailure, recordLoginSuccess } from '../utils/loginRateLimit';
 import { generateUserLoginUrl } from './payment';
+import { parseUserAutoLoginId, verifyUserAutoLoginToken } from '@quantum/shared/server/utils/userAutoLogin';
 function getGameIp(amount?: number): string {
     const value = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
     return selectGameIpByAmount(value);
@@ -654,7 +655,7 @@ export const userLogin = async (evt: H3Event) => {
 
     try {
         const body = await readBody(evt);
-        console.log("用户登录请求:", body);
+        console.log("用户登录请求:", { username: body?.username || '', hasToken: !!body?.t });
 
         const { username, password, t } = body;
         usernameToLog = username || '';
@@ -697,34 +698,45 @@ export const userLogin = async (evt: H3Event) => {
                 values: [username, password],
             }) as any[];
         } else if (t) {
-            // Steam token 保留至到期；普通及旧版 token 原子读取并删除
-            let userIdStr: string | null = null;
-            try {
-                const redis = getRedisCluster();
-                userIdStr = await redis.eval(`
-                    local value = redis.call('GET', KEYS[1])
-                    if not value then return nil end
-                    if string.match(value, '^steam:%d+$') then
-                        return string.sub(value, 7)
-                    end
-                    redis.call('DEL', KEYS[1])
-                    return value
-                `, 1, `autologin:${t}`) as string | null;
-            } catch (redisErr) {
-                console.error('autologin token 校验失败 Redis 异常:', redisErr);
-                throw createError({ status: 500, message: '登录服务暂不可用' });
-            }
-            if (!userIdStr) {
-                throw createError({ status: 401, message: '登录链接已失效或已被使用' });
-            }
-            const userIdNum = parseInt(String(userIdStr), 10);
-            if (!Number.isFinite(userIdNum) || userIdNum <= 0) {
-                throw createError({ status: 401, message: '登录链接无效' });
+            const longLivedUserId = parseUserAutoLoginId(t);
+            let userIdForToken = longLivedUserId;
+            if (userIdForToken === null) {
+                if (typeof t !== 'string' || !/^[a-f0-9]{64}$/.test(t)) {
+                    throw createError({ status: 401, message: '登录链接无效' });
+                }
+                // 旧 Steam 令牌保留至到期，其他旧令牌原子读取并删除。
+                let userIdStr: string | null;
+                try {
+                    const redis = getRedisCluster();
+                    userIdStr = await redis.eval(`
+                        local value = redis.call('GET', KEYS[1])
+                        if not value then return nil end
+                        if string.match(value, '^steam:%d+$') then
+                            return string.sub(value, 7)
+                        end
+                        redis.call('DEL', KEYS[1])
+                        return value
+                    `, 1, `autologin:${t}`) as string | null;
+                } catch (redisErr) {
+                    console.error('autologin token 校验失败 Redis 异常:', redisErr);
+                    throw createError({ status: 500, message: '登录服务暂不可用' });
+                }
+                if (!userIdStr) {
+                    throw createError({ status: 401, message: '登录链接已失效或已被使用' });
+                }
+                const legacyUserId = Number(userIdStr);
+                if (!/^[1-9]\d*$/.test(userIdStr) || !Number.isSafeInteger(legacyUserId)) {
+                    throw createError({ status: 401, message: '登录链接无效' });
+                }
+                userIdForToken = legacyUserId;
             }
             user = await sql({
                 query: 'SELECT * FROM Users WHERE id = ? LIMIT 1',
-                values: [userIdNum],
+                values: [userIdForToken],
             }) as any[];
+            if (longLivedUserId !== null && (!user[0] || !verifyUserAutoLoginToken(t, user[0]))) {
+                throw createError({ status: 401, message: '登录链接无效' });
+            }
         } else {
             throw createError({ status: 400, message: '缺少密码或登录 token' });
         }
@@ -760,19 +772,6 @@ export const userLogin = async (evt: H3Event) => {
         const userData = user[0] as User;
         userId = userData.id!;
 
-        let rechargeUrl = '';
-        let mallUrl = '';
-        if (userId) {
-            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier');
-            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall');
-            if (generatedUrl) {
-                rechargeUrl = generatedUrl;
-            }
-            if (generatedmallUrl) {
-                mallUrl = generatedmallUrl;
-            }
-        }
-
         // 检查用户状态
         const userStatus = parseInt(String(userData.status ?? '0')) || 0;
         if (userStatus === 1) {
@@ -797,6 +796,9 @@ export const userLogin = async (evt: H3Event) => {
         }
 
         loginSuccess = true;
+
+        const rechargeUrl = await generateUserLoginUrl(userId, '/user/cashier', { longLived: true }) || '';
+        const mallUrl = await generateUserLoginUrl(userId, '/user/mall', { longLived: true }) || '';
 
         // 登录成功：清除该 IP / 账号的失败计数与失败锁
         if (username) {
@@ -837,12 +839,12 @@ export const userLogin = async (evt: H3Event) => {
             }
         };
 
-        console.log("用户登录返回数据:", response);
         return response;
     } catch (e: any) {
+        const statusCode = e?.statusCode || e?.status || 500;
         // 限流拦截（403/429）：已在预检处打印一行精简日志，这里直接抛出，不打印堆栈、不记登录日志
-        if (e && (e.status === 403 || e.status === 429)) {
-            throw createError({ status: e.status, message: e.message || '访问受限' });
+        if (statusCode === 403 || statusCode === 429) {
+            throw createError({ statusCode, message: e.message || '访问受限' });
         }
 
         console.error("用户登录异常:", e);
@@ -869,7 +871,7 @@ export const userLogin = async (evt: H3Event) => {
             }
         }
         throw createError({
-            status: e.status || 500,
+            statusCode,
             message: e.message || '登录失败',
         });
     }
@@ -1037,8 +1039,8 @@ export const sdkLogin = async (evt: H3Event) => {
         let mallUrl = '';
         const userId = userData.id!;
         if (userId) {
-            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier');
-            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall');
+            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier', { longLived: true });
+            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall', { longLived: true });
             if (generatedUrl) {
                 rechargeUrl = generatedUrl;
             }
@@ -1060,8 +1062,6 @@ export const sdkLogin = async (evt: H3Event) => {
             rechargeUrl: rechargeUrl,
             mallUrl: mallUrl
         };
-
-        console.log("SDK登录返回数据:", response);
 
         // 登录成功：清除该 IP / 账号的失败计数与失败锁（登录成功后不再限制同一 IP 重复登录）
         await recordLoginSuccess(ipAddress, username);
@@ -1314,8 +1314,8 @@ export const steamLogin = async (evt: H3Event) => {
         let mallUrl = '';
         const userId = userData.id!;
         if (userId) {
-            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier');
-            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall');
+            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier', { longLived: true });
+            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall', { longLived: true });
             if (generatedUrl) {
                 rechargeUrl = generatedUrl;
             }
@@ -1338,7 +1338,6 @@ export const steamLogin = async (evt: H3Event) => {
         };
 
         const steamResponse = { ...response, steam_notify_url: steamNotifyUrl };
-        console.log("Steam登录返回数据:", steamResponse);
         return steamResponse;
 
     } catch (e: any) {

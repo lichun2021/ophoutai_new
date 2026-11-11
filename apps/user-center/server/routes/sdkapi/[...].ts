@@ -7,7 +7,9 @@ import * as AdminCtrl from '../../controller/admin';
 import * as PaymentSettingsCtrl from '../../controller/paymentSettings';
 import * as PaymentCtrl from '../../controller/payment';
 import { sdkMessages } from '../../utils/i18n';
-import { getClientIp, checkLoginLimits } from '../../utils/loginRateLimit';
+import { checkLoginLimits } from '../../utils/loginRateLimit';
+import { getRequestClientIp } from '../../utils/requestIp';
+import { logLoginResponse } from '@quantum/shared/server/utils/loginResponseLog';
 
 const router = createRouter();
 
@@ -19,7 +21,7 @@ const withLogging = (handler: Function, apiName: string) => {
     
     // ========== 访问日志 ==========
     const headers = getHeaders(event);
-    const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+    const ipAddress = getRequestClientIp(event);
     const userAgent = (headers['user-agent'] as string) || 'unknown';
     const method = getMethod(event);
     const url = getRequestURL(event);
@@ -36,10 +38,10 @@ const withLogging = (handler: Function, apiName: string) => {
     // 访问日志
     const maskIpForPrivacy = apiName.includes('登录');
     console.log(`[IN] 时间: ${new Date().toISOString()}`);
-    console.log(`[IN] 路径: ${method} ${url.pathname}${url.search}`);
+    console.log(`[IN] 路径: ${method} ${url.pathname}${maskIpForPrivacy ? '' : url.search}`);
     console.log(`[IN] IP: ${maskIpForPrivacy ? '[masked]' : ipAddress}, ${userAgent.split(' ')[0]}`);
     console.log(`[IN] 参数: 用户名=${(requestBody as any)?.z ?? 'N/A'}, 登录类型=${(requestBody as any)?.c ?? 'N/A'}, 游戏ID=${(requestBody as any)?.d ?? 'N/A'}, 代理ID=${(requestBody as any)?.f ?? 'N/A'}`);
-    console.log(`[IN] 请求体: ${JSON.stringify(requestBody)}`);
+    if (!maskIpForPrivacy) console.log(`[IN] 请求体: ${JSON.stringify(requestBody)}`);
     console.log('=========================================');
 
     let response: any = {};
@@ -105,6 +107,8 @@ const withLogging = (handler: Function, apiName: string) => {
     
     const endTime = Date.now();
     const processingTime = endTime - startTime;
+
+    if (maskIpForPrivacy) return logLoginResponse(apiName, response, event.node.res.statusCode);
     
     // 出口日志
     console.log(`[OUT] ${apiName} 耗时: ${processingTime}ms, 状态: ${
@@ -188,8 +192,7 @@ const withSignAndLogging = (handler: Function, apiName: string) => withLogging(w
 const withLoginRateGuard = (handler: Function) => {
   return defineEventHandler(async (event: H3Event) => {
     try {
-      const headers = getHeaders(event) as Record<string, string>;
-      const ip = getClientIp(headers);
+      const ip = getRequestClientIp(event);
       let username = '';
       try {
         const body = await readBody(event);
@@ -200,7 +203,7 @@ const withLoginRateGuard = (handler: Function) => {
       if (limit.locked) {
         setResponseStatus(event, 429);
         console.warn(`[限流] POST /sdkapi/login/dologin IP=${ip} 用户名=${username || '-'} 命中${limit.reason || '限流'}，剩余 ${limit.retryAfter}s`);
-        return {
+        return logLoginResponse('SDK登录接口', {
           z: -1,
           x: limit.message || '登录过于频繁，请稍后再试',
           b: "",
@@ -209,7 +212,7 @@ const withLoginRateGuard = (handler: Function) => {
           sid: "",
           e: Date.now().toString(),
           retry_after: limit.retryAfter
-        };
+        }, 429);
       }
     } catch (e: any) {
       // 限流预检自身异常（如 Redis 不可用）时 fail-open，放行进入正常流程

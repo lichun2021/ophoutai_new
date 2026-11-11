@@ -1,36 +1,72 @@
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const cpus = os.cpus().length;
-const APPS_ROOT = process.env.PM2_APPS_ROOT || '/data';
-const instancesUser  = Math.max(1, cpus);
-const instancesOp    = Math.max(1, Math.floor((cpus * 2) / 3));
-const instancesAgent = Math.max(1, Math.floor(cpus / 3));
 
-const SHARED = {
-  DB_HOST: '127.0.0.1', DB_PORT: '3306', DB_USER: 'root',
-  DB_PASSWORD: 'Tz9#mQ!kR8@vX2$pN5jL',
-  DB_NAME: 'quantum_db',
-  REDIS_HOST: '127.0.0.1', REDIS_PORT: '6379', REDIS_PASSWORD: '',
-  JWT_SECRET: '3587d7546a3d93796e6d3e83e6731bffb5f843c1251aa1b14213e75c6c81cbe0',
-  JWT_EXPIRES_IN: '4h',
-  ADMIN_SESSION_SECRET: '8a141dd93492d3c8d686905dfb108a1c358323cac029ea43442e47b44f3cc666',
-  API_SIGN_KEY: 'fasdjhkfh2348!@#$!617',
-  LOG_LEVEL: 'info',
-  ADMIN_LOGIN_IP_WHITELIST: '*'
-};
+const root = '/data';
+const shared = JSON.parse(fs.readFileSync(path.join(root, 'config/runtime-env.json'), 'utf8'));
+const cpus = Math.max(1, os.cpus().length);
+const publicIp = shared.PUBLIC_IP || '118.107.9.181';
+const node = process.execPath;
 
-// 进程防护通用配置（防止内存增长被 OOM 杀、崩溃风暴、日志撑满磁盘）
-const PROTECT = {
-  max_memory_restart: '2G',   // 内存超 1G 自动重启，避免被系统 OOM Killer 杀掉导致进程消失
-  max_restarts: 10,           // 10 秒内崩溃超 10 次才停止（防崩溃风暴），稳定后自动恢复
-  min_uptime: '10s',          // 启动后 10s 内崩才算"快速崩溃"，计入 max_restarts
-  log_date_format: 'YYYY-MM-DD HH:mm:ss',  // 日志加时间戳（配合 pm2-logrotate 轮转）
-};
+for (const name of [
+  'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME',
+  'REDIS_HOST', 'REDIS_PORT', 'JWT_SECRET', 'ADMIN_SESSION_SECRET', 'API_SIGN_KEY',
+]) {
+  if (shared[name] === undefined || shared[name] === null || String(shared[name]) === '') {
+    throw new Error(`Missing runtime setting: ${name}`);
+  }
+}
+
+const sharedEnv = Object.fromEntries(Object.entries(shared).map(([key, value]) => [key, String(value)]));
+
+function app(name, publicPort, instances) {
+  const url = `http://${publicIp}:${publicPort}`;
+  return {
+    name,
+    cwd: path.join(root, name),
+    script: 'server/index.mjs',
+    interpreter: node,
+    exec_mode: 'cluster',
+    instances,
+    node_args: '--max-old-space-size=512',
+    max_memory_restart: '768M',
+    autorestart: true,
+    max_restarts: 10,
+    min_uptime: '10s',
+    kill_timeout: 10000,
+    listen_timeout: 15000,
+    merge_logs: true,
+    log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    error_file: path.join(root, 'logs', `${name}-error.log`),
+    out_file: path.join(root, 'logs', `${name}-out.log`),
+    env: {
+      ...sharedEnv,
+      NODE_ENV: 'production',
+      LOG_LEVEL: sharedEnv.LOG_LEVEL || 'info',
+      HOST: '0.0.0.0',
+      NITRO_HOST: '0.0.0.0',
+      PORT: String(publicPort),
+      NITRO_PORT: String(publicPort),
+      DB_CONNECTION_LIMIT: sharedEnv.DB_CONNECTION_LIMIT || '50',
+      BASE_URL: url,
+      API_BASE_URL: url,
+      NUXT_BASE_URL: url,
+      NUXT_PUBLIC_BASE_URL: url,
+      NUXT_PUBLIC_API_BASE_URL: url,
+      NUXT_PUBLIC_API_SIGN_KEY: sharedEnv.API_SIGN_KEY,
+      OP_ADMIN_URL: 'http://127.0.0.1:3003',
+      OP_ADMIN_BASE_URL: 'http://127.0.0.1:3003',
+      TELEGRAM_BOT_ENABLED: 'false',
+      ITEM_CONFIG_PATH: path.join(root, 'config', name, 'itemConfig.json'),
+      RECHARGE_CONFIG_PATH: path.join(root, 'config', name, 'rechargeConfig.json'),
+    },
+  };
+}
 
 module.exports = {
   apps: [
-    { name: 'user-center',  ...PROTECT, error_file: path.join(APPS_ROOT,'logs/user-center-error.log'), out_file: path.join(APPS_ROOT,'logs/user-center-out.log'),  cwd: path.join(APPS_ROOT,'user-center'),  script: 'server/index.mjs', exec_mode: 'cluster', instances: instancesUser,  merge_logs: true, env: { ...SHARED, NODE_ENV:'production', PORT: 3001, DB_CONNECTION_LIMIT:'600',  BASE_URL:'https://shop.ymumel.cn' } },
-    { name: 'agent-admin',  ...PROTECT, error_file: path.join(APPS_ROOT,'logs/agent-admin-error.log'), out_file: path.join(APPS_ROOT,'logs/agent-admin-out.log'),  cwd: path.join(APPS_ROOT,'agent-admin'),  script: 'server/index.mjs', exec_mode: 'cluster', instances: instancesAgent, merge_logs: true, env: { ...SHARED, NODE_ENV:'production', PORT: 3002, DB_CONNECTION_LIMIT:'200',  BASE_URL:'https://www.fullalert96.cfd' } },
-    { name: 'op-admin',     ...PROTECT, error_file: path.join(APPS_ROOT,'logs/op-admin-error.log'),    out_file: path.join(APPS_ROOT,'logs/op-admin-out.log'),     cwd: path.join(APPS_ROOT,'op-admin'),     script: 'server/index.mjs', exec_mode: 'cluster', instances: instancesOp,    merge_logs: true, env: { ...SHARED, NODE_ENV:'production', PORT: 3003, DB_CONNECTION_LIMIT:'1200', BASE_URL:'https://www.redalert96.lat' } },
-  ]
+    app('user-center', 3001, cpus),
+    app('agent-admin', 3002, Math.max(1, Math.floor(cpus / 3))),
+    app('op-admin', 3003, Math.max(1, Math.floor((cpus * 2) / 3))),
+  ],
 };

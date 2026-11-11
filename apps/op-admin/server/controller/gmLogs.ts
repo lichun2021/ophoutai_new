@@ -1,7 +1,9 @@
 import { H3Event, getQuery } from 'h3';
 import { queryGmOperationLogs } from '../model/gmOperationLogs';
+import { requireGMPermission } from './gm';
 
 export const listLogs = async (evt: H3Event) => {
+  await requireGMPermission(evt);
   const q = getQuery(evt) as any;
   const page = q.page ? Number(q.page) : 1;
   const pageSize = q.pageSize ? Number(q.pageSize) : 20;

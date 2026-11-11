@@ -14,7 +14,7 @@
       <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
         <USelectMenu v-model="filters.op_type" :options="opTypeOptions" value-attribute="value" option-attribute="label" placeholder="操作类型"/>
         <USelectMenu v-model="filters.server" :options="serverOptions" placeholder="选择服务器" value-attribute="value" option-attribute="label" />
-        <UInput v-model="filters.player_id" placeholder="玩家ID"/>
+        <UInput v-model="filters.player_id" placeholder="角色 WUID / 历史玩家ID"/>
         <UInput v-model="filters.player_name" placeholder="玩家名称"/>
         <UInput v-model="filters.open_id" placeholder="OpenID"/>
         <UInput v-model="filters.admin_id" placeholder="管理员ID"/>
@@ -32,7 +32,8 @@
           <UBadge variant="soft">{{ formatOpType(row.op_type) }}</UBadge>
         </template>
         <template #success-data="{ row }">
-          <UBadge :color="row.success ? 'green' : 'red'" variant="soft">{{ row.success ? '成功' : '失败' }}</UBadge>
+          <UBadge :color="Number(row.success) === 1 ? 'green' : isUnconfirmed(row) ? 'amber' : 'red'" variant="soft">{{ Number(row.success) === 1 ? '成功' : isUnconfirmed(row) ? '未确认' : '失败' }}</UBadge>
+          <p v-if="row.error_message" class="mt-1 max-w-xs text-xs text-gray-500">{{ row.error_message }}</p>
         </template>
         <template #created_at-data="{ row }">
           <span class="text-sm">{{ formatDate(row.created_at) }}</span>
@@ -46,7 +47,7 @@
                 物资：
                 <span v-if="getItems(row).length === 0">-</span>
                 <span v-else>
-                  {{ getItems(row).map(i => formatItem(i)).join(', ') }}
+                  {{ getItems(row).map(i => formatItem(row, i)).join(', ') }}
                 </span>
               </div>
             </div>
@@ -100,7 +101,7 @@ const opTypeOptions = [
   { label: '全部', value: 'all' },
   { label: '封号', value: 'ban' },
   { label: '解封', value: 'unban' },
-  { label: '发物资', value: 'send_items' },
+  { label: '附件邮件 / 历史物资', value: 'send_items' },
   { label: '充值', value: 'recharge' },
   { label: '发邮件', value: 'send_mail' }
 ];
@@ -109,7 +110,7 @@ const columns = [
   { key: 'id', label: 'ID' },
   { key: 'op_type', label: '类型' },
   { key: 'server', label: '服务器' },
-  { key: 'player_id', label: '玩家ID' },
+  { key: 'player_id', label: '角色 WUID / 历史玩家ID' },
   { key: 'player_name', label: '玩家名称' },
   { key: 'open_id', label: 'OpenID' },
   { key: 'admin_id', label: '管理员ID' },
@@ -122,7 +123,7 @@ const formatOpType = (t: string) => {
   switch (t) {
     case 'ban': return '封号';
     case 'unban': return '解封';
-    case 'send_items': return '发物资';
+    case 'send_items': return '附件邮件 / 历史物资';
     case 'send_mail': return '发邮件';
     case 'recharge': return '充值';
     default: return t;
@@ -176,7 +177,12 @@ const serverOptions = ref<{ label: string; value: string }[]>([]);
 const loadServers = async () => {
   try {
     const res: any = await $fetch('/api/gm/servers');
-    serverOptions.value = (res?.data || []).map((s: { name: string; bname: string }) => ({ label: s.name, value: s.bname }));
+    serverOptions.value = (res?.data || []).flatMap((s: { name: string; bname?: string; server_id: number }) => {
+      const current = { label: `${s.name}（区服 ${s.server_id}）`, value: String(s.server_id) };
+      return s.bname && s.bname !== String(s.server_id)
+        ? [current, { label: `${s.name}（历史记录）`, value: s.bname }]
+        : [current];
+    });
   } catch {}
 };
 onMounted(() => loadServers());
@@ -208,14 +214,25 @@ const getParam = (row: any, key: string) => {
   return p[key] ?? '';
 };
 
-const getItems = (row: any): Array<{ ItemId: number; ItemNum: number }> => {
+type LoggedItem = { i?: number; a?: number; ItemId?: number; ItemNum?: number };
+
+const getItems = (row: any): LoggedItem[] => {
   const p = row.request_params_parsed || {};
   return Array.isArray(p.items) ? p.items : (Array.isArray(p.SendItemList) ? p.SendItemList : []);
 };
 
-const formatItem = (i: { ItemId: number; ItemNum: number }) => {
-  const name = itemNameMap.value[String(i.ItemId)] || `物品${i.ItemId}`;
-  return `${name}×${i.ItemNum}`;
+const isUnconfirmed = (row: any) => row.response_result_parsed?.status === 'unknown';
+
+const formatItem = (row: any, item: LoggedItem) => {
+  const id = item?.i ?? item?.ItemId;
+  const amount = item?.a ?? item?.ItemNum;
+  if (id === undefined || amount === undefined) return '无效的历史物品记录';
+  const params = row.request_params_parsed || {};
+  const currentGame = params.protocol === 'new_gmtools' || (params.worldId !== undefined && item.i !== undefined);
+  const name = currentGame
+    ? params.item_names?.[String(id)] || `物品${id}`
+    : itemNameMap.value[String(id)] || `物品${id}`;
+  return `${name}（ID ${id}）×${amount}`;
 };
 </script>
 

@@ -13,6 +13,7 @@ import { getSystemConfig, getThirdPartyPaymentConfig, getSystemParam } from '../
 import { getByWorldId } from '../model/gameServers';
 import * as GameCharactersModel from '../model/gameCharacters';
 import { requireAuth } from '@quantum/shared/server/utils/jwt';
+import { createUserAutoLoginToken } from '@quantum/shared/server/utils/userAutoLogin';
 
 /**
  * 处理IP地址，将IPv6格式转换为IPv4格式
@@ -558,15 +559,18 @@ async function notifyGameServer(
 }
 
 /**
- * 生成用户登录链接（带用户名和密码参数）
+ * 生成用户免登录链接
  * @param userId 用户ID
  * @returns 登录链接
  */
-export async function generateUserLoginUrl(userId: number, redirectPath: string = '/user/home'): Promise<string | null> {
+export async function generateUserLoginUrl(
+    userId: number,
+    redirectPath = '/user/home',
+    { longLived = false }: { longLived?: boolean } = {},
+): Promise<string | null> {
     try {
-        // 查询用户及第三方身份，用于确定免密链接有效期
         const userResult = await sql({
-            query: 'SELECT id, thirdparty_uid FROM Users WHERE id = ?',
+            query: 'SELECT id, password, thirdparty_uid FROM Users WHERE id = ?',
             values: [userId],
         }) as any[];
 
@@ -575,24 +579,21 @@ export async function generateUserLoginUrl(userId: number, redirectPath: string 
             return null;
         }
 
-        // 按数据库中的 Steam 身份判断，不采用客户端传入的渠道参数
-        const isSteamUser = /^steam_\d+$/.test(String(userResult[0].thirdparty_uid || ''));
-        const tokenTtlSeconds = isSteamUser ? 6 * 60 * 60 : 60;
-
-        // token 自动登录：
-        //   Steam token 带服务端身份标记，6 小时内可重复使用；其他用户 60 秒内仅可使用一次
-        //   有效期从生成时计算，重复登录不续期，NX 保证不冲突
-        const token = crypto.randomBytes(32).toString('hex');
-        try {
+        const user = userResult[0];
+        let token: string;
+        if (longLived) {
+            token = createUserAutoLoginToken(user);
+        } else {
+            // 支付等引导链接继续使用短期 token。
+            const isSteamUser = /^steam_\d+$/.test(String(user.thirdparty_uid || ''));
+            const ttlSeconds = isSteamUser ? 6 * 60 * 60 : 60;
+            token = crypto.randomBytes(32).toString('hex');
             const redis = getRedisCluster();
-            const ok = await redis.set(`autologin:${token}`, isSteamUser ? `steam:${userId}` : String(userId), 'EX', tokenTtlSeconds, 'NX');
+            const ok = await redis.set(`autologin:${token}`, isSteamUser ? `steam:${userId}` : String(userId), 'EX', ttlSeconds, 'NX');
             if (!ok) {
                 console.error('autologin token 写 Redis 失败：NX 冲突', { userId });
                 return null;
             }
-        } catch (redisErr) {
-            console.error('autologin token 写 Redis 异常:', redisErr);
-            return null;
         }
 
         // 获取系统配置中的登录URL

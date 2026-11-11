@@ -6,7 +6,10 @@
   "exports": {
     "./server/utils/jwt": "./server/utils/jwt.ts",
     "./server/utils/envCheck": "./server/utils/envCheck.ts",
-    "./server/utils/logger": "./server/utils/logger.ts"
+    "./server/utils/logger": "./server/utils/logger.ts",
+    "./server/utils/images": "./server/utils/images.ts",
+    "./server/utils/userAutoLogin": "./server/utils/userAutoLogin.ts",
+    "./server/utils/loginResponseLog": "./server/utils/loginResponseLog.ts"
   },
   "dependencies": {
     "jsonwebtoken": "^9.0.2",

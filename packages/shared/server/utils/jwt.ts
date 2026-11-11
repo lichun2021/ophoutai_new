@@ -16,6 +16,13 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '4h';
 const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || 'quantum_auth_token';
 const JWT_COOKIE_MAX_AGE = parseInt(process.env.JWT_COOKIE_MAX_AGE || '14400000'); // 4小时 (毫秒)
 
+// 临时 HTTP 环境需显式关闭；未配置或配置无效时保留生产环境默认值。
+export function isAuthCookieSecure(): boolean {
+  if (process.env.AUTH_COOKIE_SECURE === 'false') return false;
+  if (process.env.AUTH_COOKIE_SECURE === 'true') return true;
+  return process.env.NODE_ENV === 'production';
+}
+
 /**
  * 生成 JWT Token
  * @param payload 用户信息 (不包含 iat, exp)
@@ -143,7 +150,7 @@ export function setAuthCookie(event: H3Event, token: string, maxAge?: number): v
 
   setCookie(event, JWT_COOKIE_NAME, token, {
     httpOnly: true,           // 防止 XSS 攻击
-    secure: process.env.NODE_ENV === 'production',  // 生产环境强制 HTTPS
+    secure: isAuthCookieSecure(),
     sameSite: 'lax',          // CSRF 防护
     path: '/',
     maxAge: cookieMaxAge,
@@ -157,7 +164,7 @@ export function setAuthCookie(event: H3Event, token: string, maxAge?: number): v
 export function clearAuthCookie(event: H3Event): void {
   setCookie(event, JWT_COOKIE_NAME, '', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isAuthCookieSecure(),
     sameSite: 'lax',
     path: '/',
     maxAge: 0,  // 立即过期

@@ -102,15 +102,12 @@
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import Sidebar from '~/components/Sidebar.vue';
 import { useAuthStore } from '~/store/auth';
-import { useAuthTimer } from '~/composables/useAuthTimer';
 
 const route = useRoute();
-const router = useRouter();
 const authStore = useAuthStore();
-const { remainingTime } = useAuthTimer();
 
 // 响应式状态
 const isMobile = ref(false);
@@ -364,10 +361,7 @@ const userMenuItems = computed(() => [
   }], [{
     label: '退出登录',
     icon: 'i-heroicons-arrow-right-on-rectangle',
-    click: () => {
-      authStore.logOut();
-      router.push('/admin/login');
-    }
+    click: () => authStore.logOut()
   }]
 ]);
 </script>

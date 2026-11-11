@@ -1,6 +1,7 @@
 import { config } from '../config';
 import * as ApisModel from '../model/apis';
 import * as crypto from 'crypto';
+import { getRedisCluster } from './redis-cluster';
 
 
 
@@ -166,30 +167,55 @@ export const verify2FAToken = (token: string, secret: string): boolean => {
     }
 };
 
-export const signAdminSession = (adminId: number | string, maxAgeSeconds: number = 4 * 60 * 60): string => {
-    const id = String(adminId);
-    const iat = Math.floor(Date.now() / 1000);
-    const exp = iat + maxAgeSeconds;
-    const base = `${id}.${iat}.${exp}`;
-    const h = crypto.createHmac('sha256', getAdminSecret()).update(base).digest('hex');
-    return `${base}.${h}`;
+const browserSessionPattern = /^v2\.[a-f0-9]{64}$/;
+
+function sessionKey(token: string) {
+    const digest = crypto.createHmac('sha256', getAdminSecret()).update(token).digest('hex');
+    return `op-admin:session:${digest}`;
 }
 
-export const verifyAdminSession = (value: string | undefined | null): { ok: boolean, adminId?: number } => {
-    try {
-        const v = String(value || '');
-        const parts = v.split('.');
-        if (parts.length !== 4) return { ok: false };
-        const [idStr, iatStr, expStr, sig] = parts;
-        const base = `${idStr}.${iatStr}.${expStr}`;
-        const expect = crypto.createHmac('sha256', getAdminSecret()).update(base).digest('hex');
-        if (!crypto.timingSafeEqual(Buffer.from(expect), Buffer.from(sig))) return { ok: false };
-        const now = Math.floor(Date.now() / 1000);
-        if (now > parseInt(expStr)) return { ok: false };
-        const adminId = parseInt(idStr);
-        if (isNaN(adminId) || adminId <= 0) return { ok: false };
-        return { ok: true, adminId };
-    } catch {
-        return { ok: false };
+function readLegacySession(token: string) {
+    const match = /^([1-9]\d*)\.(\d+)\.(\d+)\.([a-f0-9]{64})$/.exec(token);
+    if (!match) return null;
+    const [, id, issuedAt, expires, signature] = match;
+    const adminId = Number(id);
+    const expiresAt = Number(expires);
+    if (!Number.isSafeInteger(adminId) || !Number.isSafeInteger(expiresAt) || expiresAt < Math.floor(Date.now() / 1000)) return null;
+    const expected = crypto.createHmac('sha256', getAdminSecret()).update(`${id}.${issuedAt}.${expires}`).digest();
+    if (!crypto.timingSafeEqual(expected, Buffer.from(signature, 'hex'))) return null;
+    return { adminId, expiresAt };
+}
+
+export async function createAdminSession(adminId: number): Promise<string> {
+    if (!Number.isSafeInteger(adminId) || adminId <= 0) throw new Error('管理员 ID 无效');
+    const token = `v2.${crypto.randomBytes(32).toString('hex')}`;
+    // The browser holds a session cookie. Redis makes explicit logout effective across workers.
+    await getRedisCluster().set(sessionKey(token), String(adminId));
+    return token;
+}
+
+export async function verifyAdminSession(value: string | undefined | null): Promise<{ ok: boolean; adminId?: number }> {
+    if (!value) return { ok: false };
+    if (browserSessionPattern.test(value)) {
+        const adminId = Number(await getRedisCluster().get(sessionKey(value)));
+        return Number.isSafeInteger(adminId) && adminId > 0 ? { ok: true, adminId } : { ok: false };
+    }
+    const legacy = readLegacySession(value);
+    if (legacy && !(await getRedisCluster().exists(sessionKey(value)))) {
+        return { ok: true, adminId: legacy.adminId };
+    }
+    return { ok: false };
+}
+
+export async function revokeAdminSession(value: string | undefined | null): Promise<void> {
+    if (!value) return;
+    if (browserSessionPattern.test(value)) {
+        await getRedisCluster().del(sessionKey(value));
+        return;
+    }
+    const legacy = readLegacySession(value);
+    if (legacy) {
+        const ttl = Math.max(1, legacy.expiresAt - Math.floor(Date.now() / 1000) + 1);
+        await getRedisCluster().set(sessionKey(value), 'revoked', 'EX', ttl);
     }
 }

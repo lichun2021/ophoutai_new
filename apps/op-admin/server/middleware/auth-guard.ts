@@ -1,5 +1,12 @@
-import { defineEventHandler, getRequestURL, getCookie, setResponseStatus, sendRedirect, createError, getHeader } from 'h3';
+import { defineEventHandler, getRequestURL, getCookie, setResponseStatus, sendRedirect, createError, getHeader, type H3Event } from 'h3';
 import { verifyAdminSession } from '../utils/auth';
+import { isAdminActive } from '../model/admin';
+
+async function getActiveAdminId(event: H3Event) {
+  const session = await verifyAdminSession(getCookie(event, 'admin_sid'));
+  if (!session.ok || !session.adminId || !await isAdminActive(session.adminId)) return null;
+  return session.adminId;
+}
 
 // 服务端中间件：拦截受保护的页面路由（不拦 /sdkapi/** 与公开页）
 // 仅针对页面请求（SSR/直访）；API与 /sdkapi/** 保持现有逻辑
@@ -36,6 +43,7 @@ export default defineEventHandler(async (event) => {
       path.startsWith('/api/internal/') ||
       // 登录/注册/校验（对外开放以便登录流程）
       path === '/api/admin/login' ||
+      path === '/api/admin/logout' ||
       path === '/api/user/login' ||
       path === '/api/user/register' ||
       path === '/api/user/check-channel' ||
@@ -57,27 +65,26 @@ export default defineEventHandler(async (event) => {
     // 路由前缀要求角色
     if (path.startsWith('/api/admin/') || path.startsWith('/api/gm/')) {
       // 管理端与 GM 接口：必须有有效的管理员签名会话，并与 Authorization 一致
-      const sid = getCookie(event, 'admin_sid');
-      const v = verifyAdminSession(sid);
+      const adminId = await getActiveAdminId(event);
       const authz = getHeader(event, 'authorization');
       const authId = authz ? parseInt(String(authz)) : NaN;
-      if (!v.ok) {
+      if (!adminId) {
         throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
       }
       // 如提供了 header，且与 cookie 解出的 id 不一致，则拒绝
-      if (!isNaN(authId) && authId !== v.adminId) {
+      if (!isNaN(authId) && authId !== adminId) {
         throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
       }
       // 将管理员ID写入上下文，便于控制器读取
       try {
         // @ts-ignore
-        event.context.adminId = v.adminId;
+        event.context.adminId = adminId;
       } catch {}
       // 若缺少 authorization 头，自动注入，兼容依赖该头的控制器
       if (!authz) {
         try {
           // @ts-ignore Node 原始 headers 可写入（用于向下游兼容）
-          event.node.req.headers['authorization'] = String(v.adminId);
+          event.node.req.headers['authorization'] = String(adminId);
         } catch {}
       }
       // 仅管理员可访问
@@ -127,11 +134,8 @@ export default defineEventHandler(async (event) => {
   const needAuth = isAdminArea;
   if (!needAuth) return;
 
-  // 4) 简单会话检查：读取前端已有的 localStorage 无法在服务端使用，这里从 Cookie 读取占位会话
-  //    后续可改为登录成功后设置 HttpOnly Cookie: auth_logged_in=true; Path=/; Secure; SameSite=Lax
-
   // 未登录：重定向到对应登录页（后台默认跳转管理员登录，用户页跳用户登录）
-  if (!logged) {
+  if (!logged || (isUser !== 'true' && !await getActiveAdminId(event))) {
     const target = isAdminArea ? '/admin/login' : '/user/login';
     // SSR 环境用 302 跳转
     setResponseStatus(event, 302);

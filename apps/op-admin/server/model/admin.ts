@@ -25,6 +25,14 @@ export type Admin = {
     google_2fa_secret?: string; // Google 2FA 密钥
 };
 
+export const isAdminActive = async (id: number): Promise<boolean> => {
+    const rows = await sql({
+        query: 'SELECT 1 FROM Admins WHERE id = ? AND is_active = 1 LIMIT 1',
+        values: [id],
+    }) as unknown[];
+    return rows.length > 0;
+};
+
 export const getAdminLevel = async (id:number) => {
     const result = await sql({
         query: 'SELECT level FROM Admins WHERE id = ?',

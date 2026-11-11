@@ -9,6 +9,7 @@ import * as PaymentCtrl from '../../controller/payment';
 import * as SteamPaymentCtrl from '../../controller/steamPayment';
 import { sdkMessages } from '../../utils/i18n';
 import { getClientIp, checkGlobalBlacklist, checkIpBlacklist, checkLoginLimits, incrementAccountFailure } from '../../utils/loginRateLimit';
+import { logLoginResponse } from '@quantum/shared/server/utils/loginResponseLog';
 
 const router = createRouter();
 
@@ -39,10 +40,10 @@ const withLogging = (handler: Function, apiName: string) => {
     // 访问日志
     const maskIpForPrivacy = apiName.includes('登录');
     console.log(`[IN] 时间: ${new Date().toISOString()}`);
-    console.log(`[IN] 路径: ${method} ${url.pathname}${url.search}`);
+    console.log(`[IN] 路径: ${method} ${url.pathname}${maskIpForPrivacy ? '' : url.search}`);
     console.log(`[IN] IP: ${maskIpForPrivacy ? '[masked]' : ipAddress}, ${userAgent.split(' ')[0]}`);
     console.log(`[IN] 参数: 用户名=${(requestBody as any)?.z ?? 'N/A'}, 登录类型=${(requestBody as any)?.c ?? 'N/A'}, 游戏ID=${(requestBody as any)?.d ?? 'N/A'}, 代理ID=${(requestBody as any)?.f ?? 'N/A'}`);
-    console.log(`[IN] 请求体: ${JSON.stringify(requestBody)}`);
+    if (!maskIpForPrivacy) console.log(`[IN] 请求体: ${JSON.stringify(requestBody)}`);
     console.log('=========================================');
 
     let response: any = {};
@@ -108,6 +109,8 @@ const withLogging = (handler: Function, apiName: string) => {
     
     const endTime = Date.now();
     const processingTime = endTime - startTime;
+
+    if (maskIpForPrivacy) return logLoginResponse(apiName, response, event.node.res.statusCode);
     
     // 出口日志
     console.log(`[OUT] ${apiName} 耗时: ${processingTime}ms, 状态: ${
@@ -207,7 +210,7 @@ const withLoginRateGuard = (handler: Function) => {
       if (gbl.locked) {
         setResponseStatus(event, 403);
         console.warn(`[黑名单] POST /sdkapi/login/dologin IP=${ip} 已封禁，原因：${gbl.message}`);
-        return {
+        return logLoginResponse('SDK登录接口', {
           z: -1,
           x: '该 IP 已被封禁',
           b: "",
@@ -216,7 +219,7 @@ const withLoginRateGuard = (handler: Function) => {
           sid: "",
           e: Date.now().toString(),
           retry_after: gbl.retryAfter
-        };
+        }, 403);
       }
 
       // 1. 登录专用 IP 黑名单（24h 封禁）：命中直接 403，不进入业务逻辑、不累计任何计数
@@ -224,7 +227,7 @@ const withLoginRateGuard = (handler: Function) => {
       if (bl.locked) {
         setResponseStatus(event, 403);
         console.warn(`[黑名单] POST /sdkapi/login/dologin IP=${ip} 命中黑名单，原因：${bl.message}，剩余 ${bl.retryAfter}s`);
-        return {
+        return logLoginResponse('SDK登录接口', {
           z: -1,
           x: bl.message || '该 IP 已被封禁',
           b: "",
@@ -233,7 +236,7 @@ const withLoginRateGuard = (handler: Function) => {
           sid: "",
           e: Date.now().toString(),
           retry_after: bl.retryAfter
-        };
+        }, 403);
       }
 
       // 2. 检查 IP/账号失败锁
@@ -247,7 +250,7 @@ const withLoginRateGuard = (handler: Function) => {
           await incrementAccountFailure(username);
         }
 
-        return {
+        return logLoginResponse('SDK登录接口', {
           z: -1,
           x: limit.message || '登录过于频繁，请稍后再试',
           b: "",
@@ -256,7 +259,7 @@ const withLoginRateGuard = (handler: Function) => {
           sid: "",
           e: Date.now().toString(),
           retry_after: limit.retryAfter
-        };
+        }, 429);
       }
     } catch (e: any) {
       // 限流预检自身异常（如 Redis 不可用）时 fail-open，放行进入正常流程

@@ -69,7 +69,7 @@ export const useAuthStore = defineStore('auth', {
         }
         const response = await $fetch('/api/user/login', { method: 'POST', body }) as any;
 
-        console.log("✅ 用户登录response:", response);
+        console.log('用户登录结果:', { code: response?.code, authenticated: !!response?.data?.user });
         
         // 检查响应是否有效
         if (!response) {
@@ -111,17 +111,11 @@ export const useAuthStore = defineStore('auth', {
           console.log('🎉 用户登录流程完成，返回true');
           return true;
         } else {
-          console.log('❌ 响应数据格式错误或登录失败:', response);
+          console.log('用户登录未成功:', { code: response?.code });
           return false;
         }
       } catch (error: any) {
-          console.error('💥 用户登录异常:', error);
-          console.error('错误详情:', {
-            message: error?.message,
-            stack: error?.stack,
-            name: error?.name,
-            data: error?.data
-          });
+          console.error('用户登录异常:', { status: error?.statusCode || error?.status || error?.response?.status });
           this.clearAuthState();
           // 保留 HTTP 状态及限流信息，由登录页面显示具体原因
           throw error;

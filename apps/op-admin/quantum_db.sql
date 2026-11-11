@@ -787,6 +787,7 @@ CREATE TABLE `GameServers` (
   `server_id` int DEFAULT NULL COMMENT '业务服务器ID，例如 10001',
   `name` varchar(100) NOT NULL COMMENT '显示名称，如 S1/一区',
   `webhost` varchar(255) NOT NULL COMMENT '如 http://1.2.3.4:8888 或 https://domain:port',
+  `serverlist_config` json DEFAULT NULL COMMENT '客户端公开服务器列表配置，与运营接口地址独立',
   `dbip` varchar(128) NOT NULL COMMENT 'MySQL 主机',
   `bname` varchar(100) NOT NULL COMMENT '数据库名，如 game_1',
   `dbuser` varchar(100) NOT NULL COMMENT 'MySQL 用户名',

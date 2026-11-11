@@ -1,7 +1,7 @@
-import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, createError, setResponseStatus, type H3Event } from "h3";
+import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, deleteCookie, createError, setHeader, setResponseStatus, type H3Event } from "h3";
 import { verifyApiSignature } from '../utils/apiSign';
-import { signAdminSession } from '../utils/auth';
-import { verifyAdminSession } from '../utils/auth';
+import { createAdminSession, revokeAdminSession, verifyAdminSession } from '../utils/auth';
+import { withLoginResponseLog } from '@quantum/shared/server/utils/loginResponseLog';
 import { getClientIp, checkGlobalBlacklist, checkClientRateLimit, banIpTemporarily } from '../utils/loginRateLimit';
 import * as UserCtrl from '../controller/user';
 import * as PaymentCtrl from '../controller/payment';
@@ -171,7 +171,7 @@ const withLogging = (handler: Function, apiName: string) => {
 const adminWrap = (handler: Function, apiName: string) => {
   return withLogging(async (event: H3Event) => {
     const sid = getCookie(event, 'admin_sid');
-    const v = verifyAdminSession(sid);
+    const v = await verifyAdminSession(sid);
     if (!v.ok) {
       throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
     }
@@ -253,7 +253,7 @@ const adminWrap = (handler: Function, apiName: string) => {
  * 管理员登录接口
  * @route POST /api/admin/login
  */
-router.post('/admin/login', defineEventHandler(async (event) => {
+router.post('/admin/login', defineEventHandler(withLoginResponseLog('Admin Login', async (event) => {
   // 获取客户端 IP（提前获取，用于日志）
   const headers = getHeaders(event);
 
@@ -382,12 +382,22 @@ router.post('/admin/login', defineEventHandler(async (event) => {
   }
 
   const result: any = await AdminCtrl.login(event);
+  const adminId = Number(result?.data?.id);
+  const loggedIn = Number.isSafeInteger(adminId) && adminId > 0 && result?.data?.require_2fa !== true;
+  let sid: string | undefined;
+  if (loggedIn) {
+    try {
+      sid = await createAdminSession(adminId);
+    } catch {
+      throw createError({ statusCode: 503, message: '暂时无法建立管理员会话，请稍后重试' });
+    }
+  }
 
   // ===== 记录管理员登录日志（含IP）=====
   try {
     const body2 = await readBody(event).catch(() => ({})) as any;
     const adminName = String(body2?.name || '').trim() || 'unknown';
-    const success = !!(result && result.data);
+    const success = loggedIn;
     const adminId = success ? (result.data?.id || null) : null;
     const failReason = success ? '' :
       (result?.code === 403 && result?.message?.includes('IP') ? 'IP不在白名单' :
@@ -406,21 +416,36 @@ router.post('/admin/login', defineEventHandler(async (event) => {
   }
   // ===== 登录日志结束 =====
 
-  try {
-    // 登录成功则设置短期会话 Cookie（占位实现，可后续改为真正签名会话）
-    const ok = !!(result && result.data);
-    if (ok) {
-      // 识别管理员/用户，这里管理员登录：auth_is_user=false
-      const adminId = result.data.id || result.data.admin_id || 0;
-      const sid = signAdminSession(adminId);
-      event.node.res.setHeader('Set-Cookie', [
-        'auth_logged_in=true; Path=/; HttpOnly; SameSite=Lax',
-        'auth_is_user=false; Path=/; HttpOnly; SameSite=Lax',
-        `admin_sid=${sid}; Path=/; HttpOnly; SameSite=Lax`
-      ]);
-    }
-  } catch { }
+  if (sid) {
+    event.node.res.setHeader('Set-Cookie', [
+      'auth_logged_in=true; Path=/; HttpOnly; SameSite=Lax',
+      'auth_is_user=false; Path=/; HttpOnly; SameSite=Lax',
+      `admin_sid=${sid}; Path=/; HttpOnly; SameSite=Lax`
+    ]);
+  }
   return result;
+})));
+
+router.post('/admin/logout', defineEventHandler(async (event) => {
+  const site = getHeaders(event)['sec-fetch-site'];
+  if (site === 'cross-site' || site === 'same-site') {
+    throw createError({ statusCode: 403, message: '请从运营后台退出登录' });
+  }
+  try {
+    await revokeAdminSession(getCookie(event, 'admin_sid'));
+  } catch {
+    throw createError({ statusCode: 503, message: '暂时无法退出登录，请稍后重试' });
+  }
+  for (const name of ['admin_sid', 'auth_logged_in', 'auth_is_user']) {
+    deleteCookie(event, name, { path: '/', httpOnly: true, sameSite: 'lax' });
+  }
+  return { success: true };
+}));
+
+router.get('/admin/session', defineEventHandler((event) => {
+  if (!event.context.adminId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+  setHeader(event, 'Cache-Control', 'no-store');
+  return { success: true };
 }));
 
 /**
@@ -982,7 +1007,7 @@ router.post('/user/check', defineEventHandler(UserCtrl.checkUser));
  * @body {username: string, password: string}
  * @returns {Object} 登录结果
  */
-router.post('/user/login', defineEventHandler(async (event) => {
+router.post('/user/login', defineEventHandler(withLoginResponseLog('User Login', async (event) => {
   const result: any = await UserCtrl.userLogin(event);
   try {
     const ok = !!(result && result.data && result.data.user);
@@ -994,7 +1019,7 @@ router.post('/user/login', defineEventHandler(async (event) => {
     }
   } catch { }
   return result;
-}));
+})));
 
 /**
  * 用户注册接口
@@ -1244,85 +1269,15 @@ router.get('/client/servers', withLogging(async () => {
  */
 router.get('/client/player-gift-packages', withLogging(UserClientCtrl.getPlayerGiftPackageRecords, '客户端-获取玩家礼包记录'));
 
-// ========== GM管理接口 ==========
-
-/**
- * 获取游戏服务器列表
- * @route GET /api/gm/servers
- */
-router.get('/gm/servers', withLogging(GMCtrl.getServers, 'GM获取服务器列表'));
-
-/**
- * 获取玩家列表
- * @route GET /api/gm/players
- */
-router.get('/gm/players', withLogging(GMCtrl.getPlayers, 'GM获取玩家列表'));
-
-
-/**
- * 封号
- * @route POST /api/gm/ban
- */
-router.post('/gm/ban', adminWrap(GMCtrl.banPlayer, 'GM封号'));
-
-/**
- * 解封
- * @route POST /api/gm/unban
- */
-router.post('/gm/unban', adminWrap(GMCtrl.unbanPlayer, 'GM解封'));
-
-/**
- * 发放物资
- * @route POST /api/gm/send-items
- */
-router.post('/gm/send-items', adminWrap(GMCtrl.sendItems, 'GM发放物资'));
-
-/**
- * 批量发放物资（顺序执行，0.5s 间隔，上限 50 人）
- * @route POST /api/gm/send-items-batch
- */
-router.post('/gm/send-items-batch', adminWrap(GMCtrl.sendItemsBatch, 'GM批量发放物资'));
-
-/**
- * GM充值
- * @route POST /api/gm/recharge
- */
-router.post('/gm/recharge', adminWrap(GMCtrl.rechargePlayer, 'GM充值'));
-
-/**
- * 发送邮件
- * @route POST /api/gm/send-mail
- */
+// ========== 游戏运营：当前游戏 Inter 协议 ==========
+// 权限由控制器统一校验有效的超级管理员会话。旧游戏 IDIP 写操作不开放。
+router.get('/gm/servers', withLogging(GMCtrl.getServers, 'GM获取游戏区服'));
+router.get('/gm/players', withLogging(GMCtrl.getPlayers, 'GM按WUID查询角色'));
+router.get('/gm/items', withLogging(GMCtrl.getItems, 'GM查询游戏物品库'));
+router.post('/gm/send-items', adminWrap(GMCtrl.sendItems, 'GM发送附件邮件'));
+router.post('/gm/send-items-batch', adminWrap(GMCtrl.sendItemsBatch, 'GM发送定向批量邮件'));
 router.post('/gm/send-mail', adminWrap(GMCtrl.sendMail, 'GM发送邮件'));
 
-/**
- * 检查目标puid
- * @route POST /api/gm/check-target-puid
- */
-router.post('/gm/check-target-puid', withLogging(GMCtrl.checkTargetPuid, 'GM检查目标puid'));
-
-/**
- * 迁移平台
- * @route POST /api/gm/migrate-platform
- */
-router.post('/gm/migrate-platform', withLogging(GMCtrl.migratePlatform, 'GM迁移平台'));
-
-/**
- * 开罩子
- * @route POST /api/gm/open-protect-shield
- */
-router.post('/gm/open-protect-shield', withLogging(GMCtrl.openProtectShield, 'GM开罩子'));
-
-/**
- * 删除角色
- * @route POST /api/gm/delete-player
- */
-router.post('/gm/delete-player', withLogging(GMCtrl.deletePlayer, 'GM删除角色'));
-
-/**
- * GM操作日志查询
- * @route GET /api/admin/gm-operation-logs
- */
 router.get('/admin/gm-operation-logs', adminWrap(GmLogsCtrl.listLogs, 'GM操作日志查询'));
 
 // ========== GameServers 配置接口 ==========
@@ -1330,6 +1285,7 @@ router.get('/admin/servers', adminWrap(ServerCfgCtrl.list, '服务器配置列�
 router.post('/admin/servers/create', adminWrap(ServerCfgCtrl.create, '服务器配置创建'));
 router.post('/admin/servers/update', adminWrap(ServerCfgCtrl.update, '服务器配置更新'));
 router.post('/admin/servers/remove', adminWrap(ServerCfgCtrl.remove, '服务器配置删除'));
+router.post('/admin/servers/generate-serverlist', adminWrap(ServerCfgCtrl.generateServerlist, '生成客户端服务器列表'));
 
 /**
  * 获取游戏服状态（注册数/在线数）
@@ -1337,7 +1293,7 @@ router.post('/admin/servers/remove', adminWrap(ServerCfgCtrl.remove, '服务器�
  */
 router.get('/admin/server-status', defineEventHandler(async (event) => {
   const sid = getCookie(event, 'admin_sid');
-  const v = verifyAdminSession(sid);
+  const v = await verifyAdminSession(sid);
   if (!v.ok) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
   }

@@ -185,7 +185,7 @@ export const login = async (evt: H3Event) => {
 
         console.log("login:", admin ? { id: admin.id, level: admin.level, name: admin.name } : null, name);
 
-        if (admin) {
+        if (admin && Number(admin.is_active) === 1) {
             // ===== IP 白名单校验 =====
             // 获取客户端真实IP（阶梯：ali-cdn-real-ip > x-forwarded-for > x-real-ip）
             const aliCdnIp = getHeader(evt, 'ali-cdn-real-ip') || '';

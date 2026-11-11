@@ -13,9 +13,11 @@ import { getRedisCluster } from '../utils/redis-cluster';
 import * as PaymentModel from '../model/payment';
 import { sdkMessages } from '../utils/i18n';
 import { selectGameIpByAmount } from '../utils/gameIp';
-import { getClientIp, recordLoginFailure, recordLoginSuccess } from '../utils/loginRateLimit';
+import { recordLoginFailure, recordLoginSuccess } from '../utils/loginRateLimit';
+import { getRequestClientIp } from '../utils/requestIp';
 import { generateUserLoginUrl } from './payment';
 import { signJWT, setAuthCookie } from '@quantum/shared/server/utils/jwt';
+import { parseUserAutoLoginId, verifyUserAutoLoginToken } from '@quantum/shared/server/utils/userAutoLogin';
 
 /**
  * 打印一行红色错误日志（不打印堆栈），保持终端输出整洁。
@@ -38,16 +40,6 @@ function logError(prefix: string, e?: any): void {
         if (code) msg = `[${code}] ${msg}`;
     }
     console.error(`${RED}✗ ${prefix}${msg ? ': ' + msg : ''}${RESET}`);
-}
-
-function getClientIpFromHeaders(headers: ReturnType<typeof getHeaders>): string {
-    const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
-    const xForwardedFor = headers['x-forwarded-for'] as string;
-    const xRealIp = headers['x-real-ip'] as string;
-    return aliCdnRealIp
-        || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
-        || xRealIp
-        || 'unknown';
 }
 
 async function assertRegisterIpAllowed(clientIp: string) {
@@ -162,8 +154,7 @@ export const checkChannelStatus = async (evt: H3Event) => {
 
 export const quickreg = defineEventHandler(async (event) => {
     const query = getQuery(event);
-    const headers = getHeaders(event);
-    const clientIp = getClientIpFromHeaders(headers);
+    const clientIp = getRequestClientIp(event);
     try {
         // return {
         //     status: "ok",
@@ -431,18 +422,8 @@ export const reg = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
 
-        // ---- 获取真实客户端IP（阿里云CDN架构）----
-        const headers = getHeaders(evt);
-        // 优先取阿里云CDN专属头，其次取 X-Forwarded-For 第一个，最后取 X-Real-IP
-        const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
-        const xForwardedFor = headers['x-forwarded-for'] as string;
-        const xRealIp = headers['x-real-ip'] as string;
-        const clientIp = aliCdnRealIp
-            || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
-            || xRealIp
-            || 'unknown';
-        console.log(`[注册] 来自IP: ${clientIp} | Ali-CDN-Real-IP: ${aliCdnRealIp || '-'} | X-Forwarded-For: ${xForwardedFor || '-'} | X-Real-IP: ${xRealIp || '-'}`);
-        // ---- END ----
+        const clientIp = getRequestClientIp(evt);
+        console.log(`[注册] 来自IP: ${clientIp}`);
 
         // ---- IP 注册频率限制：同一IP 8小时内只允许注册一次 ----
         const REGISTER_IP_LIMIT_HOURS = 8;
@@ -767,15 +748,9 @@ export const userLogin = async (evt: H3Event) => {
         const { username, password, t } = body;
         usernameToLog = username || '';
 
-        // 获取客户端信息（阿里云CDN架构：Ali-CDN-Real-IP > X-Forwarded-For > X-Real-IP）
+        // 登录限流和日志使用同一经过代理信任校验的客户端IP。
         const headers = getHeaders(evt);
-        const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
-        const xForwardedFor = headers['x-forwarded-for'] as string;
-        const xRealIp = headers['x-real-ip'] as string;
-        const ipAddress = aliCdnRealIp
-            || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
-            || xRealIp
-            || 'unknown';
+        const ipAddress = getRequestClientIp(evt);
         const userAgent = (headers['user-agent'] as string) || '';
 
         // 防脚本刷登录：同一 IP 1 分钟内只允许请求一次用户登录接口
@@ -808,6 +783,7 @@ export const userLogin = async (evt: H3Event) => {
         console.log("正在查询用户:", username || `[autologin token]`);
 
         let user: any[] = [];
+        let longLivedUserId: number | null = null;
         if (password) {
             // 传统密码登录
             user = await sql({
@@ -815,34 +791,41 @@ export const userLogin = async (evt: H3Event) => {
                 values: [username, password],
             }) as any[];
         } else if (t) {
-            // Steam token 保留至到期；普通及旧版 token 原子读取并删除
-            let userIdStr: string | null = null;
-            try {
-                const redis = getRedisCluster();
-                userIdStr = await redis.eval(`
-                    local value = redis.call('GET', KEYS[1])
-                    if not value then return nil end
-                    if string.match(value, '^steam:%d+$') then
-                        return string.sub(value, 7)
-                    end
-                    redis.call('DEL', KEYS[1])
-                    return value
-                `, 1, `autologin:${t}`) as string | null;
-            } catch (redisErr) {
-                logError('autologin token 校验失败 Redis 异常', redisErr);
-                throw createError({ status: 500, message: '登录服务暂不可用' });
-            }
-            if (!userIdStr) {
-                throw createError({ status: 401, message: '登录链接已失效或已被使用' });
-            }
-            const userIdNum = parseInt(String(userIdStr), 10);
-            if (!Number.isFinite(userIdNum) || userIdNum <= 0) {
-                throw createError({ status: 401, message: '登录链接无效' });
+            longLivedUserId = parseUserAutoLoginId(t);
+            let loginUserId = longLivedUserId;
+            if (loginUserId === null) {
+                if (typeof t !== 'string' || !/^[a-f0-9]{64}$/.test(t)) {
+                    throw createError({ status: 401, message: '登录链接无效' });
+                }
+                // Steam 旧 token 保留至到期，普通旧 token 原子读取并删除。
+                let userIdStr: string | null;
+                try {
+                    const redis = getRedisCluster();
+                    userIdStr = await redis.eval(`
+                        local value = redis.call('GET', KEYS[1])
+                        if not value then return nil end
+                        if string.match(value, '^steam:%d+$') then
+                            return string.sub(value, 7)
+                        end
+                        redis.call('DEL', KEYS[1])
+                        return value
+                    `, 1, `autologin:${t}`) as string | null;
+                } catch {
+                    logError('autologin token 校验失败 Redis 异常');
+                    throw createError({ status: 500, message: '登录服务暂不可用' });
+                }
+                loginUserId = Number(userIdStr);
+                if (!Number.isSafeInteger(loginUserId) || loginUserId <= 0) {
+                    throw createError({ status: 401, message: '登录链接已失效' });
+                }
             }
             user = await sql({
                 query: 'SELECT * FROM Users WHERE id = ? LIMIT 1',
-                values: [userIdNum],
+                values: [loginUserId],
             }) as any[];
+            if (longLivedUserId !== null && (!user[0] || !verifyUserAutoLoginToken(t, user[0]))) {
+                throw createError({ status: 401, message: '登录链接已失效' });
+            }
         } else {
             throw createError({ status: 400, message: '缺少密码或登录 token' });
         }
@@ -873,24 +856,6 @@ export const userLogin = async (evt: H3Event) => {
         const userData = user[0] as User;
         userId = userData.id!;
 
-        let rechargeUrl = '';
-        let mallUrl = '';
-        let cdkUrl = '';
-        if (userId) {
-            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier');
-            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall');
-            const generatedCdkUrl = await generateUserLoginUrl(userId, '/user/cdk-redeem');
-            if (generatedUrl) {
-                rechargeUrl = generatedUrl;
-            }
-            if (generatedmallUrl) {
-                mallUrl = generatedmallUrl;
-            }
-            if (generatedCdkUrl) {
-                cdkUrl = generatedCdkUrl;
-            }
-        }
-
         // 检查用户状态
         const userStatus = parseInt(String(userData.status ?? '0')) || 0;
         if (userStatus === 1) {
@@ -917,6 +882,10 @@ export const userLogin = async (evt: H3Event) => {
         loginSuccess = true;
 
         console.log("用户登录成功:", userData.username);
+
+        const rechargeUrl = await generateUserLoginUrl(userId, '/user/cashier', { longLived: true }) || '';
+        const mallUrl = await generateUserLoginUrl(userId, '/user/mall', { longLived: true }) || '';
+        const cdkUrl = await generateUserLoginUrl(userId, '/user/cdk-redeem', { longLived: true }) || '';
 
         // 记录成功的登录
         const UserLoginLogsModel = await import('../model/userLoginLogs');
@@ -965,7 +934,6 @@ export const userLogin = async (evt: H3Event) => {
             }
         };
 
-        console.log("用户登录返回数据:", response);
         return response;
     } catch (e: any) {
         logError('用户登录异常', e);
@@ -974,7 +942,7 @@ export const userLogin = async (evt: H3Event) => {
         if (!loginSuccess && usernameToLog) {
             try {
                 const headers = getHeaders(evt);
-                const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+                const ipAddress = getRequestClientIp(evt);
                 const userAgent = (headers['user-agent'] as string) || '';
 
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
@@ -1034,8 +1002,7 @@ export const sdkLogin = async (evt: H3Event) => {
 
         // 获取客户端信息
         const headers = getHeaders(evt);
-        // 使用统一的 IP 提取逻辑（ali-cdn-real-ip 优先），限流与日志共用同一准确 IP
-        const ipAddress = getClientIp(headers as Record<string, string>);
+        const ipAddress = getRequestClientIp(evt);
         const userAgent = (headers['user-agent'] as string) || '';
 
         if (!username || !password) {
@@ -1161,8 +1128,8 @@ export const sdkLogin = async (evt: H3Event) => {
         let mallUrl = '';
         const userId = userData.id!;
         if (userId) {
-            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier');
-            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall');
+            const generatedUrl = await generateUserLoginUrl(userId, '/user/cashier', { longLived: true });
+            const generatedmallUrl = await generateUserLoginUrl(userId, '/user/mall', { longLived: true });
             if (generatedUrl) {
                 rechargeUrl = generatedUrl;
             }
@@ -1185,8 +1152,6 @@ export const sdkLogin = async (evt: H3Event) => {
             mallUrl: mallUrl
         };
 
-        console.log("SDK登录返回数据:", response);
-
         // 登录成功：清除该 IP / 账号的失败计数与失败锁（登录成功后不再限制同一 IP 重复登录）
         await recordLoginSuccess(ipAddress, username);
 
@@ -1199,7 +1164,7 @@ export const sdkLogin = async (evt: H3Event) => {
         if (!loginSuccess && usernameToLog) {
             try {
                 const headers = getHeaders(evt);
-                const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+                const ipAddress = getRequestClientIp(evt);
                 const userAgent = (headers['user-agent'] as string) || '';
 
                 const UserLoginLogsModel = await import('../model/userLoginLogs');
@@ -1706,8 +1671,7 @@ export const reportRole = async (evt: H3Event) => {
             console.log("角色上报成功，开始自动上报登录日志");
 
             // 获取客户端信息
-            const headers = getHeaders(evt);
-            const ipAddress = (headers['x-forwarded-for'] as string) || (headers['x-real-ip'] as string) || 'unknown';
+            const ipAddress = getRequestClientIp(evt);
 
             // 从Users表获取游戏代码和渠道码
             const userInfoResult = await sql({
@@ -1926,15 +1890,7 @@ export const register = async (evt: H3Event) => {
     try {
         const body = await readBody(evt);
 
-        // 提取真实客户端IP（阿里云CDN架构）
-        const _headers = getHeaders(evt);
-        const _aliIp = _headers['ali-cdn-real-ip'] as string;
-        const _xffIp = _headers['x-forwarded-for'] as string;
-        const _realIp = _headers['x-real-ip'] as string;
-        const clientIp = _aliIp
-            || (_xffIp ? _xffIp.split(',')[0].trim() : '')
-            || _realIp
-            || 'unknown';
+        const clientIp = getRequestClientIp(evt);
 
         console.log(`[用户注册] IP: ${clientIp} | 用户名: ${body.username} | 渠道: ${body.channel_code} | 游戏: ${body.game_code}`);
 

@@ -1,1115 +1,211 @@
-import { H3Event, readBody, getQuery, createError, getHeader, getCookie } from 'h3';
+import { type H3Event, readBody, getQuery, createError, getCookie } from 'h3';
 import * as AdminModel from '../model/admin';
 import { verifyAdminSession } from '../utils/auth';
-import { IdipClient } from './gmport';
-import type { RowDataPacket } from 'mysql2';
-import { gameDbSql, getGameDatabases, checkGameDatabase } from '../db/gameDb';
-import { listActive, getByIdentifier as getGameServerByIdentifier } from '../model/gameServers';
+import { listActive, getByIdentifier, type GameServerConfig } from '../model/gameServers';
 import { insertGmOperationLog } from '../model/gmOperationLogs';
+import { getGmItem, searchGmItems } from '../utils/gmItems';
+import { GmInterClient, normalizeWorldId, normalizeWuid, type GmMailItem, type GmMailResult } from '../utils/gmInterClient';
 
-// 根据区服动态创建 IdipClient（优先使用 GameServers.webhost）
-const createIdipClientForServer = async (identifier: string): Promise<IdipClient> => {
-  // 读取区服配置
-  const cfg = await getGameServerByIdentifier(identifier).catch(() => null);
-  // 优先使用每服 webhost，否则回退到环境变量，再回退到默认值
-  const rawBase = (cfg?.webhost || process.env.GM_BASE_URL || '').replace(/\/+$/, '');
-  // 补齐 /script 前缀（如果未包含）
-  const baseURL = rawBase.includes('/script') ? rawBase : `${rawBase}/script`;
-  const timeoutMs = parseInt(process.env.GM_TIMEOUT_MS || '10000');
-  return new IdipClient({ baseURL, directMode: true, timeoutMs });
+const invalid = (message: string) => createError({ statusCode: 400, statusMessage: 'Invalid GM request', message });
+
+export const requireGMPermission = async (event: H3Event) => {
+  const session = await verifyAdminSession(getCookie(event, 'admin_sid'));
+  if (!session.ok || !session.adminId) {
+    throw createError({ statusCode: 401, statusMessage: 'Authentication required', message: '请先登录有效的管理员账号' });
+  }
+  const admin = await AdminModel.getAdminWithPermissions(session.adminId);
+  if (!admin || Number(admin.is_active) !== 1) {
+    throw createError({ statusCode: 403, statusMessage: 'Administrator disabled', message: '管理员不存在或已停用' });
+  }
+  if (Number(admin.level) !== 0) {
+    throw createError({ statusCode: 403, statusMessage: 'GM access denied', message: '仅超级管理员可使用游戏运营功能' });
+  }
+  return admin;
 };
 
-// 根据区服获取玩家名称
-const getPlayerName = async (bname: string, playerId: string): Promise<string | null> => {
+function clientFor(server: GameServerConfig): GmInterClient {
+  return new GmInterClient({
+    baseUrl: String(server.webhost || process.env.GM_INTER_BASE_URL || '').trim(),
+    secret: process.env.GM_INTER_SECRET || '',
+    timeoutMs: Number(process.env.GM_TIMEOUT_MS || '10000'),
+  });
+}
+
+async function resolveServer(identifier: unknown) {
+  if (typeof identifier !== 'string' && typeof identifier !== 'number') throw invalid('请选择游戏区服');
+  const value = String(identifier).trim();
+  if (!value) throw invalid('请选择游戏区服');
+  const server = await getByIdentifier(value);
+  if (!server || Number(server.is_active) !== 1) throw invalid('游戏区服不存在或已停用');
   try {
-    const rows = await gameDbSql({
-      query: 'SELECT name FROM player WHERE id = ? LIMIT 1',
-      values: [playerId],
-      database: bname
-    }) as RowDataPacket[];
-    return rows && rows[0] ? (rows[0] as any).name || null : null;
-  } catch {
-    return null;
-  }
-};
-
-// 权限验证函数
-const requireGMPermission = async (event: H3Event) => {
-  // 🔐 安全加固：不再信任 Header 中的 authorization，强制校验 Cookie 中的 Session
-  const sid = getCookie(event, 'admin_sid');
-  const v = verifyAdminSession(sid);
-  
-  if (!v.ok || !v.adminId) {
-    // 如果 Cookie 校验失败，尝试从 Header 获取（仅作为备选，且必须经过 AdminModel.getAdminWithPermissions 严格校验）
-    const authorizationHeader = getHeader(event, 'authorization');
-    const token = authorizationHeader ? parseInt(authorizationHeader) : null;
-    
-    if (!token) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: '未提供有效的认证凭据'
-      });
-    }
-    
-    // 如果是通过 Header 传参，必须确保该 ID 确实拥有超级管理员权限
-    const adminWithPermissions = await AdminModel.getAdminWithPermissions(token);
-    if (!adminWithPermissions || adminWithPermissions.level > 0) {
-      throw createError({
-        statusCode: 403,
-        statusMessage: '非法访问：身份验证失败'
-      });
-    }
-    return adminWithPermissions;
-  }
-
-  try {
-    const adminWithPermissions = await AdminModel.getAdminWithPermissions(v.adminId);
-    if (!adminWithPermissions) {
-      throw createError({
-        statusCode: 401,
-        statusMessage: 'Token无效或已过期'
-      });
-    }
-
-    // 只有超级管理员(level 0)可以访问GM功能
-    if (adminWithPermissions.level > 0) {
-      throw createError({
-        statusCode: 403,
-        statusMessage: '无权限访问GM功能'
-      });
-    }
-
-    return adminWithPermissions;
+    return { server, worldId: normalizeWorldId(server.server_id), client: clientFor(server) };
   } catch (error: any) {
-    console.error('[GM] 权限验证失败:', error);
-    // 如果已经是createError，直接重新抛出
-    if (error.statusCode) {
-      throw error;
-    }
-    throw createError({
-      statusCode: 401,
-      statusMessage: '认证失败'
-    });
+    throw createError({ statusCode: 503, statusMessage: 'GM configuration required', message: error.message });
   }
+}
+
+export const getServers = async (event: H3Event) => {
+  await requireGMPermission(event);
+  const active = await listActive();
+  let unconfiguredCount = 0;
+  const data = active.flatMap(server => {
+    let worldId: number;
+    try { worldId = normalizeWorldId(server.server_id); } catch {
+      unconfiguredCount++;
+      return [];
+    }
+    let configurationError: string | null = null;
+    try { clientFor(server); } catch (error: any) { configurationError = error.message; }
+    return [{
+      name: server.name,
+      bname: server.bname || '',
+      server_id: worldId,
+      identifier: String(worldId),
+      is_configured: !configurationError,
+      configuration_error: configurationError,
+    }];
+  });
+  return {
+    success: true, data, unconfiguredCount,
+    message: unconfiguredCount ? `有 ${unconfiguredCount} 个区服缺少明确的游戏区服 ID，请完善区服配置` : '获取游戏区服成功',
+  };
 };
 
-// 获取服务器列表
-export const getServers = async (evt: H3Event) => {
+export const getPlayers = async (event: H3Event) => {
+  await requireGMPermission(event);
+  const query = getQuery(event);
+  let wuid: string;
+  try { wuid = normalizeWuid(query.wuid); } catch (error: any) { throw invalid(error.message); }
+  const { worldId, client } = await resolveServer(query.server);
   try {
-    const activeServers = await listActive();
-    const data = activeServers
-      .filter(s => s && s.name && s.bname)
-      .map(s => ({ name: s.name, bname: s.bname, server_id: s.server_id ?? null }));
-    return { success: true, data, message: '获取服务器列表成功' };
+    const player = await client.getPlayer(worldId, wuid);
+    return { success: true, data: player ? [player] : [], message: player ? '角色查询成功' : '该区服未找到此 WUID' };
   } catch (error: any) {
-    console.error('[GM] 获取服务器列表失败:', error);
-    return {
-      success: false,
-      data: [],
-      message: error.message || '获取服务器列表失败'
-    };
+    throw createError({ statusCode: 502, statusMessage: 'Game query failed', message: error.message });
   }
 };
 
-// 获取玩家列表
-export const getPlayers = async (evt: H3Event) => {
-  try {
-    const query = getQuery(evt);
-    const server = query.server as string;
-    
-    if (!server) {
-      return {
-        success: false,
-        data: [],
-        message: '请指定服务器'
-      };
-    }
-
-    // 检查数据库是否存在
-    const dbExists = await checkGameDatabase(server);
-    if (!dbExists) {
-      return {
-        success: false,
-        data: [],
-        message: '服务器不存在'
-      };
-    }
-
-    const players = await gameDbSql({
-      query: `
-        SELECT 
-          id,
-          openid,
-          puid,
-          name,
-          vipLevel,
-          vipExp,
-          platform,
-          channel,
-          forbidenTime,
-          loginTime,
-          createTime,
-          battlePoint
-        FROM player
-        WHERE invalid = 0
-        ORDER BY loginTime DESC
-      `,
-      database: server
-    }) as RowDataPacket[];
-
-    return {
-      success: true,
-      data: players,
-      message: '获取玩家列表成功'
-    };
-  } catch (error: any) {
-    console.error('[GM] 获取玩家列表失败:', error);
-    return {
-      success: false,
-      data: [],
-      message: error.message || '获取玩家列表失败'
-    };
-  }
+export const getItems = async (event: H3Event) => {
+  await requireGMPermission(event);
+  const query = getQuery(event);
+  if (Array.isArray(query.search) || (query.search !== undefined && typeof query.search !== 'string')) throw invalid('物品搜索参数格式错误');
+  const search = String(query.search || '').trim();
+  if (search.length > 200) throw invalid('物品搜索内容最多 200 字');
+  const limit = query.limit === undefined ? 100 : Number(query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw invalid('物品搜索条数须为 1–200');
+  const result = searchGmItems(search, limit);
+  return { success: true, data: result.items, total: result.total };
 };
 
-// 封号
-export const banPlayer = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId, openId, platform, duration, reason } = body;
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !playerId || !openId || !duration || !reason) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
+function mailBody(body: any): { title: string; content: string; items: GmMailItem[] } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw invalid('邮件参数格式错误');
+  if (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 200) throw invalid('邮件标题须为 1–200 字');
+  if (typeof body.content !== 'string' || !body.content.trim() || body.content.trim().length > 5000) throw invalid('邮件正文须为 1–5000 字');
+  const items = body.items ?? [];
+  if (!Array.isArray(items) || items.length > 6) throw invalid('邮件最多包含 6 组附件');
+  const seen = new Set<number>();
+  const normalized = items.map((item: any) => {
+    if (!item || !Number.isSafeInteger(item.i) || item.i <= 0 || !Number.isSafeInteger(item.a) || item.a <= 0) {
+      throw invalid('附件物品 ID 和数量须为正安全整数');
     }
+    if (!getGmItem(item.i)) throw invalid(`物品 ${item.i} 不在当前游戏物品库中`);
+    if (seen.has(item.i)) throw invalid(`物品 ${item.i} 重复，请合并数量后发送`);
+    seen.add(item.i);
+    return { i: item.i, a: item.a };
+  });
+  return { title: body.title.trim(), content: body.content.trim(), items: normalized };
+}
 
-    // 获取partition（服务器ID）
-    const partition = server.replace('game_', '');
-    
-    try {
-      // 处理平台ID: iOS=2, Android=1
-      let platId: 1 | 2 = 1; // 默认Android
-      if (typeof platform === 'string') {
-        platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-      } else if (typeof platform === 'number') {
-        platId = platform === 2 ? 2 : 1;
-      }
-      
-      // 调用GM接口封号
-      const idipClient = await createIdipClientForServer(server);
-      const requestPayload = {
-        partition,
-        platId,
-        openId,
-        banSeconds: Number(duration),
-        banReason: reason
-      };
-      await idipClient.banUser(requestPayload);
-
-      // 更新数据库中的封号时间
-      const forbidenTime = Date.now() + Number(duration) * 1000;
-      await gameDbSql({
-        query: 'UPDATE player SET forbidenTime = ? WHERE id = ?',
-        values: [forbidenTime, playerId],
-        database: server
-      });
-
-      console.log('[GM] Ban success:', { playerId, duration });
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'ban',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        platform: String(platform ?? ''),
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null,
-        request_params: requestPayload,
-        response_result: { message: 'ok' },
-        success: 1,
-        error_message: null
-      });
-      return {
-        success: true,
-        message: '封号成功'
-      };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'ban',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        platform: String(platform ?? ''),
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null,
-        request_params: { partition, openId, duration, reason },
-        response_result: null,
-        success: 0,
-        error_message: idipError?.message || 'IDIP错误'
-      });
-      // 即使IDIP失败，也尝试更新数据库
-      const forbidenTime = Date.now() + Number(duration) * 1000;
-      await gameDbSql({
-        query: 'UPDATE player SET forbidenTime = ? WHERE id = ?',
-        values: [forbidenTime, playerId],
-        database: server
-      });
-      
-      return {
-        success: true,
-        message: '封号成功（数据库已更新）'
-      };
-    }
-  } catch (error: any) {
-    console.error('[GM] 封号失败:', error);
-    return {
-      success: false,
-      message: error.message || '封号失败'
-    };
+function recipients(body: any, batch: boolean): Array<{ playerId: string; name: string }> {
+  const raw = batch ? body.players : [{ playerId: body.playerId }];
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 50) throw invalid('单次定向邮件须为 1–50 位玩家');
+  const ids = new Set<string>();
+  const targets: Array<{ playerId: string; name: string }> = [];
+  for (const target of raw) {
+    let id: string;
+    try { id = normalizeWuid(target?.playerId); } catch (error: any) { throw invalid(error.message); }
+    if (ids.has(id)) continue;
+    ids.add(id);
+    // Display names are annotations, never a way to resolve a different target.
+    targets.push({ playerId: id, name: typeof target.name === 'string' ? target.name.slice(0, 200) : '' });
   }
-};
+  return targets;
+}
 
-// 解封
-export const unbanPlayer = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId, openId, platform } = body;
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !playerId || !openId) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
-    }
-
-    // 获取partition（服务器ID）
-    const partition = server.replace('game_', '');
-    
-    try {
-      // 处理平台ID: iOS=2, Android=1
-      let platId: 1 | 2 = 1; // 默认Android
-      if (typeof platform === 'string') {
-        platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-      } else if (typeof platform === 'number') {
-        platId = platform === 2 ? 2 : 1;
-      }
-      
-      // 调用IDIP接口解封（接口会自动更新数据库）
-      const idipClient = await createIdipClientForServer(server);
-      const requestPayload = {
-        partition,
-        platId,
-        openId
-      };
-      await idipClient.unbanUser(requestPayload);
-
-      console.log('[GM] Unban success:', { server, playerId });
-    const playerName = await getPlayerName(server, playerId);
-    await insertGmOperationLog({
-      op_type: 'unban',
-      server,
-      player_id: String(playerId),
-      player_name: playerName || null,
-        open_id: String(openId),
-        platform: String(platform ?? ''),
-      admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null,
-        request_params: requestPayload,
-        response_result: { message: 'ok' },
-        success: 1,
-        error_message: null
-    });
-    return {
-      success: true,
-      message: '解封成功'
-    };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'unban',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        platform: String(platform ?? ''),
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null,
-        request_params: { partition, openId },
-        response_result: null,
-        success: 0,
-        error_message: idipError?.message || 'IDIP错误'
-      });
-      
-      return {
-        success: false,
-        message: `解封失败: ${idipError?.message || 'IDIP错误'}`
-      };
-    }
-  } catch (error: any) {
-    console.error('[GM] 解封失败:', error);
-    return {
-      success: false,
-      message: error.message || '解封失败'
-    };
-  }
-};
-
-// 发放物资
-export const sendItems = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId, openId, platform, roleId, title, content, items } = body;
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !openId || !title || !content || !items || items.length === 0) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
-    }
-
-    // 获取partition（服务器ID）
-    const partition = server.replace('game_', '');
-
-    try {
-      // 处理平台ID: iOS=2, Android=1
-      let platId: 1 | 2 = 1; // 默认Android
-      if (typeof platform === 'string') {
-        platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-      } else if (typeof platform === 'number') {
-        platId = platform === 2 ? 2 : 1;
-      }
-      
-      const idipClient = await createIdipClientForServer(server);
-      const requestPayload = {
-        partition,
-        platId,
-        openId,
-        roleId: roleId || playerId,
-        title,
-        content,
-        items
-      };
-      await idipClient.sendItems(requestPayload);
-
-      console.log('[GM] Items sent:', { playerId, itemCount: items.length });
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'send_items',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        role_id: String(roleId || playerId),
-        platform: String(platform ?? ''),
-        request_params: requestPayload,
-        response_result: { message: 'ok' },
-        success: 1,
-        error_message: null,
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: true,
-        message: '物资发放成功'
-      };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'send_items',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        role_id: String(roleId || playerId),
-        platform: String(platform ?? ''),
-        request_params: { partition, openId, roleId: roleId || playerId, title, content, items },
-        response_result: null,
-        success: 0,
-        error_message: idipError?.message || 'IDIP错误',
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: false,
-        message: `发放失败: ${idipError.message}`
-      };
-    }
-  } catch (error: any) {
-    console.error('[GM] 发放物资失败:', error);
-    return {
-      success: false,
-      message: error.message || '发放物资失败'
-    };
-  }
-};
-
-// GM充值
-export const rechargePlayer = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId, openId, platform, diamond } = body;
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !openId || !diamond || diamond <= 0) {
-      return {
-        success: false,
-        message: '参数不完整或无效'
-      };
-    }
-
-    // 获取partition（服务器ID）
-    const partition = server.replace('game_', '');
-
-    try {
-      // 处理平台ID: iOS=2, Android=1
-      let platId: 1 | 2 = 1; // 默认Android
-      if (typeof platform === 'string') {
-        platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-      } else if (typeof platform === 'number') {
-        platId = platform === 2 ? 2 : 1;
-      }
-      
-      const idipClient = await createIdipClientForServer(server);
-      const requestPayload = {
-        partition,
-        platId,
-        openId,
-        diamond: Number(diamond)
-      };
-      await idipClient.gmRecharge(requestPayload);
-
-      console.log('[GM] 充值成功');
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'recharge',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        platform: String(platform ?? ''),
-        request_params: requestPayload,
-        response_result: { message: 'ok' },
-        success: 1,
-        error_message: null,
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: true,
-        message: `成功充值 ${diamond} 钻石`
-      };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'recharge',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        platform: String(platform ?? ''),
-        request_params: { partition, openId, diamond: Number(diamond) },
-        response_result: null,
-        success: 0,
-        error_message: idipError?.message || 'IDIP错误',
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: false,
-        message: `充值失败: ${idipError.message}`
-      };
-    }
-  } catch (error: any) {
-    console.error('[GM] GM充值失败:', error);
-    return {
-      success: false,
-      message: error.message || 'GM充值失败'
-    };
-  }
-};
-
-// 发送邮件
-export const sendMail = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId, openId, platform, roleId, title, content } = body;
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !openId || !title || !content) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
-    }
-
-    // 获取partition（服务器ID）
-    const partition = server.replace('game_', '');
-
-    try {
-      // 处理平台ID: iOS=2, Android=1  
-      let platId: 1 | 2 = 1; // 默认Android
-      if (typeof platform === 'string') {
-        platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-      } else if (typeof platform === 'number') {
-        platId = platform === 2 ? 2 : 1;
-      }
-      
-      const idipClient = await createIdipClientForServer(server);
-      const requestPayload = {
-        partition,
-        platId,
-        openId,
-        roleId: roleId || playerId,
-        title,
-        content
-      };
-      await idipClient.sendTextMail(requestPayload);
-
-      console.log('[GM] 邮件发送成功');
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'send_mail',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        role_id: String(roleId || playerId),
-        platform: String(platform ?? ''),
-        request_params: requestPayload,
-        response_result: { message: 'ok' },
-        success: 1,
-        error_message: null,
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: true,
-        message: '邮件发送成功'
-      };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP接口调用失败:', idipError);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'send_mail',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        role_id: String(roleId || playerId),
-        platform: String(platform ?? ''),
-        request_params: { partition, openId, roleId: roleId || playerId, title, content },
-        response_result: null,
-        success: 0,
-        error_message: idipError?.message || 'IDIP错误',
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: false,
-        message: `发送失败: ${idipError.message}`
-      };
-    }
-  } catch (error: any) {
-    console.error('[GM] 发送邮件失败:', error);
-    return {
-      success: false,
-      message: error.message || '发送邮件失败'
-    };
-  }
-};
-
-// 检查目标 puid 是否存在
-export const checkTargetPuid = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, openId, targetPlatform } = body;
-    await requireGMPermission(evt);
-
-    if (!server || !openId || !targetPlatform) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
-    }
-
-    // 获取游戏服务器配置
-    const gameServer = await getGameServerByIdentifier(server);
-    if (!gameServer) {
-      return {
-        success: false,
-        message: '游戏服务器不存在'
-      };
-    }
-
-    const newPuid = `${openId}#${targetPlatform}`;
-
-    // 解析 dbip
-    const [host, port] = gameServer.dbip.split(':');
-    const dbConfig = {
-      host: host,
-      port: port ? parseInt(port) : 3306,
-      user: gameServer.dbuser,
-      password: gameServer.dbpass,
-      database: gameServer.bname
-    };
-
-    const mysql = await import('mysql2/promise');
-    const connection = await mysql.createConnection(dbConfig);
-    
-    // 查询目标 puid 是否存在
-    const [rows]: any = await connection.execute(
-      'SELECT id, name, vipLevel, battlePoint FROM player WHERE puid = ? LIMIT 1',
-      [newPuid]
-    );
-    await connection.end();
-
-    if (rows && rows.length > 0) {
-      const existingPlayer = rows[0];
-      return {
-        success: true,
-        exists: true,
-        player: {
-          id: existingPlayer.id,
-          name: existingPlayer.name,
-          vipLevel: existingPlayer.vipLevel,
-          battlePoint: existingPlayer.battlePoint
-        }
-      };
-    }
-
-    return {
-      success: true,
-      exists: false
-    };
-  } catch (error: any) {
-    console.error('[GM] 检查目标puid失败:', error);
-    return {
-      success: false,
-      message: error.message || '检查失败'
-    };
-  }
-};
-
-// 迁移平台（使用IDIP接口）
-export const migratePlatform = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId, openId, platform, areaId = 1 } = body; // 默认为1（微信）
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !openId || !platform) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
-    }
-
-    // 根据当前平台确定目标平台
-    let targetPlatform: string;
-    if (platform.toLowerCase() === 'android') {
-      targetPlatform = 'ios';
-    } else if (platform.toLowerCase() === 'ios') {
-      targetPlatform = 'android';
-    } else {
-      return {
-        success: false,
-        message: '当前平台必须是 android 或 ios'
-      };
-    }
-
-    if (areaId !== 1 && areaId !== 2) {
-      return {
-        success: false,
-        message: 'AreaId必须是1（微信）或2（手Q）'
-      };
-    }
-
-    // 获取partition（服务器ID）
-    const partition = server.replace('game_', '');
-
-    try {
-      const idipClient = await createIdipClientForServer(server);
-      const requestPayload = {
-        partition,
-        areaId: areaId as 1 | 2,
-        openId: String(openId)
-      };
-      
-      const response = await idipClient.platformTransfer(requestPayload);
-      console.log('[GM] Platform transfer success:', { playerId, platform: targetPlatform });
-        
-        // 记录操作日志
-      const playerName = await getPlayerName(server, playerId || openId);
-        await insertGmOperationLog({
-          op_type: 'migrate_platform',
-          server,
-        player_id: String(playerId || openId),
-          player_name: playerName || null,
-          open_id: String(openId),
-        role_id: String(playerId || openId),
-        platform: `${platform} -> ${targetPlatform}`,
-          request_params: { 
-          ...requestPayload, 
-          currentPlatform: platform, 
-          targetPlatform 
-          },
-          response_result: { 
-          Result: response.body.Result,
-          RetMsg: response.body.RetMsg || 'success'
-          },
-          success: 1,
-          error_message: null,
-          admin_id: admin?.id ?? null,
-          admin_name: admin?.name ?? null
-        });
-
-      return {
-        success: true,
-        message: `平台迁移成功：${platform} → ${targetPlatform}`
-      };
-    } catch (idipError: any) {
-      console.error('[GM] IDIP调用失败:', idipError);
-      const playerName = await getPlayerName(server, playerId || openId);
-      await insertGmOperationLog({
-        op_type: 'migrate_platform',
-        server,
-        player_id: String(playerId || openId),
-        player_name: playerName || null,
-        open_id: String(openId),
-        role_id: String(playerId || openId),
-        platform: `${platform} -> ${targetPlatform}`,
-        request_params: { partition, areaId, openId, currentPlatform: platform, targetPlatform },
-        response_result: null,
-        success: 0,
-        error_message: idipError?.message || 'IDIP调用失败',
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: false,
-        message: idipError.message || '平台迁移失败'
-      };
-    }
-  } catch (error: any) {
-    console.error('[GM] 迁移平台失败:', error);
-    return {
-      success: false,
-      message: error.message || '迁移平台失败'
-    };
-  }
-};
-
-// 批量发放物资（顺序执行，0.5 秒间隔，上限 50 人）
-export const sendItemsBatch = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, title, content, items, targets } = body || {};
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !title || !content || !Array.isArray(items) || items.length === 0 || !Array.isArray(targets) || targets.length === 0) {
-      return { success: false, message: '参数不完整' };
-    }
-
-    // 人数上限 50
-    const MAX_PER_BATCH = 50;
-    if (targets.length > MAX_PER_BATCH) {
-      return { success: false, message: `单次最多支持 ${MAX_PER_BATCH} 人` };
-    }
-
-    // 同服约束：本接口以 server 为准，targets 不允许跨服（若传入的 playerId/openId 属于其他服，调用也会失败）
-
-    // 去重（按 openId+playerId 组合）
-    const seen = new Set<string>();
-    const deduped = targets.filter((t: any) => {
-      const key = `${t?.openId || ''}::${t?.playerId || ''}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    const partition = String(server).replace('game_', '');
-    const idipClient = await createIdipClientForServer(server);
-
-    const results: Array<{ playerId: string; openId: string; success: boolean; message?: string }> = [];
-
-    // 顺序执行 + 0.5 秒间隔
-    for (let i = 0; i < deduped.length; i++) {
-      const t = deduped[i] || {};
-      const playerId = String(t.playerId || '');
-      const openId = String(t.openId || '');
-      const roleId = String(t.roleId || playerId);
-      const platform = t.platform;
-
-      // 平台: iOS=2, Android=1
-      let platId: 1 | 2 = 1;
-      if (typeof platform === 'string') {
-        platId = platform.toLowerCase() === 'ios' ? 2 : 1;
-      } else if (typeof platform === 'number') {
-        platId = platform === 2 ? 2 : 1;
-      }
-
-      const requestPayload = {
-        partition,
-        platId,
-        openId,
-        roleId,
-        title,
-        content,
-        items
-      };
-
+async function deliver(event: H3Event, batch: boolean) {
+  const admin = await requireGMPermission(event);
+  const body = await readBody(event);
+  const mail = mailBody(body);
+  const targets = recipients(body, batch);
+  const { worldId, client } = await resolveServer(body.server);
+  // The Inter mail endpoint checks _id existence, but does not itself filter
+  // game_user.w. Recheck the world before sending, including manually entered
+  // batch targets and worlds sharing a merged database.
+  const checked = new Map<string, { name?: string; failure?: GmMailResult }>();
+  let nextTarget = 0;
+  await Promise.all(Array.from({ length: Math.min(5, targets.length) }, async () => {
+    while (nextTarget < targets.length) {
+      const target = targets[nextTarget++];
       try {
-        await idipClient.sendItems(requestPayload);
-
-        const playerName = await getPlayerName(server, playerId);
-        await insertGmOperationLog({
-          op_type: 'send_items',
-          server,
-          player_id: String(playerId),
-          player_name: playerName || null,
-          open_id: String(openId),
-          role_id: String(roleId),
-          platform: String(platform ?? ''),
-          request_params: requestPayload,
-          response_result: { message: 'ok' },
-          success: 1,
-          error_message: null,
-          admin_id: admin?.id ?? null,
-          admin_name: admin?.name ?? null
+        const player = await client.getPlayer(worldId, target.playerId);
+        checked.set(target.playerId, player ? { name: player.name } : {
+          failure: { playerId: target.playerId, success: false, status: 'failed', message: '选定区服未找到该 WUID，本次未发送' },
         });
-
-        results.push({ playerId, openId, success: true });
-      } catch (idipError: any) {
-        const playerName = await getPlayerName(server, playerId);
-        await insertGmOperationLog({
-          op_type: 'send_items',
-          server,
-          player_id: String(playerId),
-          player_name: playerName || null,
-          open_id: String(openId),
-          role_id: String(roleId),
-          platform: String(platform ?? ''),
-          request_params: requestPayload,
-          response_result: null,
-          success: 0,
-          error_message: idipError?.message || 'IDIP错误',
-          admin_id: admin?.id ?? null,
-          admin_name: admin?.name ?? null
+      } catch (error: any) {
+        checked.set(target.playerId, {
+          failure: { playerId: target.playerId, success: false, status: 'failed', message: `角色校验失败：${error.message}；本次未发送` },
         });
-
-        results.push({ playerId, openId, success: false, message: idipError?.message || 'IDIP错误' });
-      }
-
-      // 0.5 秒间隔（避免并发冲击后端/脚本服务）
-      if (i < deduped.length - 1) {
-        await new Promise((r) => setTimeout(r, 500));
       }
     }
-
-    const successCount = results.filter(r => r.success).length;
-    const failedCount = results.length - successCount;
-    return {
-      success: true,
-      summary: { total: results.length, success: successCount, failed: failedCount },
-      results
-    };
-  } catch (error: any) {
-    console.error('[GM] 批量发放物资失败:', error);
-    return { success: false, message: error?.message || '批量发放物资失败' };
-  }
-};
-
-// 开罩子
-export const openProtectShield = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId } = body;
-    const minutes = body.minutes === undefined ? 1440 : Number(body.minutes);
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 43200) {
-      return { success: false, message: '保护时间必须为 1–43200 分钟' };
-    }
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !playerId) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
-    }
-
+  }));
+  const validTargets = targets.filter(target => !checked.get(target.playerId)?.failure);
+  const delivered = validTargets.length
+    ? await client.sendMail(worldId, validTargets.map(target => target.playerId), mail.title, mail.content, mail.items)
+    : [];
+  const results = targets.map(target => checked.get(target.playerId)?.failure || delivered.find(result => result.playerId === target.playerId)!);
+  let auditWarning = false;
+  for (const result of results) {
     try {
-      // 获取游戏服务器配置
-      const gameServer = await getGameServerByIdentifier(server);
-      if (!gameServer) {
-        return {
-          success: false,
-          message: '游戏服务器不存在'
-        };
-      }
-
-      // 从实际游戏角色读取身份，不能用后台小号 ID 代替游戏 OpenId。
-      const players = await gameDbSql({
-        database: gameServer.bname,
-        query: 'SELECT id, name, openid, puid, platform, serverId FROM player WHERE id = ? AND invalid = 0 LIMIT 1',
-        values: [String(playerId)]
-      }) as any[];
-      const player = players[0];
-      if (!player) throw new Error('游戏服中没有找到该角色');
-      const platform = String(player.platform || '').toLowerCase();
-      if (!['android', 'ios'].includes(platform)) throw new Error('无法确认角色平台');
-      const openId = String(player.openid || '').trim();
-      const partition = String(player.serverId || '').trim();
-      if (!openId || !partition || ![openId, `${openId}#${platform}`].includes(String(player.puid))) {
-        throw new Error('角色账号映射不一致，停止开罩');
-      }
-      const matches = await gameDbSql({
-        database: gameServer.bname,
-        query: 'SELECT id FROM player WHERE puid = ? AND serverId = ? AND invalid = 0',
-        values: [player.puid, partition]
-      }) as any[];
-      if (matches.length !== 1 || String(matches[0].id) !== String(playerId)) throw new Error('账号映射存在多个角色，停止开罩');
-      const client = await createIdipClientForServer(server);
-      const startedAt = Math.floor(Date.now() / 1000);
-      const result = await client.openProtectShield({ partition, platId: platform === 'android' ? 1 : 2, openId, minutes });
-      const endTime = Number(result.body.EndTime);
-      if (!Number.isFinite(endTime) || endTime < startedAt + minutes * 60 - 60) throw new Error('游戏服未返回预期的保护结束时间，请核查后勿重复提交');
-      const playerName = player.name;
       await insertGmOperationLog({
-        op_type: 'open_protect_shield',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        request_params: { playerId, minutes, endpoint: 'idip/4423' },
-        response_result: result,
-        success: 1,
-        error_message: null,
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-
-      return { success: true, message: '保护罩已开启，保留已有更长保护时间', data: { endTime, minutes } };
-    } catch (error: any) {
-      console.error('[GM] 调用开罩子接口失败:', error);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'open_protect_shield',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        request_params: { playerId, minutes, endpoint: 'idip/4423' },
-        response_result: null,
-        success: 0,
-        error_message: error?.message || '接口调用失败',
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: false,
-        message: `开罩子失败: ${error.message}`
-      };
-    }
-  } catch (error: any) {
-    console.error('[GM] 开罩子失败:', error);
-    return {
-      success: false,
-      message: error.message || '开罩子失败'
-    };
-  }
-};
-
-// 删除角色
-export const deletePlayer = async (evt: H3Event) => {
-  try {
-    const body = await readBody(evt);
-    const { server, playerId } = body;
-    const admin = await requireGMPermission(evt);
-
-    if (!server || !playerId) {
-      return {
-        success: false,
-        message: '参数不完整'
-      };
-    }
-
-    try {
-      // 获取游戏服务器配置
-      const gameServer = await getGameServerByIdentifier(server);
-      if (!gameServer) {
-        return {
-          success: false,
-          message: '游戏服务器不存在'
-        };
-      }
-
-      // 先获取玩家名称（用于日志）
-      const playerName = await getPlayerName(server, playerId);
-
-      // 调用游戏服务器接口（命令 id 为 userDel，见游戏服 script.xml，注册的是 PlayerDeleteHandler）
-      const url = `${gameServer.webhost}/script/userDel?playerId=${playerId}`;
-      const response = await fetch(url);
-      const result = await response.json();
-
-      await insertGmOperationLog({
-        op_type: 'delete_player',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        request_params: { playerId },
-        response_result: result,
+        op_type: mail.items.length ? 'send_items' : 'send_mail',
+        server: String(worldId),
+        player_id: result.playerId,
+        player_name: checked.get(result.playerId)?.name || null,
+        role_id: result.playerId,
+        admin_id: admin.id,
+        admin_name: admin.name,
+        request_params: {
+          protocol: 'new_gmtools',
+          worldId,
+          playerId: result.playerId,
+          ...mail,
+          item_names: Object.fromEntries(mail.items.map(item => [String(item.i), getGmItem(item.i)?.name || ''])),
+          targetedBatch: batch,
+        },
+        response_result: { status: result.status, message: result.message },
         success: result.success ? 1 : 0,
         error_message: result.success ? null : result.message,
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
       });
-
-      if (result.success) {
-        return {
-          success: true,
-          message: result.message || '删除角色成功'
-        };
-      } else {
-        return {
-          success: false,
-          message: result.message || '删除角色失败'
-        };
-      }
-    } catch (error: any) {
-      console.error('[GM] 调用删除角色接口失败:', error);
-      const playerName = await getPlayerName(server, playerId);
-      await insertGmOperationLog({
-        op_type: 'delete_player',
-        server,
-        player_id: String(playerId),
-        player_name: playerName || null,
-        request_params: { playerId },
-        response_result: null,
-        success: 0,
-        error_message: error?.message || '接口调用失败',
-        admin_id: admin?.id ?? null,
-        admin_name: admin?.name ?? null
-      });
-      return {
-        success: false,
-        message: `删除角色失败: ${error.message}`
-      };
+    } catch {
+      // A log write failure must not turn an acknowledged send into a failure
+      // that would invite the operator to resend the same reward.
+      auditWarning = true;
+      console.error('[GM] 邮件操作日志写入失败，发送结果以游戏服确认信息为准');
     }
-  } catch (error: any) {
-    console.error('[GM] 删除角色失败:', error);
-    return {
-      success: false,
-      message: error.message || '删除角色失败'
-    };
   }
-};
+  const successCount = results.filter(result => result.success).length;
+  const failedCount = results.length - successCount;
+  const unknownCount = results.filter(result => result.status === 'unknown').length;
+  let message = failedCount ? `已确认 ${successCount} 人发送成功，${failedCount} 人失败或结果未确认` : `已确认 ${successCount} 人邮件发送成功`;
+  if (unknownCount) message += '；请核对未确认玩家的游戏内邮件，勿直接重试';
+  if (auditWarning) message += '；部分操作日志未能保存，请人工留存本次结果';
+  return {
+    success: failedCount === 0,
+    data: { total: results.length, successCount, failedCount, unknownCount, results, auditWarning },
+    message,
+  };
+}
+
+export const sendMail = (event: H3Event) => deliver(event, false);
+export const sendItems = (event: H3Event) => deliver(event, false);
+export const sendItemsBatch = (event: H3Event) => deliver(event, true);

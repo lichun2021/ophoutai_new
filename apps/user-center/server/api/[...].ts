@@ -1,4 +1,4 @@
-import { useBase, createRouter, defineEventHandler, getHeaders, getMethod, getRequestURL, readBody, getQuery, getCookie, setCookie, createError, setResponseStatus, type H3Event } from "h3";
+import { useBase, createRouter, defineEventHandler, getMethod, getRequestURL, readBody, getQuery, getCookie, setCookie, createError, setResponseStatus, type H3Event } from "h3";
 import { verifyApiSignature } from '../utils/apiSign';
 import * as UserCtrl from '../controller/user';
 import * as PaymentCtrl from '../controller/payment';
@@ -9,19 +9,11 @@ import { listActive, listCdkRedeemable } from '../model/gameServers';
 import * as SystemParamsCtrl from '../controller/systemParams';
 import * as PaymentSettingsCtrl from '../controller/paymentSettings';
 import { generateCaptcha, verifyCaptcha } from '../utils/captcha';
+import { isAuthCookieSecure } from '@quantum/shared/server/utils/jwt';
+import { withLoginResponseLog } from '@quantum/shared/server/utils/loginResponseLog';
+import { getRequestClientIp } from '../utils/requestIp';
 
 const router = createRouter();
-
-// 获取真实客户端IP（阿里云CDN架构）
-function getRealIp(headers: ReturnType<typeof getHeaders>): string {
-  const aliCdnRealIp = headers['ali-cdn-real-ip'] as string;
-  const xForwardedFor = headers['x-forwarded-for'] as string;
-  const xRealIp = headers['x-real-ip'] as string;
-  return aliCdnRealIp
-    || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : '')
-    || xRealIp
-    || 'unknown';
-}
 
 // 获取当前时间字符串（北京时间）
 function nowStr(): string {
@@ -32,8 +24,7 @@ function nowStr(): string {
 const withLogging = (handler: Function, apiName: string) => {
   return defineEventHandler(async (event: H3Event) => {
     const startTime = Date.now();
-    const headers = getHeaders(event);
-    const ipAddress = getRealIp(headers);
+    const ipAddress = getRequestClientIp(event);
     const method = getMethod(event);
     const url = getRequestURL(event);
 
@@ -126,27 +117,27 @@ router.get('/user/check-channel', defineEventHandler(UserCtrl.checkChannelStatus
  * 用户网页登录
  * @route POST /api/user/login
  */
-router.post('/user/login', defineEventHandler(async (event) => {
+router.post('/user/login', defineEventHandler(withLoginResponseLog('User Login', async (event) => {
   const result: any = await UserCtrl.userLogin(event);
   try {
     const ok = !!(result && result.data && result.data.user);
     if (ok) {
       setCookie(event, 'auth_logged_in', 'true', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: isAuthCookieSecure(),
         sameSite: 'lax',
         path: '/',
       });
       setCookie(event, 'auth_is_user', 'true', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: isAuthCookieSecure(),
         sameSite: 'lax',
         path: '/',
       });
     }
   } catch { }
   return result;
-}));
+})));
 
 /**
  * 获取图形验证码
@@ -161,8 +152,7 @@ router.get('/user/captcha', defineEventHandler(async () => {
  * @route POST /api/user/register
  */
 router.post('/user/register', withLogging(async (event: H3Event) => {
-  const headers = getHeaders(event);
-  const clientIp = getRealIp(headers);
+  const clientIp = getRequestClientIp(event);
 
   // 安全验证（图形验证码，答案只在后端保存，一次性使用）
   const body = await readBody(event);

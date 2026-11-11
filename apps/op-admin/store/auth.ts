@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia';
 
+const USER_SESSION_DURATION_MS = 15 * 60 * 1000;
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     id: 0,
     isLoggedIn: false,
     name: '',
-    password: '',
     permissions: null,
     timeoutId: 0 as unknown as number,
     loginTime: 0, // 添加登录时间戳
@@ -19,27 +20,24 @@ export const useAuthStore = defineStore('auth', {
   // },
   actions: {
     init() {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = 0;
       this.id = Number(localStorage.getItem('auth_id')) || 0;
       this.isLoggedIn = localStorage.getItem('auth_isLoggedIn') === 'true';
       this.name = localStorage.getItem('auth_name') || '';
-      this.password = localStorage.getItem('auth_password') || '';
+      localStorage.removeItem('auth_password');
       this.permissions = JSON.parse(localStorage.getItem('auth_permissions') || 'null');
       this.loginTime = Number(localStorage.getItem('auth_loginTime')) || 0;
       this.isUser = localStorage.getItem('auth_isUser') === 'true';
       this.userInfo = JSON.parse(localStorage.getItem('auth_userInfo') || 'null');
       
-      // 检查登录有效期
-      if (this.isLoggedIn && this.loginTime) {
-        const now = Date.now();
-        // 用户15分钟，管理员4小时
-        const duration = this.isUser ? 15 * 60 * 1000 : 4 * 60 * 60 * 1000;
-        
-        if (now - this.loginTime > duration) {
-          console.log(`登录已超过${this.isUser ? '15分钟' : '4小时'}，需要重新登录`);
-          this.logOut();
+      // 普通用户仍按登录时间检查 15 分钟有效期。
+      if (this.isLoggedIn && this.isUser && this.loginTime) {
+        const remainingTime = USER_SESSION_DURATION_MS - (Date.now() - this.loginTime);
+        if (remainingTime <= 0) {
+          console.log('登录已超过15分钟，需要重新登录');
+          void this.logOut();
         } else {
-          // 计算剩余时间并设置超时
-          const remainingTime = duration - (now - this.loginTime);
           this.setTimeoutWithDuration(remainingTime);
         }
       }
@@ -144,14 +142,13 @@ export const useAuthStore = defineStore('auth', {
             this.id = response.data.id;
             this.permissions = JSON.parse(data);
             this.name = username;
-            this.password = password;
             this.loginTime = Date.now();
             this.userInfo = null; // 管理员没有用户信息
 
             localStorage.setItem('auth_id', this.id.toString());
             localStorage.setItem('auth_isLoggedIn', 'true');
             localStorage.setItem('auth_name', this.name);
-            localStorage.setItem('auth_password', this.password);
+            localStorage.removeItem('auth_password');
             localStorage.setItem('auth_permissions', JSON.stringify(this.permissions));
             localStorage.setItem('auth_loginTime', this.loginTime.toString());
             localStorage.setItem('auth_isUser', 'false');
@@ -175,7 +172,6 @@ export const useAuthStore = defineStore('auth', {
       this.permissions = null;
       this.id = 0;
       this.name = '';
-      this.password = '';
       this.isUser = false;
       this.userInfo = null;
       this.loginTime = 0;
@@ -189,33 +185,38 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem('auth_isUser');
       localStorage.removeItem('auth_userInfo');
     },
-    logOut() {
-      clearTimeout(this.timeoutId);
-      
-      // 在清除状态前先保存用户类型
+    async logOut(redirectTo?: '/admin/login' | '/user/login') {
       const wasUser = this.isUser;
-      
+      const router = useRouter();
+      if (!wasUser) {
+        try {
+          const response = await $fetch<{ success: boolean }>('/api/admin/logout', {
+            method: 'POST',
+            retry: 0,
+          });
+          if (!response?.success) throw new Error('Administrator logout failed');
+        } catch {
+          window.alert('退出登录失败，请重试。');
+          return false;
+        }
+      }
+
+      clearTimeout(this.timeoutId);
       this.clearAuthState();
       this.timeoutId = 0;
-      
-      // 根据之前的用户类型跳转到不同的登录页
-      const router = useRouter();
-      if (wasUser) {
-        router.push('/user/login'); // 用户跳转到用户登录页
-      } else {
-        router.push('/admin/login'); // 管理员跳转到管理员登录页
-      }
+      await router.push(redirectTo ?? (wasUser ? '/user/login' : '/admin/login'));
+      return true;
     },
     resetTimeout() {
-      // 用户15分钟，管理员4小时
-      const duration = this.isUser ? 15 * 60 * 1000 : 4 * 60 * 60 * 1000;
-      this.setTimeoutWithDuration(duration);
+      clearTimeout(this.timeoutId);
+      this.timeoutId = 0;
+      if (this.isUser) this.setTimeoutWithDuration(USER_SESSION_DURATION_MS);
     },
     setTimeoutWithDuration(duration: number) {
       clearTimeout(this.timeoutId);
       this.timeoutId = setTimeout(() => {
         console.log('登录超时，自动登出');
-        this.logOut();
+        void this.logOut();
       }, duration) as unknown as number;
     },
     // 刷新用户余额

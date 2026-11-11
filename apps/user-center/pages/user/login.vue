@@ -60,6 +60,7 @@ import { useAuthStore } from '@/store/auth';
 import { useTips } from '@/composables/useTips';
 
 definePageMeta({ layout: 'auth' });
+useHead({ meta: [{ name: 'referrer', content: 'no-referrer' }] });
 
 const state = reactive({ username: '', password: '' });
 const error = ref('');
@@ -71,7 +72,7 @@ const authStore = useAuthStore();
 const tips = useTips();
 
 const isFormValid = computed(() => {
-  // 带一次性 token 时不需要用户名密码
+  // 免登录 token 可直接完成登录。
   const hasToken = typeof route.query.t === 'string' && !!route.query.t;
   if (hasToken) return true;
   const hasUsername = !!state.username?.trim();
@@ -79,7 +80,21 @@ const isFormValid = computed(() => {
   return hasUsername && hasPwd;
 });
 
-const login = async (isAutoLogin = false) => {
+const redirectAfterLogin = () => {
+  const value = typeof route.query.redirect === 'string' ? route.query.redirect : '';
+  if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return '/user/home';
+  try {
+    const target = new URL(value, window.location.origin);
+    if (target.origin !== window.location.origin) return '/user/home';
+    // 凭据由当前登录页消费，不带到后续页面。
+    for (const key of ['t', 'username', 'password', 'auto_login']) target.searchParams.delete(key);
+    return target.pathname + target.search + target.hash;
+  } catch {
+    return '/user/home';
+  }
+};
+
+const login = async () => {
   if (loading.value) return;
   const tParam = typeof route.query.t === 'string' ? route.query.t : undefined;
   if (!tParam && (!state.username || !state.password)) {
@@ -91,9 +106,7 @@ const login = async (isAutoLogin = false) => {
     const isResult = await authStore.logInUser(state.username, state.password, tParam);
     if (isResult) {
       tips.success('登录成功');
-      await new Promise(r => setTimeout(r, 500));
-      const redirect = typeof route.query.redirect === 'string' && route.query.redirect ? route.query.redirect : '/user/home';
-      await router.push(redirect);
+      await router.replace(redirectAfterLogin());
       return;
     }
     tips.error('登录失败，请稍后重试');
@@ -111,7 +124,7 @@ const login = async (isAutoLogin = false) => {
       tips.error(message);
       // 限流不代表链接过期，保留 token 和目标页面供稍后重试
     } else if (status === 401 && tParam) {
-      tips.error('免登录链接已失效或已被使用，请返回游戏重新登录获取新链接');
+      tips.error('免登录链接已失效，请返回游戏重新登录获取新链接');
       await router.replace({ path: route.path });
     } else if (status === 401) {
       tips.error('登录失败，用户名或密码错误');
@@ -133,7 +146,7 @@ const checkUrlParams = () => {
   const hasToken = typeof q.t === 'string' && !!q.t;
   if (q.auto_login === 'true' && (hasToken || (state.username && state.password))) {
     tips.success('正在自动登录...');
-    setTimeout(() => { login(true); }, 1000);
+    setTimeout(() => { login(); }, 1000);
   }
 };
 
