@@ -228,7 +228,7 @@ const withLoginRateGuard = (handler: Function) => {
 /**
  * SDK登录接口
  * @route POST /sdkapi/login/dologin
- * @body {z: string, b: string, c: number, d: string, e: string, f: string, x: string, h: string, i: string, vs: string, sid: string, o: string, p: string, q: string, r: string, s: string, si: string}
+ * @body {z: string, b: string, c: number, d: string, game_login_proof?: '1', e: string, f: string, x: string, h: string, i: string, vs: string, sid: string, o: string, p: string, q: string, r: string, s: string, si: string}
  * @returns {Object} SDK登录结果
  */
 router.post('/login/dologin', withLoginRateGuard(withSignAndLogging(UserCtrl.sdkLogin, 'SDK登录接口')));

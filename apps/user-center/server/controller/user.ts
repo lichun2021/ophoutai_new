@@ -984,6 +984,7 @@ export const sdkLogin = async (evt: H3Event) => {
             b: password,     // 密码
             c: loginType,    // 登录类型
             d: gameId,       // 游戏ID
+            game_login_proof: gameLoginProofCapability,
             e: imei,         // 设备IMEI
             f: agentId,      // 代理ID
             x: appId,        // APP ID
@@ -1156,7 +1157,7 @@ export const sdkLogin = async (evt: H3Event) => {
         // 登录成功：清除该 IP / 账号的失败计数与失败锁（登录成功后不再限制同一 IP 重复登录）
         await recordLoginSuccess(ipAddress, username);
 
-        if (gameId === 'op' && userId) {
+        if (gameId === 'op' && gameLoginProofCapability === '1' && userId) {
             try {
                 const sdkSession = await createSdkGameSession(userId);
                 if (sdkSession) {

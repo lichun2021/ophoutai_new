@@ -123,7 +123,12 @@ function fixture() {
   const requestIp = { getRequestClientIp: () => '127.0.0.1' };
   const i18n = {
     sdkMessages: {
-      login: { success: () => 'ok', failed: () => 'login failed', systemError: () => 'system error' },
+      login: {
+        success: () => 'ok',
+        invalidCredentials: () => 'credentials rejected',
+        failed: () => 'login failed',
+        systemError: () => 'system error',
+      },
     },
   };
   const listByParent = async userId => {
@@ -183,10 +188,14 @@ function fixture() {
   const app = h3.createApp().use(route.default);
   const handle = h3.toWebHandler(app);
 
+  function signRequest(body) {
+    return { ...body, sign: sdkSign.computeSdkSign(body, sdkSecret) };
+  }
+
   async function post(routeName, body, { signed = true, session } = {}) {
     const headers = { 'Content-Type': 'application/json' };
     if (session) headers.Authorization = `Bearer ${session}`;
-    const payload = signed ? { ...body, sign: sdkSign.computeSdkSign(body, sdkSecret) } : body;
+    const payload = signed ? signRequest(body) : body;
     const response = await handle(new Request(`http://localhost/sdkapi/login/${routeName}`, {
       method: 'POST', headers, body: JSON.stringify(payload),
     }));
@@ -195,7 +204,7 @@ function fixture() {
 
   async function login() {
     const { username, password } = state.users[0];
-    const result = await post('dologin', { z: username, b: password, d: 'op' });
+    const result = await post('dologin', { z: username, b: password, d: 'op', game_login_proof: '1' });
     assert.equal(result.status, 200);
     assert.equal(result.body.z, 1);
     assert.match(result.body.sdk_session, /^[a-f0-9]{64}$/);
@@ -203,7 +212,7 @@ function fixture() {
     return result.body.sdk_session;
   }
 
-  return { state, post, login };
+  return { state, post, login, signRequest };
 }
 
 function assertProof(proof, expectedSubject, now, audience = 'op-sdk-ownership') {
@@ -248,6 +257,39 @@ test('signed xiaohao without sdk_session retains the full legacy response', asyn
   });
   assert.equal(state.redisReads, 0);
   assert.equal(state.signAttempts, 0);
+});
+
+test('dologin issues a session only with an authenticated, signed string opt-in for OP', async () => {
+  const { state, post, login, signRequest } = fixture();
+  const { username, password } = accounts[0];
+  const legacyLogin = { z: username, b: password, d: 'op' };
+  const optIn = { ...legacyLogin, game_login_proof: '1' };
+
+  for (const body of [
+    legacyLogin,
+    { ...optIn, game_login_proof: 1 },
+    { ...optIn, game_login_proof: '0' },
+    { ...optIn, d: 'another-game' },
+  ]) {
+    const result = await post('dologin', body);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.z, 1);
+    assert.equal(Object.hasOwn(result.body, 'sdk_session'), false);
+  }
+  for (const body of [optIn, { ...signRequest(legacyLogin), game_login_proof: '1' }]) {
+    const result = await post('dologin', body, { signed: false });
+    assert.equal(result.body.z, -1);
+    assert.equal(result.body.x, '签名无效');
+    assert.equal(Object.hasOwn(result.body, 'sdk_session'), false);
+  }
+  const rejected = await post('dologin', { ...optIn, b: 'wrong-fixture-password' });
+  assert.equal(rejected.body.z, -1);
+  assert.equal(rejected.body.x, 'credentials rejected');
+  assert.equal(Object.hasOwn(rejected.body, 'sdk_session'), false);
+  assert.equal(state.sessions.size, 0);
+
+  await login();
+  assert.equal(state.sessions.size, 1);
 });
 
 test('dologin session issues a distinct ownership proof for each owned subaccount and keeps game tickets separate', async () => {
