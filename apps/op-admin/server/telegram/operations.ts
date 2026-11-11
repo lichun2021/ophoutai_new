@@ -84,15 +84,13 @@ function settlementScope(admin: Admin) {
 
 function settlementPages(report: SettlementReport) {
     const agents = report.settlement_data.filter(row =>
-        row.yesterday_amount !== 0 || row.today_amount !== 0 || row.total_amount !== 0
+        row.yesterday_amount !== 0 || row.today_amount !== 0
     );
     const totals = {
         yesterday_amount: 0,
         yesterday_settlement: 0,
         today_amount: 0,
-        today_settlement: 0,
-        total_amount: 0,
-        total_settlement: 0
+        today_settlement: 0
     };
     const fields = Object.keys(totals) as (keyof typeof totals)[];
     for (const row of agents) {
@@ -101,8 +99,7 @@ function settlementPages(report: SettlementReport) {
 
     const periods = [
         ['昨日 ' + report.yesterday_date, 'yesterday'],
-        ['今日 ' + report.today_date, 'today'],
-        ['历史累计', 'total']
+        ['今日 ' + report.today_date, 'today']
     ] as const;
     const formatTotals = (values: typeof totals) => periods.map(([label, key]) =>
         `${label}　流水 ${currency.format(values[`${key}_amount`])} / 结算 ${currency.format(values[`${key}_settlement`])}`
@@ -113,7 +110,7 @@ function settlementPages(report: SettlementReport) {
         `【汇总 · ${agents.length} 个下级代理】`,
         ...formatTotals(totals)
     ].join('\n')];
-    if (!agents.length) blocks.push('暂无产生流水的下级代理。');
+    if (!agents.length) blocks.push('昨日和今日暂无下级代理流水。');
 
     for (const row of agents) {
         blocks.push([
