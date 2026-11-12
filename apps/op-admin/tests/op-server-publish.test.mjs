@@ -16,6 +16,14 @@ const { publishOpServerConfig } = bundle.exports;
 
 const url = 'https://op.example.test/v2/game_world/publish?env=1';
 const token = 'ab'.repeat(32);
+const interPath = '/v2/Inter/World/publish';
+const interBase = 'http://192.168.123.1:8111';
+const interSecret = 'inter fixture + &';
+const interSettings = {
+  OP_WORLD_PUBLISH_URL: interBase + interPath,
+  GM_INTER_BASE_URL: interBase,
+  GM_INTER_SECRET: interSecret,
+};
 const world = {
   _id: 111,
   w: 1,
@@ -129,4 +137,60 @@ test('does not send the publish credential to a different route', async context 
   const fetchMock = context.mock.method(globalThis, 'fetch', async () => { throw new Error('unexpected fetch'); });
   await assert.rejects(publishOpServerConfig(world), { statusCode: 503 });
   assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test('publishes the native document as a form to the same-origin private Inter address', async context => {
+  configure(context, interSettings);
+  const fetchMock = context.mock.method(globalThis, 'fetch', async () => Response.json({
+    code: 200, result: { reloaded: true, world },
+  }));
+
+  await publishOpServerConfig(world);
+  await assert.rejects(publishOpServerConfig({ ...world, _id: 112 }), { statusCode: 403 });
+  assert.equal(fetchMock.mock.callCount(), 1);
+  const [target, request] = fetchMock.mock.calls[0].arguments;
+  assert.equal(target.href, interSettings.OP_WORLD_PUBLISH_URL);
+  assert.equal(request.method, 'POST');
+  assert.equal(request.redirect, 'error');
+  assert.deepEqual(request.headers, { 'Content-Type': 'application/x-www-form-urlencoded' });
+  assert.ok(request.body instanceof URLSearchParams);
+  assert.deepEqual(Object.fromEntries(request.body), { code: interSecret, world: JSON.stringify(world) });
+});
+
+test('does not send the Inter secret when the route, origin, or credential is invalid', async context => {
+  const cases = [
+    ['different origin', { GM_INTER_BASE_URL: 'http://192.168.123.1:8112' }],
+    ['missing base', { GM_INTER_BASE_URL: undefined }],
+    ['missing secret', { GM_INTER_SECRET: undefined }],
+    ['query', { OP_WORLD_PUBLISH_URL: interBase + interPath + '?env=1' }],
+    ['empty fragment', { OP_WORLD_PUBLISH_URL: interBase + interPath + '#' }],
+    ['public HTTP', { GM_INTER_BASE_URL: 'http://198.51.100.1:8111', OP_WORLD_PUBLISH_URL: 'http://198.51.100.1:8111' + interPath }],
+    ['DNS HTTP', { GM_INTER_BASE_URL: 'http://inter.example.test', OP_WORLD_PUBLISH_URL: 'http://inter.example.test' + interPath }],
+    ['encoded IPv4 HTTP', { OP_WORLD_PUBLISH_URL: 'http://0xc0a87b01:8111' + interPath }],
+  ];
+  for (const [label, overrides] of cases) {
+    await context.test(label, async fixture => {
+      configure(fixture, { ...interSettings, ...overrides });
+      const fetchMock = fixture.mock.method(globalThis, 'fetch', async () => { throw new Error('unexpected fetch'); });
+      await assert.rejects(publishOpServerConfig(world), { statusCode: 503 });
+      assert.equal(fetchMock.mock.callCount(), 0);
+    });
+  }
+});
+
+test('Inter failure or mismatched acknowledgement does not retry on either channel', async context => {
+  configure(context, interSettings);
+  const responses = [
+    Response.json({ code: 202, msg: 'upstream details' }, { status: 202 }),
+    Response.json({ code: 200, result: { reloaded: true, world: { ...world, fighting_db: 'otherDb' } } }),
+  ];
+  const fetchMock = context.mock.method(globalThis, 'fetch', async () => responses.shift());
+  for (const _ of [0, 1]) {
+    await assert.rejects(publishOpServerConfig(world), error => (
+      error.statusCode === 502 && /待确认/.test(error.message) && !/upstream details/.test(error.message)
+    ));
+  }
+  assert.deepEqual(fetchMock.mock.calls.map(call => call.arguments[0].href), [
+    interSettings.OP_WORLD_PUBLISH_URL, interSettings.OP_WORLD_PUBLISH_URL,
+  ]);
 });
