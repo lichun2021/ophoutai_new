@@ -32,7 +32,7 @@
           <div class="text-2xl font-bold text-orange-600">¥{{ totalCashFlow }}</div>
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-banknotes" class="w-4 h-4 text-orange-500" />
-            <span class="text-sm text-gray-600">总流水</span>
+            <span class="text-sm text-gray-600">近一个月流水</span>
           </div>
         </div>
       </UCard>
@@ -143,7 +143,7 @@
               <th>结算方式</th>
               <th>分成比例</th>
               <th>分账金额</th>
-              <th>总流水</th>
+              <th>近一个月流水</th>
               <th>状态</th>
               <th>创建时间</th>
               <th>操作</th>
@@ -343,11 +343,11 @@
             <span class="detail-value">{{ selectedPromoter.divide_rate }}%</span>
           </div>
           <div class="detail-row">
-            <label class="detail-label">总流水（支付宝+微信）</label>
+            <label class="detail-label">近一个月流水（支付宝+微信）</label>
             <span class="detail-value amount">¥{{ formatAmount(selectedPromoter.total_cash_flow) }}</span>
           </div>
           <div class="detail-row">
-            <label class="detail-label">分账金额（= 总流水 × 分成比例）</label>
+            <label class="detail-label">分账金额（= 近一个月流水 × 分成比例）</label>
             <span class="detail-value amount">¥{{ formatAmount(selectedPromoter.total_rev_share) }}</span>
           </div>
           <div class="detail-row">

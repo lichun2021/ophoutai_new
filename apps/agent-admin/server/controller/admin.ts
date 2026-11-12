@@ -11,6 +11,9 @@ import { queryRechargeDaily, countRechargeDaily } from '../model/rechargeDaily';
 import { convertToChinaDateString, getChinaDateString, getChinaDateStringDaysAgo, getChinaYesterdayString } from '../utils/timezone';
 
 
+// 所有代理端流水与报表共用同一自然月边界（含边界当天）。
+const AGENT_HISTORY_START_SQL = 'DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+
 export const read = async (evt?: H3Event) => {
     try {
         const result = await AdminModel.read();
@@ -30,6 +33,7 @@ export const read = async (evt?: H3Event) => {
                 SELECT channel_code, SUM(amount) AS total_amount
                 FROM paymentrecords
                 WHERE payment_status = 3
+                  AND created_at >= ${AGENT_HISTORY_START_SQL}
                   AND channel_code IS NOT NULL
                   AND channel_code <> ''
                   AND (
@@ -2626,6 +2630,9 @@ export const getPaymentRecords = async (evt: H3Event) => {
     }
 }
 
+// 代理端流水只展示最近一个自然月；独立于请求筛选，订单号查询和导出也不能绕过。
+const AGENT_PAYMENT_HISTORY_CONDITION = `pr.created_at >= ${AGENT_HISTORY_START_SQL}`;
+
 // 支付方式筛选统一处理（兼容中文名称和代码）
 const applyPaymentMethodFilter = (filters: any, whereConditions: string[], values: any[]) => {
     if (!filters.payment_method) return;
@@ -2666,7 +2673,7 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
 
     console.log('getPaymentRecordsWithFilters 参数:', { page, pageSize, filters, allowedChannelCodes });
 
-    let whereConditions = [];
+    let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION];
     let values: any[] = [];
 
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -2804,7 +2811,7 @@ const getPaymentRecordsWithFilters = async (page: number, pageSize: number, filt
 const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[] = []) => {
     console.log('getPaymentRecordsCount 参数:', { filters, allowedChannelCodes });
 
-    let whereConditions = [];
+    let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION];
     let values: any[] = [];
 
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -2895,7 +2902,7 @@ const getPaymentRecordsCount = async (filters: any, allowedChannelCodes: string[
 const getCurrentQueryStats = async (filters: any, allowedChannelCodes: string[] = []) => {
     console.log('getCurrentQueryStats 参数:', { filters, allowedChannelCodes });
 
-    let whereConditions = [];
+    let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION];
     let values: any[] = [];
 
     // 权限过滤：非超级管理员需要按照allowed_channel_codes过滤
@@ -3034,8 +3041,8 @@ const getPaymentStatsForDateRange = async (startDate?: string, endDate?: string,
         };
     } else {
         // 查询范围统计：计算总的成功订单数和金额（排除平台币购买）
-        let whereConditions = ['pr.payment_status = 3', '(pr.payment_way NOT LIKE \'%平台币%\' OR pr.payment_way IS NULL OR pr.payment_way = \'\')'];
-        let whereConditionsAll = ['1=1'];
+        let whereConditions = [AGENT_PAYMENT_HISTORY_CONDITION, 'pr.payment_status = 3', '(pr.payment_way NOT LIKE \'%平台币%\' OR pr.payment_way IS NULL OR pr.payment_way = \'\')'];
+        let whereConditionsAll = [AGENT_PAYMENT_HISTORY_CONDITION];
         let values: any[] = [];
         let valuesAll: any[] = [];
 
@@ -3550,7 +3557,7 @@ export const getDataOverview = async (evt: H3Event) => {
         }
 
         // 构建查询条件
-        let conditions = ['ds.stat_date BETWEEN ? AND ?'];
+        let conditions = ['ds.stat_date BETWEEN ? AND ?', `ds.stat_date >= ${AGENT_HISTORY_START_SQL}`];
         let values = [startDate, endDate];
 
         // 渠道过滤
@@ -3602,7 +3609,7 @@ export const getDataOverview = async (evt: H3Event) => {
         }) as any;
 
         // 5. 获取游戏统计数据（也从DailyStats表聚合）
-        let gameStatsConditions = ['ds.stat_date BETWEEN ? AND ?'];
+        let gameStatsConditions = ['ds.stat_date BETWEEN ? AND ?', `ds.stat_date >= ${AGENT_HISTORY_START_SQL}`];
         let gameStatsValues = [startDate, endDate];
 
         // 渠道过滤
@@ -3791,7 +3798,7 @@ export const getDailyReportDetails = async (evt: H3Event) => {
         }
 
         // 构建查询条件
-        let conditions = ['ds.stat_date BETWEEN ? AND ?'];
+        let conditions = ['ds.stat_date BETWEEN ? AND ?', `ds.stat_date >= ${AGENT_HISTORY_START_SQL}`];
         let values = [startDate, endDate];
 
         // 渠道过滤
@@ -3968,7 +3975,9 @@ export const getDataOverviewDetails = async (evt: H3Event) => {
                 FROM Users u
                 LEFT JOIN UserLoginLogs ul ON u.username = ul.username 
                     AND DATE(ul.login_time) BETWEEN ? AND ?
+                    AND ul.login_time >= ${AGENT_HISTORY_START_SQL}
                 WHERE DATE(u.created_at) BETWEEN ? AND ?
+                AND u.created_at >= ${AGENT_HISTORY_START_SQL}
                 ${channelFilter}
                 GROUP BY ${groupField}
             ),
@@ -3983,6 +3992,7 @@ export const getDataOverviewDetails = async (evt: H3Event) => {
                 LEFT JOIN PaymentRecords pr ON u.id = pr.user_id AND pr.payment_status = 3
                     AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')
                     AND DATE(pr.created_at) BETWEEN ? AND ?
+                    AND pr.created_at >= ${AGENT_HISTORY_START_SQL}
                 LEFT JOIN (
                     SELECT user_id, DATE(MIN(created_at)) as first_pay_date
                     FROM PaymentRecords 
@@ -3991,6 +4001,7 @@ export const getDataOverviewDetails = async (evt: H3Event) => {
                     GROUP BY user_id
                 ) first_pay ON u.id = first_pay.user_id
                 WHERE DATE(u.created_at) BETWEEN ? AND ?
+                AND u.created_at >= ${AGENT_HISTORY_START_SQL}
                 ${channelFilter}
                 GROUP BY ${groupField}
             )
@@ -4034,6 +4045,7 @@ export const getDataOverviewDetails = async (evt: H3Event) => {
             SELECT COUNT(DISTINCT ${groupField}) as total
             FROM Users u
             WHERE DATE(u.created_at) BETWEEN ? AND ?
+                AND u.created_at >= ${AGENT_HISTORY_START_SQL}
             ${channelFilter}
         `;
 
@@ -4194,7 +4206,7 @@ export const getLTVData = async (evt: H3Event) => {
         const offset = (currentPage - 1) * limit;
 
         // 构建基础查询条件
-        let whereConditions = ['ls.stat_date BETWEEN ? AND ?'];
+        let whereConditions = ['ls.stat_date BETWEEN ? AND ?', `ls.stat_date >= ${AGENT_HISTORY_START_SQL}`];
         let queryParams = [startDate, endDate];
 
         // 管理员权限过滤
@@ -4410,7 +4422,7 @@ export const getLTVTrendData = async (evt: H3Event) => {
         }
 
         // 构建基础查询条件
-        let whereConditions = ['ls.stat_date BETWEEN ? AND ?'];
+        let whereConditions = ['ls.stat_date BETWEEN ? AND ?', `ls.stat_date >= ${AGENT_HISTORY_START_SQL}`];
         let queryParams = [startDate, endDate];
 
         // 管理员权限过滤
@@ -4904,7 +4916,7 @@ export const getChannelData = async (evt: H3Event) => {
         }
 
         // 构建查询条件
-        let conditions = ['stat_date BETWEEN ? AND ?'];
+        let conditions = ['stat_date BETWEEN ? AND ?', `stat_date >= ${AGENT_HISTORY_START_SQL}`];
         let params = [startDate, endDate];
 
         // 渠道过滤
@@ -5170,6 +5182,7 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
                        LEFT JOIN Users u ON pr.user_id = u.id
                        WHERE u.channel_code IN (${placeholders})
                        AND pr.payment_status = 3
+                       AND pr.created_at >= ${AGENT_HISTORY_START_SQL}
                        AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')`,
                 values: allChannelCodes
             }) as any[];

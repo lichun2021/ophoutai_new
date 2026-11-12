@@ -21,7 +21,13 @@ export const telegramConfig: TelegramBotConfig = {
  * 动态读取 Telegram 权限配置（支持热更新）
  * 从 server/config/telegram.json 读取
  */
-export async function getTelegramAccessConfig(): Promise<{ allowedUserIds: number[]; allowedGroupIds: number[] }> {
+interface TelegramAccessConfig {
+    allowedUserIds: number[];
+    allowedGroupIds: number[];
+    adminBindings: Record<string, number>;
+}
+
+export async function getTelegramAccessConfig(): Promise<TelegramAccessConfig> {
     try {
         const fs = await import('fs');
         const path = await import('path');
@@ -50,17 +56,24 @@ export async function getTelegramAccessConfig(): Promise<{ allowedUserIds: numbe
             const configContent = fs.readFileSync(configPath, 'utf-8');
             const config = JSON.parse(configContent);
             
+            const bindings = config.adminBindings && typeof config.adminBindings === 'object'
+                ? Object.entries(config.adminBindings)
+                : [];
             return {
                 allowedUserIds: Array.isArray(config.allowedUserIds) ? config.allowedUserIds : [],
-                allowedGroupIds: Array.isArray(config.allowedGroupIds) ? config.allowedGroupIds : []
+                allowedGroupIds: Array.isArray(config.allowedGroupIds) ? config.allowedGroupIds : [],
+                adminBindings: Object.fromEntries(bindings.filter(
+                    (entry): entry is [string, number] => /^\d+$/.test(entry[0])
+                        && typeof entry[1] === 'number' && Number.isSafeInteger(entry[1]) && entry[1] > 0
+                ))
             };
         } else {
             console.warn('[Telegram] 未找到 telegram.json 配置文件，权限控制已禁用');
-            return { allowedUserIds: [], allowedGroupIds: [] };
+            return { allowedUserIds: [], allowedGroupIds: [], adminBindings: {} };
         }
     } catch (error) {
         console.error('[Telegram] 读取权限配置失败:', error);
-        return { allowedUserIds: [], allowedGroupIds: [] };
+        return { allowedUserIds: [], allowedGroupIds: [], adminBindings: {} };
     }
 }
 

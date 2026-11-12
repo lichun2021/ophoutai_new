@@ -1,5 +1,6 @@
 <template>
   <div class="ltv-data-page">
+    <p class="text-sm text-gray-500 mb-4">仅展示最近一个月的数据，筛选、统计及导出均受此限制。</p>
     <!-- 页面标题 -->
     <div class="page-header mb-6">
       <div class="flex items-center gap-3 mb-6">

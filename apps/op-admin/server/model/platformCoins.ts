@@ -1,4 +1,6 @@
-import {sql} from '../db';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { pool, sql } from '../db';
+import { updatePlatformCoinsUnified } from './user';
 
 // 代理间平台币转账
 export type AdminPlatformCoinTransaction = {
@@ -111,126 +113,173 @@ export const transferBetweenAdmins = async (
     }
 };
 
-// 代理给玩家转账
-export const transferToPlayer = async (
-    adminChannelCode: string,
-    userId: string,
+export class PlayerCoinTransferError extends Error {}
+
+// PaymentRecords.amount 是 DECIMAL(10, 2)。
+export const MAX_PLATFORM_COIN_GRANT = 99_999_999.99;
+
+type PlayerGrant = {
+    adminId: number;
+    userId: number;
+    account: string;
+    thirdpartyUid: string;
+    amount: number;
+    requestId: string;
+};
+
+type FundingAccount = { channelCode: string; operatorChannelCode: string } | PlayerGrant;
+
+const transferPlayerBalance = async (
+    fundingAccount: FundingAccount,
+    userId: number,
     amount: number,
-    remark: string = '',
-    operatorChannelCode: string = ''
+    remark: string,
 ) => {
+    if (!Number.isSafeInteger(userId) || userId <= 0 || !Number.isFinite(amount) || amount === 0) {
+        throw new PlayerCoinTransferError('用户ID或金额无效');
+    }
+
+    const connection = await pool.getConnection();
+    const runQuery: typeof sql = async ({ query, values = [] }) => {
+        const [rows] = await connection.query<RowDataPacket[] | ResultSetHeader>(query, values);
+        return rows;
+    };
+
     try {
-        await sql({ query: 'START TRANSACTION' });
-
-        // 获取代理信息
-        const admin = await sql({
-            query: 'SELECT name, available_platform_coins FROM Admins WHERE channel_code = ?',
-            values: [adminChannelCode]
-        }) as any[];
-
-        if (!admin.length) {
-            throw new Error('代理不存在');
+        await connection.beginTransaction();
+        const isGrant = 'adminId' in fundingAccount;
+        const [admins] = await connection.query<RowDataPacket[]>(
+            `SELECT id, name, channel_code, level, is_active, available_platform_coins
+             FROM Admins WHERE ${isGrant ? 'id' : 'channel_code'} = ? LIMIT 2 FOR UPDATE`,
+            [isGrant ? fundingAccount.adminId : fundingAccount.channelCode],
+        );
+        const admin = admins[0];
+        if (isGrant && (!admin || admin.level !== 0 || Number(admin.is_active) !== 1)) {
+            throw new PlayerCoinTransferError('只有启用的超级管理员可以给玩家发放平台币');
+        }
+        if (admins.length !== 1 || !admin.channel_code) {
+            throw new PlayerCoinTransferError('无法唯一确定扣款管理员渠道');
         }
 
-        // 获取玩家信息 - 使用user_id查找
-        const user = await sql({
-            query: 'SELECT id, platform_coins, channel_code, game_code, thirdparty_uid FROM Users WHERE id = ?',
-            values: [parseInt(userId.toString())]
-        }) as any[];
+        const adminChannelCode: string = admin.channel_code;
+        const operatorChannelCode = isGrant ? adminChannelCode : fundingAccount.operatorChannelCode;
+        const transactionId = isGrant
+            ? `bonus_tg_${admin.id}_${fundingAccount.requestId.toLowerCase()}`
+            : `bonus_${Date.now()}_${userId}_${Math.random().toString(36).slice(2, 11)}`;
 
-        if (!user.length) {
-            throw new Error('玩家不存在');
-        }
-
-        const adminBalance = parseFloat(admin[0].available_platform_coins) || 0;
-        const playerBalance = parseFloat(user[0].platform_coins) || 0;
-
-        // 支持负数：正数=发放，负数=扣除
-        if (amount > 0) {
-            // 发放平台币：检查代理余额
-            if (adminBalance < amount) {
-                throw new Error('代理余额不足');
+        // 相同管理员的确认请求由管理员余额行锁串行处理，流水唯一键跨进程保留结果。
+        if (isGrant) {
+            const [receipts] = await connection.query<RowDataPacket[]>(
+                `SELECT user_id, ptb_change, payment_status, product_name, mch_order_id
+                 FROM PaymentRecords WHERE transaction_id = ?`,
+                [transactionId],
+            );
+            const receipt = receipts[0];
+            if (receipt) {
+                if (Number(receipt.user_id) !== userId || Number(receipt.ptb_change) !== amount
+                    || receipt.payment_status !== 3 || receipt.product_name !== '管理员发放'
+                    || receipt.mch_order_id !== transactionId) {
+                    throw new PlayerCoinTransferError('发放确认已用于其他请求，请重新查询玩家');
+                }
+                await connection.commit();
+                return { success: true as const, message: '已发放', replayed: true };
             }
-        } else if (amount < 0) {
-            // 扣除平台币：检查玩家余额
-            if (playerBalance < Math.abs(amount)) {
-                throw new Error('玩家余额不足');
-            }
         }
+
+        const [users] = await connection.query<RowDataPacket[]>(
+            `SELECT id, username, status, platform_coins, channel_code, game_code, thirdparty_uid
+             FROM Users WHERE id = ? FOR UPDATE`,
+            [userId],
+        );
+        const user = users[0];
+        if (!user) throw new PlayerCoinTransferError('玩家不存在');
+        if (isGrant) {
+            if ((user.username || user.thirdparty_uid) !== fundingAccount.account
+                || user.thirdparty_uid !== fundingAccount.thirdpartyUid) {
+                throw new PlayerCoinTransferError('玩家账号信息已变更，请重新查询');
+            }
+            if ((user.status ?? 0) !== 0) throw new PlayerCoinTransferError('该玩家账号已禁用');
+        }
+
+        const adminBalance = Number(admin.available_platform_coins) || 0;
+        const playerBalance = Number(user.platform_coins) || 0;
+        if (amount > 0 && adminBalance < amount) throw new PlayerCoinTransferError('代理余额不足');
+        if (amount < 0 && playerBalance < -amount) throw new PlayerCoinTransferError('玩家余额不足');
 
         const newAdminBalance = adminBalance - amount;
-
-        // 更新代理余额
-        await sql({
-            query: 'UPDATE Admins SET available_platform_coins = ? WHERE channel_code = ?',
-            values: [newAdminBalance, adminChannelCode]
-        });
-
-        // 更新玩家余额（使用统一方法）
-        const { updatePlatformCoinsUnified } = await import('./user');
-        const updateResult = await updatePlatformCoinsUnified(parseInt(userId.toString()), amount, 5);
-        if (!updateResult.success) {
+        await connection.query('UPDATE Admins SET available_platform_coins = ? WHERE id = ?', [newAdminBalance, admin.id]);
+        const updateResult = await updatePlatformCoinsUnified(userId, amount, 5, runQuery);
+        if (!updateResult.success || updateResult.newBalance === undefined) {
             throw new Error(updateResult.message || '更新玩家余额失败');
         }
-        const newPlayerBalance = updateResult.newBalance!;
+        const newPlayerBalance = updateResult.newBalance;
 
-        // 记录流水 - 使用user_thirdparty_uid字段
-        await sql({
-            query: `INSERT INTO AdminToPlayerPlatformCoinTransactions 
+        await connection.query(
+            `INSERT INTO AdminToPlayerPlatformCoinTransactions
                    (admin_channel_code, admin_name, user_thirdparty_uid, user_channel_code, game_code,
                     amount, admin_balance_before, admin_balance_after, player_balance_before, player_balance_after, 
                     remark, operator_channel_code) 
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            values: [
-                adminChannelCode, admin[0].name, user[0].thirdparty_uid || '', user[0].channel_code || '', user[0].game_code || '',
+            [
+                adminChannelCode, admin.name, user.thirdparty_uid || '', user.channel_code || '', user.game_code || '',
                 amount, adminBalance, newAdminBalance, playerBalance, newPlayerBalance,
                 remark, operatorChannelCode
-            ]
-        });
+            ],
+        );
 
-        // 📝 在 PaymentRecords 中创建充值/扣除记录（保持余额链完整性）
-        const transactionId = `bonus_${Date.now()}_${userId}_${Math.random().toString(36).substr(2, 9)}`;
+        // 管理员发放和扣除沿用主账号的余额流水格式。
         const operationType = amount > 0 ? '管理员发放' : '管理员扣除';
-        
-        await sql({
-            query: `INSERT INTO PaymentRecords 
+        await connection.query(
+            `INSERT INTO PaymentRecords
                    (user_id, sub_user_id, transaction_id, wuid, payment_way, payment_id,
                     world_id, product_name, product_des, ip, amount, mch_order_id, msg,
                     server_url, device, channel_code, game_code, payment_status,
                     ptb_before, ptb_change, ptb_after)
-                   VALUES (?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            values: [
-                parseInt(userId.toString()),  // user_id
-                null,                         // sub_user_id
-                transactionId,                // transaction_id
-                0,                          // wuid （管理员发放设置为'0'）
-                "平台币",                      // payment_way
-                0,                            // payment_id
-                1,                            // world_id
-                operationType,                // product_name
-                remark || `${operationType}平台币`, // product_des
-                '',                           // ip
-                Math.abs(amount),             // amount (绝对值)
-                transactionId,                // mch_order_id
-                `操作人:${operatorChannelCode || adminChannelCode}`, // msg
-                '',                           // server_url
-                '',                           // device
-                user[0].channel_code || '',   // channel_code
-                user[0].game_code || '',      // game_code
-                3,                            // payment_status (成功)
-                playerBalance,                // ptb_before
-                amount,                       // ptb_change (可能是正数或负数)
-                newPlayerBalance              // ptb_after
-            ]
-        });
+                   VALUES (?, NULL, ?, '0', '平台币', 0, 1, ?, ?, '', ?, ?, ?, '', '', ?, ?, 3, ?, ?, ?)`,
+            [
+                userId, transactionId, operationType, remark || `${operationType}平台币`, Math.abs(amount),
+                transactionId, `操作人:${operatorChannelCode || adminChannelCode}`, user.channel_code || '',
+                user.game_code || '', playerBalance, amount, newPlayerBalance,
+            ],
+        );
 
-        await sql({ query: 'COMMIT' });
+        await connection.commit();
         const message = amount > 0 ? '发放成功' : '扣除成功';
-        return { success: true, message };
-    } catch (error: any) {
-        await sql({ query: 'ROLLBACK' });
+        return { success: true as const, message, replayed: false };
+    } catch (error) {
+        await connection.rollback().catch(() => connection.destroy());
         throw error;
+    } finally {
+        connection.release();
     }
+};
+
+// 后台继续支持正数发放和负数扣除。
+export const transferToPlayer = async (
+    adminChannelCode: string,
+    userId: string,
+    amount: number,
+    remark = '',
+    operatorChannelCode = '',
+) => {
+    const { success, message } = await transferPlayerBalance(
+        { channelCode: adminChannelCode, operatorChannelCode }, Number(userId), amount, remark,
+    );
+    return { success, message };
+};
+
+export const grantToPlayerFromAdmin = async (grant: PlayerGrant) => {
+    if (!Number.isSafeInteger(grant.adminId) || grant.adminId <= 0) {
+        throw new PlayerCoinTransferError('后台管理员无效');
+    }
+    if (!Number.isFinite(grant.amount) || grant.amount <= 0 || grant.amount > MAX_PLATFORM_COIN_GRANT
+        || Number(grant.amount.toFixed(2)) !== grant.amount) {
+        throw new PlayerCoinTransferError('请输入有效的正数金额，最多两位小数');
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(grant.requestId)) {
+        throw new PlayerCoinTransferError('发放确认无效，请重新查询玩家');
+    }
+    return transferPlayerBalance(grant, grant.userId, grant.amount, 'Telegram 机器人发放');
 };
 
 // 获取代理间转账记录
@@ -407,4 +456,4 @@ export const allocatePlatformCoins = async (
         await sql({ query: 'ROLLBACK' });
         throw error;
     }
-}; 
+};

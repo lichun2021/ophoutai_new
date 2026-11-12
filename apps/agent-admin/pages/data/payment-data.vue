@@ -2,7 +2,8 @@
   <div class="payment-data-page">
     <!-- 页面标题 -->
     <div class="page-header">
-      <h2 class="text-2xl font-bold text-gray-900 mb-6">订单支付数据</h2>
+      <h2 class="text-2xl font-bold text-gray-900 mb-2">订单支付数据</h2>
+      <p class="text-sm text-gray-500 mb-6">仅支持查询最近一个月的流水，列表、金额统计和导出均受此限制。</p>
     </div>
 
     <!-- 统计卡片 -->
@@ -467,9 +468,7 @@ const selected = ref({
 const dateRanges = [
   { label: '最近7天', days: 7 },
   { label: '最近14天', days: 14 },
-  { label: '最近30天', days: 30 },
-  { label: '最近60天', days: 60 },
-  { label: '最近90天', days: 90 }
+  { label: '最近30天', days: 30 }
 ];
 
 // 表格列定义
@@ -627,7 +626,7 @@ const isRangeSelected = (days) => {
 
 // 格式化日期范围显示
 const formatDateRange = (startDate, endDate) => {
-  if (!startDate || !endDate) return '不限时间（点击选择时间区间）';
+  if (!startDate || !endDate) return '最近一个月（点击选择时间区间）';
   return `${startDate} ~ ${endDate}`;
 };
 
@@ -1154,8 +1153,8 @@ const getQuerySuccessRate = () => {
 
 // 获取日期范围文本
 const getDateRangeText = () => {
-  if (!filters.startDate || !filters.endDate) return '查询范围：不限时间';
-  return `${filters.startDate} 至 ${filters.endDate}`;
+  if (!filters.startDate || !filters.endDate) return '查询范围：最近一个月';
+  return `${filters.startDate} 至 ${filters.endDate}（仅显示最近一个月内数据）`;
 };
 
 // 检查订单是否超过24小时

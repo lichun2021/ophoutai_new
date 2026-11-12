@@ -122,6 +122,19 @@ export class IdipClient {
     });
   }
 
+  // 个人保护罩：按分钟设置，游戏服保留已有更长的保护时间。
+  async openProtectShield(params: { partition: string; platId: Plat; openId: string; minutes: number }) {
+    if (!Number.isInteger(params.minutes) || params.minutes <= 0 || params.minutes > 43200) {
+      throw new Error('保护时间必须为 1–43200 分钟');
+    }
+    return this.call(params.partition, '4423', {
+      PlatId: params.platId,
+      OpenId: params.openId,
+      Partition: params.partition,
+      EffectiveDate: params.minutes,
+    });
+  }
+
   // 解封账号 idip/4107
   async unbanUser(params: {
     partition: string;

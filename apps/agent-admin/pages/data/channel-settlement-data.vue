@@ -91,7 +91,7 @@
           <div class="text-2xl font-bold text-purple-600 mb-3">¥{{ totalStats.totalAmount }}</div>
           <div class="flex items-center justify-center gap-2">
             <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-purple-500" />
-            <span class="text-sm text-gray-600">历史总流水</span>
+            <span class="text-sm text-gray-600">近一个月流水</span>
           </div>
         </div>
       </UCard>
@@ -101,7 +101,7 @@
           <div class="text-2xl font-bold text-orange-600 mb-3">¥{{ totalStats.totalSettlement }}</div>
           <div class="flex items-center justify-center gap-2">
             <UIcon name="i-heroicons-wallet" class="w-5 h-5 text-orange-500" />
-            <span class="text-sm text-gray-600">历史总结算</span>
+            <span class="text-sm text-gray-600">近一个月结算</span>
           </div>
         </div>
       </UCard>
@@ -145,8 +145,8 @@
                 <th class="text-right py-3 px-4 font-semibold text-gray-700">昨日结算</th>
                 <th class="text-right py-3 px-4 font-semibold text-gray-700">今日流水</th>
                 <th class="text-right py-3 px-4 font-semibold text-gray-700">今日结算</th>
-                <th class="text-right py-3 px-4 font-semibold text-gray-700">总流水</th>
-                <th class="text-right py-3 px-4 font-semibold text-gray-700">总结算</th>
+                <th class="text-right py-3 px-4 font-semibold text-gray-700">近一个月流水</th>
+                <th class="text-right py-3 px-4 font-semibold text-gray-700">近一个月结算</th>
               </tr>
             </thead>
             <tbody>

@@ -8,7 +8,8 @@ import { sql } from '../db';
 import { getItemName, formatGiftItemsDisplay } from '../utils/itemConfig';
 import { extractWorldIdFromBName } from '../model/gameServers';
 import { queryRechargeDaily, countRechargeDaily } from '../model/rechargeDaily';
-import { convertToChinaDateString, getChinaDateString, getChinaDateStringDaysAgo, getChinaYesterdayString } from '../utils/timezone';
+import { convertToChinaDateString, getChinaDateString, getChinaDateStringDaysAgo } from '../utils/timezone';
+import { getChannelSettlementData as readChannelSettlementData } from '../model/channelSettlement';
 
 
 export const read = async (evt?: H3Event) => {
@@ -4902,196 +4903,11 @@ export const getChannelSettlementData = defineEventHandler(async (evt: H3Event) 
             });
         }
 
-        // 获取当前管理员信息
-        const currentAdmin = await AdminModel.getAdminWithPermissions(adminId);
-        if (!currentAdmin) {
-            throw createError({
-                status: 404,
-                message: '管理员不存在'
-            });
-        }
-
-        let childAgents = [];
-
-        if (currentAdmin.level === 0) {
-            // 超级管理员：显示所有1级代理
-            const result = await sql({
-                query: `SELECT * FROM Admins 
-                       WHERE level = 1 AND is_active = 1 
-                       ORDER BY name`,
-                values: []
-            });
-            childAgents = result as any[];
-        } else {
-            // 其他代理：只显示直接下级代理（下一级别的代理）
-            const targetLevel = currentAdmin.level + 1; // 目标级别：当前级别+1
-
-            console.log(`[渠道结算数据] 当前管理员: ${currentAdmin.name} (级别${currentAdmin.level})`);
-            console.log(`[渠道结算数据] 查找直接下级代理 (级别${targetLevel})`);
-
-            const allowedChannelCodes = currentAdmin.allowed_channel_codes || [];
-
-            if (allowedChannelCodes.length > 0) {
-                // 清理空格并排除自己的渠道代码
-                const cleanedChannelCodes = allowedChannelCodes
-                    .map((code: any) => typeof code === 'string' ? code.trim() : code)
-                    .filter((code: any) => code && code !== '');
-
-                const childChannelCodes = cleanedChannelCodes.filter(code => code !== currentAdmin.channel_code);
-
-                if (childChannelCodes.length > 0) {
-                    const placeholders = childChannelCodes.map(() => '?').join(',');
-
-                    // 只查找指定级别的直接下级代理
-                    const result = await sql({
-                        query: `SELECT * FROM Admins 
-                               WHERE channel_code IN (${placeholders}) 
-                               AND is_active = 1 
-                               AND level = ?
-                               ORDER BY name`,
-                        values: [...childChannelCodes, targetLevel]
-                    });
-                    childAgents = result as any[];
-
-                    console.log(`[渠道结算数据] 找到 ${childAgents.length} 个级别${targetLevel}的直接下级代理:`);
-                    childAgents.forEach(agent => {
-                        console.log(`  - ${agent.name} (${agent.channel_code}) 级别${agent.level}`);
-                    });
-                } else {
-                    console.log(`[渠道结算数据] 没有找到下级渠道代码`);
-                }
-            } else {
-                console.log(`[渠道结算数据] 当前管理员没有允许的渠道代码`);
-            }
-        }
-
-        // 获取昨日和今日的日期（使用东8区时间）
-        const todayStr = getChinaDateString();
-        const yesterdayStr = getChinaYesterdayString();
-
-        const settlementData = [];
-
-        console.log(`[渠道结算数据] 开始处理 ${childAgents.length} 个下级代理的数据`);
-
-        for (const agent of childAgents) {
-            console.log(`[渠道结算数据] 处理代理: ${agent.name} (${agent.channel_code})`);
-
-            // 获取该代理管辖的所有渠道代码（使用allowed_channel_codes）
-            let allChannelCodes = [];
-            try {
-                if (agent.allowed_channel_codes) {
-                    // 解析 allowed_channel_codes 字段
-                    if (typeof agent.allowed_channel_codes === 'string') {
-                        allChannelCodes = JSON.parse(agent.allowed_channel_codes);
-                    } else {
-                        allChannelCodes = agent.allowed_channel_codes;
-                    }
-                } else {
-                    // 如果没有allowed_channel_codes，至少包含自己的渠道代码
-                    allChannelCodes = [agent.channel_code];
-                }
-
-                // 清理空格并去重
-                allChannelCodes = allChannelCodes
-                    .map((code: any) => typeof code === 'string' ? code.trim() : code)
-                    .filter((code: any) => code && code !== '')
-                    .filter((code: any, index: number, arr: any[]) => arr.indexOf(code) === index);
-
-                // 确保包含代理自己的渠道代码
-                if (!allChannelCodes.includes(agent.channel_code)) {
-                    allChannelCodes.unshift(agent.channel_code);
-                }
-
-                console.log(`[渠道结算数据] 代理 ${agent.name} 管辖的渠道:`, allChannelCodes);
-            } catch (e) {
-                console.warn(`解析代理 ${agent.name} 的 allowed_channel_codes 失败，使用默认渠道代码`);
-                allChannelCodes = [agent.channel_code];
-            }
-
-            // 构建 IN 查询的占位符
-            const placeholders = allChannelCodes.map(() => '?').join(',');
-
-            // 昨日流水
-            const yesterdayPayments = await sql({
-                query: `SELECT COALESCE(SUM(amount), 0) as total
-                       FROM PaymentRecords pr
-                       LEFT JOIN Users u ON pr.user_id = u.id
-                       WHERE u.channel_code IN (${placeholders})
-                       AND DATE(pr.created_at) = ?
-                       AND pr.payment_status = 3
-                       AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')`,
-                values: [...allChannelCodes, yesterdayStr]
-            }) as any[];
-
-            // 今日流水
-            const todayPayments = await sql({
-                query: `SELECT COALESCE(SUM(amount), 0) as total
-                       FROM PaymentRecords pr
-                       LEFT JOIN Users u ON pr.user_id = u.id
-                       WHERE u.channel_code IN (${placeholders})
-                       AND DATE(pr.created_at) = ?
-                       AND pr.payment_status = 3
-                       AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')`,
-                values: [...allChannelCodes, todayStr]
-            }) as any[];
-
-            // 总流水
-            const totalPayments = await sql({
-                query: `SELECT COALESCE(SUM(amount), 0) as total
-                       FROM PaymentRecords pr
-                       LEFT JOIN Users u ON pr.user_id = u.id
-                       WHERE u.channel_code IN (${placeholders})
-                       AND pr.payment_status = 3
-                       AND (pr.payment_way NOT LIKE '%平台币%' OR pr.payment_way IS NULL OR pr.payment_way = '')`,
-                values: allChannelCodes
-            }) as any[];
-
-            const yesterdayAmount = parseFloat(yesterdayPayments[0]?.total || 0);
-            const todayAmount = parseFloat(todayPayments[0]?.total || 0);
-            const totalAmount = parseFloat(totalPayments[0]?.total || 0);
-
-            // 计算结算金额 (流水 * 分成比例 / 100)
-            const divideRate = (agent.divide_rate || 0) / 100;
-            const yesterdaySettlement = yesterdayAmount * divideRate;
-            const todaySettlement = todayAmount * divideRate;
-            const totalSettlement = totalAmount * divideRate;
-
-            console.log(`[渠道结算数据] 代理 ${agent.name} 的收入统计:`);
-            console.log(`  - 管辖渠道数量: ${allChannelCodes.length}`);
-            console.log(`  - 昨日流水: ¥${yesterdayAmount}`);
-            console.log(`  - 今日流水: ¥${todayAmount}`);
-            console.log(`  - 总流水: ¥${totalAmount}`);
-            console.log(`  - 分成比例: ${agent.divide_rate}%`);
-            console.log(`  - 昨日结算: ¥${yesterdaySettlement.toFixed(2)}`);
-
-            settlementData.push({
-                agent_id: agent.id,
-                agent_name: agent.name,
-                channel_code: agent.channel_code,
-                divide_rate: agent.divide_rate,
-                channel_count: allChannelCodes.length, // 该代理管辖的渠道数量
-                covered_channels: allChannelCodes, // 该代理管辖的所有渠道列表
-                yesterday_amount: yesterdayAmount,
-                yesterday_settlement: yesterdaySettlement,
-                today_amount: todayAmount,
-                today_settlement: todaySettlement,
-                total_amount: totalAmount,
-                total_settlement: totalSettlement
-            });
-        }
-
+        const { settlement_data, current_admin } = await readChannelSettlementData(adminId);
         return {
             success: true,
-            data: {
-                settlement_data: settlementData,
-                current_admin: {
-                    name: currentAdmin.name,
-                    level: currentAdmin.level,
-                    divide_rate: currentAdmin.divide_rate
-                }
-            }
+            data: { settlement_data, current_admin }
         };
-
     } catch (e: any) {
         console.error('获取渠道结算数据失败:', e);
         throw createError({
