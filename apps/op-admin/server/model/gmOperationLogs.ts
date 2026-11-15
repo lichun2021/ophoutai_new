@@ -1,6 +1,6 @@
 import { sql } from '../db';
 
-export type GmOperationType = 'ban' | 'unban' | 'send_items' | 'recharge' | 'send_mail' | 'migrate_platform' | 'open_protect_shield' | 'delete_player' | 'create_admin';
+export type GmOperationType = 'ban' | 'unban' | 'mute' | 'unmute' | 'send_items' | 'recharge' | 'send_mail' | 'migrate_platform' | 'open_protect_shield' | 'delete_player' | 'create_admin';
 
 export interface GmOperationLogInsert {
   op_type: GmOperationType;

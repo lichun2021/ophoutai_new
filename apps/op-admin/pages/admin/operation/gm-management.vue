@@ -3,7 +3,7 @@
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">游戏运营</h1>
-        <p class="mt-2 text-sm text-gray-500">查询指定区服的角色，发送文本或带附件的定向邮件。</p>
+        <p class="mt-2 text-sm text-gray-500">查询指定区服的角色、管理封禁与禁言并发送定向邮件。</p>
       </div>
       <UButton v-if="isSuperAdmin" to="/admin/operation/gm-logs" icon="i-heroicons-rectangle-stack" color="gray" variant="soft">
         操作日志
@@ -29,7 +29,7 @@
               option-attribute="label"
               placeholder="请选择区服"
               :loading="loadingServers"
-              :disabled="isSending"
+              :disabled="isSending || savingModeration"
               class="w-full"
             />
           </UFormGroup>
@@ -38,11 +38,11 @@
               v-model="queryWuid"
               inputmode="numeric"
               placeholder="输入完整角色 WUID"
-              :disabled="isSending || !selectedServer || !!serverConfigurationError"
+              :disabled="isSending || savingModeration || !selectedServer || !!serverConfigurationError"
               @keyup.enter="findPlayer"
             />
           </UFormGroup>
-          <UButton icon="i-heroicons-magnifying-glass" :loading="loadingPlayer" :disabled="isSending || !selectedServer || !!serverConfigurationError" @click="findPlayer">
+          <UButton icon="i-heroicons-magnifying-glass" :loading="loadingPlayer" :disabled="isSending || savingModeration || !selectedServer || !!serverConfigurationError" @click="findPlayer">
             查询角色
           </UButton>
         </div>
@@ -63,10 +63,28 @@
                 <span v-if="player.vipLevel !== undefined">VIP：{{ player.vipLevel }}</span>
               </div>
             </div>
-            <UButton :variant="selectedPlayer?.wuid === player.wuid ? 'solid' : 'soft'" :disabled="isSending" @click="selectPlayer(player)">
-              {{ selectedPlayer?.wuid === player.wuid ? '已选为收件人' : '设为收件人' }}
-            </UButton>
+            <div class="flex flex-wrap gap-2">
+              <UButton :variant="selectedPlayer?.wuid === player.wuid ? 'solid' : 'soft'" :disabled="isSending" @click="selectPlayer(player)">
+                {{ selectedPlayer?.wuid === player.wuid ? '已选为收件人' : '设为收件人' }}
+              </UButton>
+              <UButton color="gray" variant="soft" :loading="loadingModeration" :disabled="savingModeration" @click="loadModeration(player)">刷新限制状态</UButton>
+            </div>
+            <div v-if="moderation?.wuid === player.wuid" class="grid w-full gap-3 border-t border-gray-200 pt-3 sm:grid-cols-2">
+              <div v-for="kind in moderationKinds" :key="kind" class="flex items-start justify-between gap-3">
+                <div class="min-w-0 break-words text-sm">
+                  <div class="font-medium">{{ isRestricted(kind) ? moderationLabels[kind].active : moderationLabels[kind].inactive }}</div>
+                  <p v-if="isRestricted(kind) && moderation[kind]" class="text-gray-500">
+                    {{ formatRestriction(moderation[kind]) }}
+                  </p>
+                </div>
+                <UButton size="sm" :color="isRestricted(kind) ? 'gray' : 'red'" variant="soft" :disabled="loadingModeration || savingModeration" @click="openModeration(player, kind)">
+                  {{ isRestricted(kind) ? moderationLabels[kind].clear : moderationLabels[kind].apply }}
+                </UButton>
+              </div>
+            </div>
           </div>
+          <UAlert v-if="moderationError" color="amber" :title="moderationError" />
+          <UAlert v-if="moderationFeedback" :color="moderationFeedback.success ? 'green' : 'amber'" :title="moderationFeedback.message" />
         </div>
 
         <div class="mt-5 border-t border-gray-100 pt-5">
@@ -179,6 +197,34 @@
         </div>
       </UCard>
 
+      <UModal v-model="moderationOpen" :prevent-close="savingModeration">
+        <UCard v-if="moderationTarget">
+          <template #header><h2 class="font-semibold">{{ moderationLabels[moderationTarget.kind][moderationTarget.action] }}</h2></template>
+          <div class="space-y-4">
+            <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+              <dt class="text-gray-500">区服</dt><dd>{{ moderationTarget.serverLabel }}</dd>
+              <dt class="text-gray-500">角色</dt><dd class="break-words">{{ moderationTarget.player.name }}（{{ moderationTarget.player.wuid }}）</dd>
+            </dl>
+            <template v-if="moderationTarget.action === 'apply'">
+              <UFormGroup label="限制时长" required>
+                <USelect v-model="restrictionDuration" :options="restrictionDurations" :disabled="savingModeration" />
+              </UFormGroup>
+              <UFormGroup label="原因" required>
+                <UTextarea v-model="restrictionReason" :maxlength="200" :rows="3" :disabled="savingModeration" />
+              </UFormGroup>
+            </template>
+          </div>
+          <template #footer>
+            <div class="flex justify-end gap-2">
+              <UButton color="gray" variant="ghost" :disabled="savingModeration" @click="moderationOpen = false">取消</UButton>
+              <UButton :color="moderationTarget.action === 'apply' ? 'red' : 'primary'" :loading="savingModeration" :disabled="moderationTarget.action === 'apply' && !restrictionReason.trim()" @click="saveModeration">
+                确认{{ moderationLabels[moderationTarget.kind][moderationTarget.action] }}
+              </UButton>
+            </div>
+          </template>
+        </UCard>
+      </UModal>
+
       <UModal v-model="reviewOpen" :prevent-close="isSending" :ui="{ width: 'sm:max-w-2xl' }">
         <UCard v-if="review">
           <template #header><h2 class="font-semibold">确认发送邮件</h2></template>
@@ -221,6 +267,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAuthStore } from '~/store/auth';
+import type { ModerationKind, ModerationRestriction, ModerationState } from '~/server/utils/gmInterClient';
 
 interface GameServer {
   name: string;
@@ -261,6 +308,29 @@ interface MailReview {
   items: Array<{ i: number; a: number; name: string }>;
 }
 
+interface ModerationTarget {
+  server: string;
+  serverLabel: string;
+  player: Player;
+  kind: ModerationKind;
+  action: 'apply' | 'clear';
+}
+
+const moderationKinds = ['ban', 'mute'] as const;
+const moderationLabels = {
+  ban: { active: '已封禁', inactive: '未封禁', apply: '封禁', clear: '解封' },
+  mute: { active: '已禁言', inactive: '未禁言', apply: '禁言', clear: '解禁' },
+};
+const restrictionDurations = [
+  { label: '1 小时', value: 3600 },
+  { label: '12 小时', value: 43200 },
+  { label: '1 天', value: 86400 },
+  { label: '3 天', value: 259200 },
+  { label: '7 天', value: 604800 },
+  { label: '30 天', value: 2592000 },
+  { label: '10 年', value: 315360000 },
+];
+
 const authStore = useAuthStore();
 const isSuperAdmin = computed(() => authStore.isLoggedIn && !authStore.isUser && authStore.permissions?.level === 0);
 const selectedServer = ref('');
@@ -273,6 +343,16 @@ const loadingPlayer = ref(false);
 const queryError = ref('');
 const players = ref<Player[]>([]);
 const selectedPlayer = ref<Player | null>(null);
+const moderation = ref<ModerationState | null>(null);
+const loadingModeration = ref(false);
+const savingModeration = ref(false);
+const moderationOpen = ref(false);
+const moderationTarget = ref<ModerationTarget | null>(null);
+const moderationError = ref('');
+const moderationFeedback = ref<{ success: boolean; message: string } | null>(null);
+const restrictionDuration = ref(restrictionDurations[0].value);
+const restrictionReason = ref('');
+const now = ref(Date.now());
 const recipientMode = ref<'single' | 'batch'>('single');
 const batchWuids = ref('');
 const mailTitle = ref('');
@@ -295,6 +375,8 @@ let mounted = false;
 let itemSearchTimer: ReturnType<typeof setTimeout> | undefined;
 let itemRequest = 0;
 let playerRequest = 0;
+let moderationRequest = 0;
+let clock: ReturnType<typeof setInterval> | undefined;
 
 const serverOptions = computed(() => servers.value
   .filter(server => server.server_id !== null && /^[1-9]\d*$/.test(String(server.server_id)))
@@ -351,7 +433,7 @@ async function loadServers() {
 }
 
 async function findPlayer() {
-  if (isSending.value || loadingPlayer.value || !selectedServer.value || serverConfigurationError.value) return;
+  if (isSending.value || savingModeration.value || loadingPlayer.value || !selectedServer.value || serverConfigurationError.value) return;
   const wuid = queryWuid.value.trim();
   if (!isValidWuid(wuid)) {
     queryError.value = '请填写完整、有效的角色 WUID。';
@@ -362,6 +444,7 @@ async function findPlayer() {
   queryError.value = '';
   players.value = [];
   selectedPlayer.value = null;
+  resetModeration();
   try {
     const response: any = await $fetch('/api/gm/players', { query: { server: selectedServer.value, wuid }, credentials: 'include' });
     if (request !== playerRequest) return;
@@ -373,11 +456,94 @@ async function findPlayer() {
       return { ...player, id, wuid: id, name: String(player.name || '') } as Player;
     });
     players.value = normalized;
-    if (!normalized.length) queryError.value = '该区服没有找到此 WUID 对应的角色。';
+    if (normalized.length) void loadModeration(normalized[0]);
+    else queryError.value = '该区服没有找到此 WUID 对应的角色。';
   } catch (error) {
     if (request === playerRequest) queryError.value = errorMessage(error, '角色查询失败');
   } finally {
     if (request === playerRequest) loadingPlayer.value = false;
+  }
+}
+
+function resetModeration() {
+  moderationRequest++;
+  loadingModeration.value = false;
+  moderation.value = null;
+  moderationError.value = '';
+  moderationFeedback.value = null;
+  moderationOpen.value = false;
+}
+
+function isRestricted(kind: ModerationKind) {
+  return (moderation.value?.[kind]?.until ?? 0) > now.value;
+}
+
+function formatRestriction(restriction: ModerationRestriction) {
+  return `到期 ${new Date(restriction.until).toLocaleString('zh-CN')} · ${restriction.reason}`;
+}
+
+async function loadModeration(player: Player) {
+  if (savingModeration.value || loadingModeration.value) return;
+  const request = ++moderationRequest;
+  const server = selectedServer.value;
+  loadingModeration.value = true;
+  moderation.value = null;
+  moderationError.value = '';
+  try {
+    const response = await $fetch<{ success: boolean; data: ModerationState }>('/api/gm/moderation', {
+      query: { server, wuid: player.wuid }, credentials: 'include',
+    });
+    if (request !== moderationRequest) return;
+    if (!response?.success || response.data?.wuid !== player.wuid || String(response.data.worldId) !== server) throw new Error('角色限制状态确认失败');
+    moderation.value = response.data;
+    now.value = Date.now();
+  } catch (error) {
+    if (request === moderationRequest) moderationError.value = errorMessage(error, '角色限制状态查询失败，请重新查询');
+  } finally {
+    if (request === moderationRequest) loadingModeration.value = false;
+  }
+}
+
+function openModeration(player: Player, kind: ModerationKind) {
+  if (moderation.value?.wuid !== player.wuid || savingModeration.value) return;
+  moderationTarget.value = {
+    server: selectedServer.value, serverLabel: selectedServerLabel.value, player, kind,
+    action: isRestricted(kind) ? 'clear' : 'apply',
+  };
+  restrictionDuration.value = restrictionDurations[0].value;
+  restrictionReason.value = '';
+  moderationOpen.value = true;
+}
+
+async function saveModeration() {
+  const target = moderationTarget.value;
+  if (!moderationOpen.value || !target || savingModeration.value) return;
+  if (selectedServer.value !== target.server || moderation.value?.wuid !== target.player.wuid) return;
+  if (target.action === 'apply' && !restrictionReason.value.trim()) return;
+
+  const request = ++moderationRequest;
+  const body = { server: target.server, wuid: target.player.wuid, kind: target.kind, action: target.action };
+  const details = { duration: Number(restrictionDuration.value), reason: restrictionReason.value.trim() };
+  savingModeration.value = true;
+  moderationFeedback.value = null;
+  try {
+    const response = await $fetch<{ success: boolean; data: ModerationState | null; message: string }>('/api/gm/moderation', {
+      method: 'POST', credentials: 'include', retry: 0, body: target.action === 'apply' ? { ...body, ...details } : body,
+    });
+    if (request !== moderationRequest) return;
+    const state = response?.data;
+    const confirmed = response?.success && state?.wuid === body.wuid && String(state.worldId) === body.server;
+    moderation.value = confirmed ? state : null;
+    moderationFeedback.value = { success: !!confirmed, message: response?.message || '操作结果未确认，请先刷新角色限制状态' };
+    now.value = Date.now();
+  } catch (error) {
+    if (request === moderationRequest) {
+      moderation.value = null;
+      moderationFeedback.value = { success: false, message: errorMessage(error, '操作结果未确认，请先刷新角色限制状态') };
+    }
+  } finally {
+    moderationOpen.value = false;
+    savingModeration.value = false;
   }
 }
 
@@ -475,6 +641,7 @@ watch(selectedServer, () => {
   queryError.value = '';
   players.value = [];
   selectedPlayer.value = null;
+  resetModeration();
   batchWuids.value = '';
   reviewOpen.value = false;
 });
@@ -493,6 +660,7 @@ watch(queryWuid, () => {
   queryError.value = '';
   players.value = [];
   selectedPlayer.value = null;
+  resetModeration();
 });
 watch(isSuperAdmin, allowed => {
   if (mounted && allowed) { loadServers(); loadItemOptions(); }
@@ -500,11 +668,14 @@ watch(isSuperAdmin, allowed => {
 });
 onMounted(() => {
   mounted = true;
+  clock = setInterval(() => { now.value = Date.now(); }, 1000);
   if (isSuperAdmin.value) { loadServers(); loadItemOptions(); }
 });
 onBeforeUnmount(() => {
   itemRequest++;
   playerRequest++;
+  moderationRequest++;
+  if (clock) clearInterval(clock);
   if (itemSearchTimer) clearTimeout(itemSearchTimer);
 });
 </script>

@@ -58,9 +58,13 @@
             <div v-else-if="row.op_type === 'recharge'">
               <div>钻石：{{ getParam(row, 'diamond') }}</div>
             </div>
-            <div v-else-if="row.op_type === 'ban'">
-              <div>时长(秒)：{{ getParam(row, 'banSeconds') }}</div>
-              <div>原因：{{ getParam(row, 'banReason') }}</div>
+            <div v-else-if="row.op_type === 'ban' || row.op_type === 'mute'">
+              <div>时长(秒)：{{ getParam(row, 'duration') || getParam(row, 'banSeconds') }}</div>
+              <div>原因：{{ getParam(row, 'reason') || getParam(row, 'banReason') }}</div>
+              <div v-if="row.response_result_parsed?.state?.[row.op_type]?.until">
+                到期时间：{{ formatDate(row.response_result_parsed.state[row.op_type].until) }}
+              </div>
+              <div v-if="row.response_result_parsed?.state?.disconnect === 'unconfirmed'">在线会话下线结果未确认</div>
             </div>
             <div v-else>
               <span>-</span>
@@ -101,6 +105,8 @@ const opTypeOptions = [
   { label: '全部', value: 'all' },
   { label: '封号', value: 'ban' },
   { label: '解封', value: 'unban' },
+  { label: '禁言', value: 'mute' },
+  { label: '解禁', value: 'unmute' },
   { label: '附件邮件 / 历史物资', value: 'send_items' },
   { label: '充值', value: 'recharge' },
   { label: '发邮件', value: 'send_mail' }
@@ -123,6 +129,8 @@ const formatOpType = (t: string) => {
   switch (t) {
     case 'ban': return '封号';
     case 'unban': return '解封';
+    case 'mute': return '禁言';
+    case 'unmute': return '解禁';
     case 'send_items': return '附件邮件 / 历史物资';
     case 'send_mail': return '发邮件';
     case 'recharge': return '充值';
@@ -130,7 +138,7 @@ const formatOpType = (t: string) => {
   }
 };
 
-const formatDate = (s: string) => {
+const formatDate = (s: string | number) => {
   if (!s) return '-';
   return new Date(s).toLocaleString('zh-CN');
 };

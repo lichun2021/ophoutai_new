@@ -4,7 +4,7 @@ import { verifyAdminSession } from '../utils/auth';
 import { listActive, getByIdentifier, type GameServerConfig } from '../model/gameServers';
 import { insertGmOperationLog } from '../model/gmOperationLogs';
 import { getGmItem, searchGmItems } from '../utils/gmItems';
-import { GmInterClient, normalizeWorldId, normalizeWuid, type GmMailItem, type GmMailResult } from '../utils/gmInterClient';
+import { GmInterClient, normalizeWorldId, normalizeWuid, type GmMailItem, type GmMailResult, type ModerationChange, type ModerationState } from '../utils/gmInterClient';
 
 const invalid = (message: string) => createError({ statusCode: 400, statusMessage: 'Invalid GM request', message });
 
@@ -83,6 +83,84 @@ export const getPlayers = async (event: H3Event) => {
   } catch (error: any) {
     throw createError({ statusCode: 502, statusMessage: 'Game query failed', message: error.message });
   }
+};
+
+export const getModeration = async (event: H3Event) => {
+  await requireGMPermission(event);
+  const query = getQuery(event);
+  let wuid: string;
+  try { wuid = normalizeWuid(query.wuid); } catch (error: any) { throw invalid(error.message); }
+  const { worldId, client } = await resolveServer(query.server);
+  try {
+    return { success: true, data: await client.getModeration(worldId, wuid) };
+  } catch (error: any) {
+    throw createError({ statusCode: 502, statusMessage: 'Game query failed', message: error.message });
+  }
+};
+
+function parseModerationChange(body: any): ModerationChange {
+  const { kind, action, duration, reason } = body || {};
+  if (kind !== 'ban' && kind !== 'mute') throw invalid('请选择封禁或禁言');
+  if (action === 'clear') return { kind, action };
+  if (action !== 'apply') throw invalid('请选择施加或解除限制');
+  if (!Number.isSafeInteger(duration) || duration < 1 || duration > 315360000) {
+    throw invalid('限制时长须为 1–315360000 秒的整数');
+  }
+  if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 200) {
+    throw invalid('请填写 1–200 字的限制原因');
+  }
+  return { kind, action, duration, reason: reason.trim() };
+}
+
+export const setModeration = async (event: H3Event) => {
+  const admin = await requireGMPermission(event);
+  const body = await readBody(event);
+  const change = parseModerationChange(body);
+  let wuid: string;
+  try { wuid = normalizeWuid(body.wuid); } catch (error: any) { throw invalid(error.message); }
+  const { worldId, client } = await resolveServer(body.server);
+  let player;
+  try {
+    player = await client.getPlayer(worldId, wuid);
+  } catch (error: any) {
+    throw createError({ statusCode: 502, statusMessage: 'Game query failed', message: error.message });
+  }
+  if (!player) throw createError({ statusCode: 404, statusMessage: 'Player not found', message: '选定区服未找到该角色' });
+
+  const opType = change.action === 'apply' ? change.kind : change.kind === 'ban' ? 'unban' : 'unmute';
+  let state: ModerationState | null = null;
+  let message: string;
+  try {
+    state = await client.setModeration(worldId, wuid, change);
+    message = '游戏服已确认角色限制状态';
+    if (state.disconnect === 'confirmed') message += '，该角色已下线';
+    if (state.disconnect === 'not_online') message += '，该角色当前不在线';
+    if (state.disconnect === 'unconfirmed') message += '，在线会话下线结果未确认';
+  } catch {
+    message = '操作结果未确认，请先刷新角色限制状态';
+  }
+
+  let auditWarning = false;
+  try {
+    await insertGmOperationLog({
+      op_type: opType,
+      server: String(worldId),
+      player_id: wuid,
+      player_name: player.name,
+      role_id: wuid,
+      admin_id: admin.id,
+      admin_name: admin.name,
+      request_params: { protocol: 'new_gmtools', worldId, wuid, ...change },
+      response_result: { status: state ? 'confirmed' : 'unknown', state, message },
+      success: state ? 1 : 0,
+      error_message: state ? null : message,
+    });
+  } catch {
+    auditWarning = true;
+    console.error('[GM] 角色限制操作日志写入失败');
+  }
+  if (auditWarning) message += '。本次操作日志写入失败';
+  return { success: state !== null, data: state, message };
 };
 
 export const getItems = async (event: H3Event) => {

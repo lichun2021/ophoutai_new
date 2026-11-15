@@ -1273,6 +1273,8 @@ router.get('/client/player-gift-packages', withLogging(UserClientCtrl.getPlayerG
 // 权限由控制器统一校验有效的超级管理员会话。旧游戏 IDIP 写操作不开放。
 router.get('/gm/servers', withLogging(GMCtrl.getServers, 'GM获取游戏区服'));
 router.get('/gm/players', withLogging(GMCtrl.getPlayers, 'GM按WUID查询角色'));
+router.get('/gm/moderation', adminWrap(GMCtrl.getModeration, 'GM查询角色限制状态'));
+router.post('/gm/moderation', adminWrap(GMCtrl.setModeration, 'GM修改角色限制状态'));
 router.get('/gm/items', withLogging(GMCtrl.getItems, 'GM查询游戏物品库'));
 router.post('/gm/send-items', adminWrap(GMCtrl.sendItems, 'GM发送附件邮件'));
 router.post('/gm/send-items-batch', adminWrap(GMCtrl.sendItemsBatch, 'GM发送定向批量邮件'));

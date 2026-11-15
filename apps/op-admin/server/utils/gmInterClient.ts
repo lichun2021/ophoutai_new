@@ -14,6 +14,19 @@ export type GmMailResult = {
   message: string;
 };
 
+export type ModerationKind = 'ban' | 'mute';
+export type ModerationChange = { kind: ModerationKind } & (
+  { action: 'apply'; duration: number; reason: string } | { action: 'clear' }
+);
+export type ModerationRestriction = { until: number; reason: string };
+export type ModerationState = {
+  worldId: number;
+  wuid: string;
+  ban: ModerationRestriction | null;
+  mute: ModerationRestriction | null;
+  disconnect?: 'confirmed' | 'not_online' | 'unconfirmed';
+};
+
 const MAX_WUID = 9223372036854775807n;
 export const MAIL_RESULT_UNKNOWN = '发送结果未确认，请先核对游戏内邮件记录，勿直接重试';
 
@@ -47,6 +60,25 @@ function responseWuid(value: unknown): string {
   }
   if (typeof value === 'number' && Number.isSafeInteger(value)) return normalizeWuid(String(value));
   return normalizeWuid(value);
+}
+
+function parseRestriction(value: any): ModerationRestriction | null {
+  if (value === null) return null;
+  if (!value || !Number.isSafeInteger(value.until) || value.until <= 0 || typeof value.reason !== 'string') {
+    throw new Error('游戏服返回的角色限制状态无效');
+  }
+  return { until: value.until, reason: value.reason };
+}
+
+function parseModeration(result: any, worldId: number, wuid: string): ModerationState {
+  if (normalizeWorldId(result.worldId) !== worldId || responseWuid(result.wuid) !== wuid) {
+    throw new Error('游戏服返回了不匹配的角色或区服');
+  }
+  const { disconnect } = result;
+  if (disconnect !== undefined && !['confirmed', 'not_online', 'unconfirmed'].includes(disconnect)) {
+    throw new Error('游戏服返回的下线状态无效');
+  }
+  return { worldId, wuid, ban: parseRestriction(result.ban), mute: parseRestriction(result.mute), disconnect };
 }
 
 export function buildMailMessage(playerId: string, title: string, content: string, items: GmMailItem[]) {
@@ -131,6 +163,28 @@ export class GmInterClient {
     if (Number.isSafeInteger(user.teamlv) && user.teamlv >= 0) player.level = user.teamlv;
     if (Number.isSafeInteger(user.vip) && user.vip >= 0) player.vipLevel = user.vip;
     return player;
+  }
+
+  async getModeration(worldId: number, wuid: string): Promise<ModerationState> {
+    const world = normalizeWorldId(worldId);
+    const id = normalizeWuid(wuid);
+    const result = await this.call('/v2/Inter/User/get_moderation', { w_id: String(world), _id: id });
+    return parseModeration(result, world, id);
+  }
+
+  async setModeration(worldId: number, wuid: string, change: ModerationChange): Promise<ModerationState> {
+    const world = normalizeWorldId(worldId);
+    const id = normalizeWuid(wuid);
+    const request = { w_id: String(world), _id: id, kind: change.kind, action: change.action };
+    const result = await this.call('/v2/Inter/User/set_moderation', change.action === 'apply'
+      ? { ...request, duration: String(change.duration), reason: change.reason }
+      : request);
+    const state = parseModeration(result, world, id);
+    const restriction = state[change.kind];
+    if (change.action === 'clear' ? restriction !== null : restriction?.reason !== change.reason) {
+      throw new Error('游戏服返回的状态与提交的操作不匹配');
+    }
+    return state;
   }
 
   // One request for one explicitly targeted batch. No automatic retry: this
