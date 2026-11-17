@@ -228,8 +228,6 @@ export const getPayWay = async (evt: H3Event) => {
                 money: q.money ? Number(q.money) : undefined
             };
         }
-        console.log("getPayWay 请求参数:", body);
-        
         const {
             username,        // 用户名
             gid: gameId,     // 游戏ID  
@@ -405,5 +403,3 @@ export const getPayWay = async (evt: H3Event) => {
         };
     }
 };
-
- 

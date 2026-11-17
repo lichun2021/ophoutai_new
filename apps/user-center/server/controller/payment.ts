@@ -1,6 +1,6 @@
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
-import { H3Event, setResponseStatus, getQuery } from 'h3';
+import { H3Event, getHeader, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
 import { Payment } from '../model/payment';
 import { PaymentSetting } from '../model/paymentSettings';
@@ -14,6 +14,9 @@ import { getByWorldId } from '../model/gameServers';
 import * as GameCharactersModel from '../model/gameCharacters';
 import { requireAuth } from '@quantum/shared/server/utils/jwt';
 import { createUserAutoLoginToken } from '@quantum/shared/server/utils/userAutoLogin';
+import { isOpSdkPtb, parseOpSdkPtb, signOpSdkPtb } from '@quantum/shared/server/utils/opSdkPtb';
+import { readSdkGameSession } from '../utils/sdkGameAuth';
+import { computeSdkSign, verifySdkSign } from '../utils/sdkSign';
 
 /**
  * 处理IP地址，将IPv6格式转换为IPv4格式
@@ -1724,10 +1727,6 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
  */
 export const doPayment = async (evt: H3Event) => {
     try {
-        const { getSystemParam } = await import('../utils/systemConfig');
-        const opAdminUrl = await getSystemParam('op_admin_url', 'https://pay.ymumel.cn');
-        const targetUrl = `${opAdminUrl.replace(/\/+$/, '')}/sdkapi/Unipay/pay`;
-
         let body: any = {};
         const method = evt.node.req.method?.toUpperCase() || 'GET';
         if (method !== 'GET') {
@@ -1735,6 +1734,51 @@ export const doPayment = async (evt: H3Event) => {
         }
         const query = getQuery(evt) || {};
         const params = { ...query, ...(body && typeof body === 'object' ? body : {}) };
+        if (isOpSdkPtb(params)) {
+            const checkout = parseOpSdkPtb(params);
+            if (!checkout) {
+                setResponseStatus(evt, 403);
+                return { code: -1, msg: '游戏原单参数无效', data: null };
+            }
+            const session = /^Bearer ([a-f0-9]{64})$/.exec(getHeader(evt, 'authorization') || '')?.[1];
+            if (!session || !await verifySdkSign(evt)) {
+                setResponseStatus(evt, 401);
+                return { code: -1, msg: '请重新登录 SDK 后确认支付', data: null };
+            }
+            const userId = await readSdkGameSession(session);
+            if (!userId) {
+                setResponseStatus(evt, 401);
+                return { code: -1, msg: 'SDK 会话已失效，请重新登录', data: null };
+            }
+
+            const payment = {
+                z: 'ptb', j: 'op', xx: checkout.id, f: checkout.username, tr: checkout.subAccountId,
+                x: checkout.wuid, h: checkout.worldId, k: checkout.sku, p: (checkout.amountMinor / 100).toFixed(2),
+            };
+            const sdkSecret = await getSystemParam('sdk_sign_secret', 'AQE!@#a123JNJKO$@#fg1');
+            const request = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-op-sdk-ptb-auth': signOpSdkPtb(checkout, userId) },
+                body: JSON.stringify({ ...payment, sign: computeSdkSign(payment, sdkSecret) }),
+                redirect: 'error' as const,
+                signal: AbortSignal.timeout(30000),
+            };
+            try {
+                const response = await fetch('http://127.0.0.1:3003/sdkapi/Unipay/pay', request);
+                if (response.ok) {
+                    const result = await response.json();
+                    const code = Number(result?.code);
+                    if (code < 0 && code !== -6) setResponseStatus(evt, 403);
+                    return result;
+                }
+            } catch {
+                // A disconnected response does not tell us whether the debit committed.
+            }
+            return { code: 2, checkout_state: 'processing', msg: '支付结果待确认，请查询原订单', data: null };
+        }
+
+        const opAdminUrl = await getSystemParam('op_admin_url', 'https://pay.ymumel.cn');
+        const targetUrl = `${opAdminUrl.replace(/\/+$/, '')}/sdkapi/Unipay/pay`;
 
         const extractGiftRoleId = (serverUrl: any): string => {
             const raw = String(serverUrl || '');
@@ -1786,7 +1830,6 @@ export const doPayment = async (evt: H3Event) => {
         // 清除前端签名（MD5），用 SDK 密钥（HMAC-SHA256）重新签名
         delete params.sign;
         delete params.__signed;
-        const { computeSdkSign } = await import('../utils/sdkSign');
         const sdkSecret = await getSystemParam('sdk_sign_secret', 'AQE!@#a123JNJKO$@#fg1');
         params.sign = computeSdkSign(params, sdkSecret);
 

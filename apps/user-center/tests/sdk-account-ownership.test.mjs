@@ -16,8 +16,11 @@ const sources = Object.fromEntries(await Promise.all([
   'server/utils/sdkGameAuth.ts',
   'server/utils/sdkSign.ts',
   'server/controller/user.ts',
+  'server/controller/payment.ts',
   'server/routes/sdkapi/[...].ts',
+  'server/plugins/sdkResponseLog.ts',
   '../../packages/shared/server/utils/loginResponseLog.ts',
+  '../../packages/shared/server/utils/opSdkPtb.ts',
 ].map(async file => {
   const { outputText, diagnostics } = ts.transpileModule(await readFile(path.join(appRoot, file), 'utf8'), {
     fileName: file,
@@ -53,11 +56,15 @@ function fixture() {
     now: 1784800000000,
     failRedis: false,
     failSignOn: 0,
+    paymentRequests: [],
+    paymentDisconnects: false,
+    paymentResult: { code: 2, checkout_state: 'processing' },
   };
   const captureLog = (...args) => state.logs.push(inspect(args, { depth: 8 }));
   const env = {
     SDK_GAME_TICKET_ENVIRONMENT: environment,
     SDK_GAME_TICKET_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    JWT_SECRET: 'fixture-internal-checkout-key',
   };
 
   function load(name, dependencies) {
@@ -66,10 +73,17 @@ function fixture() {
       Buffer,
       URL,
       URLSearchParams,
+      AbortSignal,
+      async fetch(url, request) {
+        state.paymentRequests.push({ url, request });
+        if (state.paymentDisconnects) throw new TypeError('fixture checkout disconnect');
+        return Response.json(state.paymentResult);
+      },
       Date: class extends Date { static now() { return state.now; } },
       process: { env },
       console: { info: captureLog, log: captureLog, warn: captureLog, error: captureLog },
       defineEventHandler: h3.defineEventHandler,
+      defineNitroPlugin: plugin => plugin,
       createError: h3.createError,
       getMethod: h3.getMethod,
       getRequestURL: h3.getRequestURL,
@@ -86,20 +100,17 @@ function fixture() {
   }
 
   const redis = {
-    async set(key, value, mode, ttl, guard) {
-      assert.equal(mode, 'EX');
-      assert.equal(guard, 'NX');
-      assert.equal(ttl, 900);
+    async set(key, value, ...options) {
+      assert.deepEqual(options, ['NX']);
       assert.match(key, /^sdk:game-session:local-fixture:[a-f0-9]{64}$/);
       if (state.sessions.has(key)) return null;
-      state.sessions.set(key, { value, expiresAt: state.now + ttl * 1000 });
+      state.sessions.set(key, value);
       return 'OK';
     },
     async get(key) {
       state.redisReads += 1;
       if (state.failRedis) throw new Error('fixture Redis failure');
-      const session = state.sessions.get(key);
-      return session && session.expiresAt > state.now ? session.value : null;
+      return state.sessions.get(key) ?? null;
     },
   };
   const sdkGameAuth = load('sdkGameAuth.ts', {
@@ -121,6 +132,7 @@ function fixture() {
     recordLoginSuccess: async () => {},
   };
   const requestIp = { getRequestClientIp: () => '127.0.0.1' };
+  const opSdkPtb = load('opSdkPtb.ts', { 'node:crypto': crypto });
   const i18n = {
     sdkMessages: {
       login: {
@@ -173,6 +185,24 @@ function fixture() {
     '@quantum/shared/server/utils/userAutoLogin': {},
     crypto,
   });
+  const payment = load('payment.ts', {
+    '../model/payment': {},
+    '../model/externalGiftPackage': {},
+    '../model/paymentSettings': {},
+    '../model/admin': {},
+    '../model/user': {},
+    '../model/gameCharacters': {},
+    '../model/gameServers': {},
+    '../db': {},
+    '../utils/redis-cluster': {},
+    '../utils/systemConfig': systemConfig,
+    '../utils/sdkGameAuth': sdkGameAuth,
+    '../utils/sdkSign': sdkSign,
+    '@quantum/shared/server/utils/jwt': {},
+    '@quantum/shared/server/utils/userAutoLogin': {},
+    '@quantum/shared/server/utils/opSdkPtb': opSdkPtb,
+    crypto,
+  });
   const route = load('[...].ts', {
     '../../utils/sdkSign': sdkSign,
     '../../utils/i18n': i18n,
@@ -181,11 +211,13 @@ function fixture() {
     '../../controller/user': controller,
     '../../controller/admin': {},
     '../../controller/paymentSettings': {},
-    '../../controller/payment': {},
+    '../../controller/payment': payment,
     '@quantum/shared/server/utils/loginResponseLog': load('loginResponseLog.ts', {}),
     uuid: { v4: crypto.randomUUID },
   });
-  const app = h3.createApp().use(route.default);
+  const hooks = {};
+  load('sdkResponseLog.ts', {}).default({ hooks: { hook(name, handler) { hooks[name] = handler; } } });
+  const app = h3.createApp({ onAfterResponse: hooks.afterResponse }).use(route.default);
   const handle = h3.toWebHandler(app);
 
   function signRequest(body) {
@@ -196,7 +228,8 @@ function fixture() {
     const headers = { 'Content-Type': 'application/json' };
     if (session) headers.Authorization = `Bearer ${session}`;
     const payload = signed ? signRequest(body) : body;
-    const response = await handle(new Request(`http://localhost/sdkapi/login/${routeName}`, {
+    const route = routeName === 'Unipay/pay' ? routeName : `login/${routeName}`;
+    const response = await handle(new Request(`http://localhost/sdkapi/${route}`, {
       method: 'POST', headers, body: JSON.stringify(payload),
     }));
     return { status: response.status, headers: response.headers, body: await response.json() };
@@ -212,8 +245,58 @@ function fixture() {
     return result.body.sdk_session;
   }
 
-  return { state, post, login, signRequest };
+  return { state, post, login, signRequest, opSdkPtb };
 }
+
+test('SDK payment verifies the player session and signs only the original checkout for the local operator service', async () => {
+  const { state, login, post, opSdkPtb } = fixture();
+  const session = await login();
+  const order = {
+    z: 'ptb', j: 'op', f: accounts[0].username, tr: '41', h: '111', p: '10.00',
+    x: '40763927194340500', k: 'cn.mobage.g12000128.tier01', xx: '00000000-0000-0000-0000-000000000041',
+  };
+  for (const options of [{}, { signed: false, session }, { session: 'a'.repeat(64) }]) {
+    const rejected = await post('Unipay/pay', order, options);
+    assert.equal(rejected.status, 401);
+    assert.equal(rejected.body.code, -1);
+  }
+  const mallParams = { os: 'web', cashier_payment: 'true', server_url: 'gift://fixture' };
+  assert.equal((await post('Unipay/pay', { ...order, ...mallParams })).status, 401);
+  assert.equal((await post('Unipay/pay', { ...order, xx: 'invalid', os: 'web', cashier_payment: 'true' })).status, 403);
+  assert.equal(opSdkPtb.isOpSdkPtb({ ...order, ...mallParams, xx: 'ptb_fixture_mall_order' }), false);
+  assert.equal((await post('Unipay/pay', { ...order, xx: 'invalid' }, { session })).status, 403);
+  assert.equal(state.paymentRequests.length, 0);
+  state.now += 25 * 60 * 60 * 1000;
+  const accepted = await post('Unipay/pay', { ...order, y: 'legacy-attachment' }, { session });
+  assert.equal(accepted.status, 200);
+  assert.equal(accepted.body.checkout_state, 'processing');
+  const [{ url, request }] = state.paymentRequests;
+  assert.equal(url, 'http://127.0.0.1:3003/sdkapi/Unipay/pay');
+  assert.equal(request.headers.Authorization, undefined);
+  assert.equal(request.body.includes(session), false);
+  assert.equal(request.body.includes('legacy-attachment'), false);
+  const checkout = opSdkPtb.parseOpSdkPtb(JSON.parse(request.body));
+  assert.equal(opSdkPtb.verifyOpSdkPtb(checkout, request.headers['x-op-sdk-ptb-auth']), accounts[0].id);
+  assert.equal(opSdkPtb.verifyOpSdkPtb({ ...checkout, amountMinor: 1 }, request.headers['x-op-sdk-ptb-auth']), null);
+  assert.equal(state.logs.some(line => line.includes(session) || line.includes(request.headers['x-op-sdk-ptb-auth'])), false);
+
+  state.paymentResult = { code: -1, msg: '游戏订单已过期，请重新下单', data: null };
+  const rejected = await post('Unipay/pay', order, { session });
+  assert.equal(rejected.status, 403);
+  assert.deepEqual(rejected.body, state.paymentResult);
+
+  for (const destination of ['https://example.test/user/login?t=fixture-login-token', 'weixin://pay/fixture-pay-token']) {
+    state.paymentResult = { code: -6, msg: '平台币余额不足', data: destination };
+    const insufficient = await post('Unipay/pay', order, { session });
+    assert.equal(insufficient.status, 200);
+    assert.deepEqual(insufficient.body, state.paymentResult);
+    assert.equal(state.logs.some(line => line.includes(destination)), false);
+  }
+  assert.equal(state.logs.some(line => line.includes('[SDK][返回]') && line.includes('"data":"[redacted]"')), true);
+
+  state.paymentDisconnects = true;
+  assert.equal((await post('Unipay/pay', order, { session })).body.checkout_state, 'processing');
+});
 
 function assertProof(proof, expectedSubject, now, audience = 'op-sdk-ownership') {
   assert.match(proof, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
@@ -318,7 +401,7 @@ test('dologin session issues a distinct ownership proof for each owned subaccoun
   }
 });
 
-test('xiaohao fails closed for malformed, expired, mismatched and banned sessions', async () => {
+test('xiaohao fails closed for malformed, missing, mismatched and banned sessions', async () => {
   const { state, post, login } = fixture();
   const session = await login();
   for (const token of ['', null, 17, 'invalid-session-fixture', '0'.repeat(64)]) {
@@ -328,7 +411,7 @@ test('xiaohao fails closed for malformed, expired, mismatched and banned session
   state.users[0].status = 1;
   assertListFailure(await post('xiaohao', { z: accounts[0].username, sdk_session: session }));
   state.users[0].status = 0;
-  state.now += 901 * 1000;
+  state.sessions.clear();
   assertListFailure(await post('xiaohao', { z: accounts[0].username, sdk_session: session }));
   assert.deepEqual(state.listedParents, []);
   assert.equal(state.signAttempts, 0);

@@ -167,7 +167,11 @@ const withLogging = (handler: Function, apiName: string) => {
       console.error('[ERROR] 日志记录失败:', logError);
     }
     
-    console.log('[OUT] 响应体:', JSON.stringify(response));
+    const paymentCheckout = url.pathname.replace(/\/+$/, '').toLowerCase() === '/sdkapi/unipay/pay';
+    const logBody = paymentCheckout && typeof response?.data === 'string' && response.data.length > 0
+      ? { ...response, data: '[redacted]' }
+      : response;
+    console.log('[OUT] 响应体:', JSON.stringify(logBody));
     return response;
   });
 };

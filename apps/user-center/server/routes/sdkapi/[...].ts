@@ -266,7 +266,7 @@ router.post('/login/editSubAccount', withSignAndLogging(UserCtrl.editSubAccountN
  * @body {username: string, gid: number, money: number} (form-data格式)
  * @returns {Object} 支付方式列表
  */
-router.post('/Pay/payway', withSignAndLogging(PaymentSettingsCtrl.getPayWay, '获取支付方式接口'));
+router.post('/Pay/payway', withSignAndLogging(PaymentSettingsCtrl.getPayWay, '获取支付方式接口', { privatePayload: true }));
 
 /**
  * 角色上报接口

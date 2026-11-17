@@ -38,12 +38,11 @@ const withLogging = (handler: Function, apiName: string) => {
     const url = getRequestURL(event);
 
     let requestBody: any = {};
-    let queryParams: any = {};
+    const queryParams = getQuery(event);
     try {
-      if (method === 'POST' || method === 'PUT') {
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
         requestBody = await readBody(event);
       }
-      queryParams = getQuery(event);
     } catch (e) {
       requestBody = {};
     }

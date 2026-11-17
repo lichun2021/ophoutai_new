@@ -2,7 +2,6 @@ import { createHash, createPrivateKey, randomBytes, sign } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
 import { getRedisCluster } from './redis-cluster';
 
-const SESSION_TTL_SECONDS = 15 * 60;
 const TICKET_TTL_SECONDS = 60;
 const JWS_HEADER = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
 
@@ -49,7 +48,7 @@ export async function createSdkGameSession(userId: number): Promise<string | und
 
     const token = randomBytes(32).toString('hex');
     const key = sessionKey(configured.environment, token);
-    const result = await getRedisCluster().set(key, String(userId), 'EX', SESSION_TTL_SECONDS, 'NX');
+    const result = await getRedisCluster().set(key, String(userId), 'NX');
     if (result !== 'OK') throw new Error('无法存储 SDK 游戏会话');
     return token;
 }

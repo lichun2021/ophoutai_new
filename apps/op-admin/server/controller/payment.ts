@@ -1,6 +1,6 @@
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
-import { H3Event, setResponseStatus, getQuery } from 'h3';
+import { H3Event, getHeader, setResponseStatus, getQuery } from 'h3';
 import * as crypto from 'crypto';
 import { Payment } from '../model/payment';
 import { PaymentSetting } from '../model/paymentSettings';
@@ -13,6 +13,9 @@ import { getSystemConfig, getThirdPartyPaymentConfig, getSystemParam } from '../
 import { getByWorldId } from '../model/gameServers';
 import * as GameCharactersModel from '../model/gameCharacters';
 import { createUserAutoLoginToken } from '@quantum/shared/server/utils/userAutoLogin';
+import { isOpSdkPtb, parseOpSdkPtb, verifyOpSdkPtb } from '@quantum/shared/server/utils/opSdkPtb';
+import { getOpPaymentInterConfig, getOpPaymentOrder, getOpPaymentOrderConfig, notifyOpPayment } from '../utils/opPaymentInter';
+import { confirmOpSdkPtbPayment, debitOpSdkPtbPayment, findOpSdkPtbPayment, OpSdkPtbOrderRejectedError } from '../model/opSdkPtbPayment';
 
 /**
  * 处理IP地址，将IPv6格式转换为IPv4格式
@@ -1536,8 +1539,84 @@ export const getPaymentByUserID = defineEventHandler(async (event) => {
     }
 }; */
 
+async function payOpSdkOrder(evt: H3Event, params: Record<string, unknown>) {
+    const checkout = parseOpSdkPtb(params);
+    if (!checkout) return { code: -1, msg: '游戏原单参数无效', data: null };
+    const userId = verifyOpSdkPtb(checkout, getHeader(evt, 'x-op-sdk-ptb-auth') || '');
+    if (!userId) return { code: -1, msg: '请重新登录 SDK 后确认支付', data: null };
+
+    const order = { ...checkout, userId };
+    const pending = {
+        code: 2, checkout_state: 'processing', msg: '游戏订单处理中，请查询原单', data: null,
+    };
+    const paymentError = (error: unknown) => error instanceof OpSdkPtbOrderRejectedError
+        ? { code: -1, msg: error.message, data: null }
+        : pending;
+    let payment;
+    try {
+        payment = await findOpSdkPtbPayment(order);
+    } catch (error) {
+        return paymentError(error);
+    }
+
+    let channel;
+    if (!payment) {
+        let quote;
+        try {
+            channel = getOpPaymentInterConfig();
+            const server = await getByWorldId(order.worldId);
+            if (!server || Number(server.is_active) !== 1) {
+                return { code: -1, msg: '游戏区服未启用', data: null };
+            }
+            quote = await getOpPaymentOrder(getOpPaymentOrderConfig(), {
+                id: order.id, worldId: order.worldId, wuid: order.wuid,
+            });
+        } catch {
+            // A concurrent payment may have moved the game order past the quoteable state.
+            try {
+                payment = await findOpSdkPtbPayment(order);
+            } catch (error) {
+                return paymentError(error);
+            }
+        }
+
+        if (!payment) {
+            if (!quote) return { code: -1, msg: '游戏原单暂无法核对，尚未扣款', data: null };
+            if (quote.sku !== order.sku || quote.subAccountId !== String(order.subAccountId)
+                || quote.amountMinor !== order.amountMinor) {
+                return { code: -1, msg: '游戏原单与收银台资料不一致', data: null };
+            }
+            try {
+                payment = await debitOpSdkPtbPayment(order, quote.expiresAt);
+            } catch (error) {
+                return paymentError(error);
+            }
+            if (!payment) {
+                const query = new URLSearchParams({
+                    sub_user_id: String(order.subAccountId), wuid: order.wuid, world_id: String(order.worldId),
+                });
+                const data = await generateUserLoginUrl(userId, `/user/cashier?${query}`);
+                return { code: -6, msg: '平台币余额不足', data: data || '' };
+            }
+        }
+    }
+
+    if (payment.receipt.amountMinor !== order.amountMinor) {
+        return { code: -1, msg: '金额与原订单不一致', data: null };
+    }
+    if (!payment.confirmed) {
+        try {
+            await notifyOpPayment(channel ?? getOpPaymentInterConfig(), payment.receipt);
+            await confirmOpSdkPtbPayment(payment);
+        } catch {
+            return pending;
+        }
+    }
+    return { code: 1, msg: '游戏服已确认收款', data: null };
+}
+
 /**
- * SDK支付请求接口 
+ * SDK支付请求接口
  * SDK接口: GET/POST /sdkapi/Pay/doPay
  */
 export const doPayment = async (evt: H3Event) => {
@@ -1557,6 +1636,7 @@ export const doPayment = async (evt: H3Event) => {
         const query = getQuery(evt) || {};
         const safeBody = (body && typeof body === 'object') ? body : {};
         const params = { ...query, ...safeBody }; // 以 query 为主，再覆盖 body
+        if (isOpSdkPtb(params)) return await payOpSdkOrder(evt, params);
 
         // Unipay/pay 参数映射 - 按照Java客户端参数格式
         let paymentMethod = typeof params.z === 'string' ? params.z.toLowerCase() : ''; // 支付方式 (zfb, wx, ptb, kf等) → payment_way (转中文)
@@ -1760,6 +1840,10 @@ export const doPayment = async (evt: H3Event) => {
         const userPlatformCoins = parseFloat(userData.platform_coins) || 0;
         const userGameCode = userData.game_code || '';
         const userChannelCode = userData.channel_code || '';
+
+        if (isOpSdkPtb({ ...params, j: userGameCode })) {
+            return { code: -1, msg: 'OP 游戏订单须通过 SDK 确认支付', data: null };
+        }
 
         // ⏳ 每日限购：指定礼包每日仅可购买一次
         if (dailyLimitedProducts.has(productDesc)) {
