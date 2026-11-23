@@ -456,6 +456,10 @@ export const getUserOrders = async (thirdparty_uid: string, status?: number) => 
       // 添加 WHERE 条件
       query += ' WHERE transaction_id = ?';
       values.push(transaction_id);
+      if (status === 1 || status === 2) {
+          // 网关建单应答可能晚于支付回调，不能将已收款的礼包改回处理中。
+          query += " AND (payment_status <> 3 OR COALESCE(server_url, '') NOT LIKE 'gift://%')";
+      }
       
       await sql({
           query,

@@ -1,3 +1,4 @@
+import { findPaymentNotificationOrder, forwardGiftPayment } from '@quantum/shared/server/utils/giftPaymentProxy';
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
@@ -1789,6 +1790,10 @@ export const doPayment = async (evt: H3Event) => {
         const sdkSecret = await getSystemParam('sdk_sign_secret', 'AQE!@#a123JNJKO$@#fg1');
         params.sign = computeSdkSign(params, sdkSecret);
 
+        if (isMallGiftOrder) {
+            return await forwardGiftPayment(evt, '/sdkapi/Unipay/pay', params);
+        }
+
         const debugFields = Object.keys(params).filter(k => k !== 'sign' && k !== '__signed').sort();
         console.log(`[PaymentProxy] re-sign=${params.sign}, fields=[${debugFields.join(',')}]`);
         console.log(`[PaymentProxy] -> ${targetUrl}`);
@@ -1882,17 +1887,23 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         const notifyOrderNo = body.trade_no || body.outTradeNo || '';
         console.log(`[${requestId}] 使用订单号查找订单:`, notifyOrderNo);
 
-        const result = await sql({
-            query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
-            values: [notifyOrderNo]
-        }) as any[];
-
-        const localOrder = result.length > 0 ? result[0] : null;
+        const localOrder = await findPaymentNotificationOrder<Payment>(body, sql);
 
         if (!localOrder) {
             console.error(`[${requestId}] 订单不存在, 订单号:`, notifyOrderNo);
             setResponseStatus(evt, 200);
             return 'fail';
+        }
+
+        // 普通订单仍只接受原处理路径使用的商户订单号。
+        if (!String(localOrder.server_url || '').startsWith('gift://')
+            && (!notifyOrderNo || String(localOrder.mch_order_id) !== String(notifyOrderNo))) {
+            setResponseStatus(evt, 200);
+            return 'fail';
+        }
+
+        if (String(localOrder.server_url || '').startsWith('gift://')) {
+            return await forwardGiftPayment(evt, '/api/payment/third-party-notify');
         }
 
         console.log(`[${requestId}] 订单查找成功!`, { transaction_id: localOrder.transaction_id, mch_order_id: localOrder.mch_order_id });
@@ -2099,17 +2110,23 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         const notifyOrderNo = body.trade_no || body.outTradeNo || '';
         console.log(`[${requestId}] 使用订单号查找订单:`, notifyOrderNo);
 
-        const result = await sql({
-            query: 'SELECT * FROM PaymentRecords WHERE mch_order_id = ? LIMIT 1',
-            values: [notifyOrderNo]
-        }) as any[];
-
-        const localOrder = result.length > 0 ? result[0] : null;
+        const localOrder = await findPaymentNotificationOrder<Payment>(body, sql);
 
         if (!localOrder) {
             console.error(`[${requestId}] 订单不存在, 订单号:`, notifyOrderNo);
             setResponseStatus(evt, 200);
             return 'fail';
+        }
+
+        // 普通订单仍只接受原处理路径使用的商户订单号。
+        if (!String(localOrder.server_url || '').startsWith('gift://')
+            && (!notifyOrderNo || String(localOrder.mch_order_id) !== String(notifyOrderNo))) {
+            setResponseStatus(evt, 200);
+            return 'fail';
+        }
+
+        if (String(localOrder.server_url || '').startsWith('gift://')) {
+            return await forwardGiftPayment(evt, '/api/payment/cashier-notify');
         }
 
         console.log(`[${requestId}] 订单查找成功!`, { transaction_id: localOrder.transaction_id, mch_order_id: localOrder.mch_order_id });
@@ -2233,7 +2250,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
                 values: [localOrder.user_id],
             }) as any[];
 
-            if (user.length === 0) {
+            if (!localOrder.user_id || user.length === 0) {
                 console.error(`[${requestId}] 用户不存在:`, localOrder.user_id);
                 setResponseStatus(evt, 200);
                 return 'fail';
@@ -2440,6 +2457,10 @@ export const queryPaymentOrder = async (evt: H3Event) => {
                 code: 403,
                 msg: '无权查询该订单'
             };
+        }
+
+        if (String(orderDetail.server_url || '').startsWith('gift://')) {
+            return await forwardGiftPayment(evt, '/api/internal/payment/query');
         }
 
         console.log('[PaymentQuery] 订单详情:', {

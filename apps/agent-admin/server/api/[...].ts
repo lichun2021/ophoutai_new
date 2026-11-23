@@ -198,6 +198,8 @@ router.get('/admin/system-params/:key', defineEventHandler(SystemParamsCtrl.getS
 // ========== 支付回调（共用）==========
 
 router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知接口'));
+router.post('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知接口'));
 router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知接口'));
+router.post('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知接口'));
 
 export default useBase('/api', router.handler);
