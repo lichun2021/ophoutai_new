@@ -1,3 +1,4 @@
+import { readReportPaymentAmounts } from '@quantum/shared/server/utils/reportPaymentAmounts';
 import { H3Event, readBody, readMultipartFormData, createError, defineEventHandler, getQuery, getHeader } from 'h3';
 import * as AdminModel from '../model/admin';
 import * as PlatformCoinsModel from '../model/platformCoins';
@@ -3731,97 +3732,37 @@ export const getDailyReportDetails = async (evt: H3Event) => {
         const startDate = query.startDate as string || getPastDate(7);
         const endDate = query.endDate as string || getCurrentDate();
         const channelCode = query.channelCode as string || '';
-        const adminId = query.adminId as string || '';
         const gameId = query.gameId as string || '';
+        const splitSteam = query.splitSteam === '1';
+        const adminId = Number(getHeader(evt, 'authorization'));
+        const admin = adminId ? await AdminModel.getAdminWithPermissions(adminId) : null;
+        if (!admin || Number(admin.is_active) !== 1) return { success: false, message: '无法验证管理员身份' };
 
-        // 获取当前用户权限信息
-        let currentUserInfo: { level: number, allowed_channel_codes: string[], allowed_game_ids: number[] } = {
-            level: 0,
-            allowed_channel_codes: [],
-            allowed_game_ids: []
-        };
-
-        if (adminId) {
-            try {
-                const adminResult = await AdminModel.getAdminWithPermissions(parseInt(adminId));
-                if (adminResult) {
-                    currentUserInfo = {
-                        level: adminResult.level,
-                        allowed_channel_codes: adminResult.allowed_channel_codes || [],
-                        allowed_game_ids: adminResult.allowed_game_ids || []
-                    };
-                }
-            } catch (error: any) {
-                console.error('获取管理员信息失败:', error);
-            }
-        }
-
-        // 确定要使用的权限（用于数据过滤）
-        let allowedChannels: string[] = [];
-        let allowedGameIds: number[] = [];
-
+        let channelCodes: string[] | undefined = admin.level === 0 ? undefined : admin.allowed_channel_codes || [];
         if (channelCode) {
-            // 用户选择了具体渠道
-            allowedChannels = [channelCode];
-        } else {
-            // 没有选择具体渠道
-            if (currentUserInfo.level === 0) {
-                // 超级管理员：不过滤，查看全部数据
-                allowedChannels = [];
-            } else {
-                // 普通代理：使用自己的权限
-                allowedChannels = currentUserInfo.allowed_channel_codes;
-            }
+            if (channelCodes && !channelCodes.includes(channelCode)) return { success: false, message: '无权限查看该渠道' };
+            channelCodes = [channelCode];
         }
 
-        // 游戏权限处理
-        let gameCodeFilter = '';
-        if (gameId) {
-            // 检查权限
-            if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0 &&
-                !currentUserInfo.allowed_game_ids.includes(parseInt(gameId))) {
-                return {
-                    success: false,
-                    message: '无权限查看该游戏数据'
-                };
-            }
-
-            // 获取游戏代码
-            const gameResult = await sql({
-                query: "SELECT game_code FROM Games WHERE id = ?",
-                values: [parseInt(gameId)]
-            }) as any;
-
-            if (gameResult.length > 0) {
-                gameCodeFilter = gameResult[0].game_code;
-            }
+        let gameCodes: string[] | undefined;
+        const gameIds = gameId ? [Number(gameId)] : admin.level === 0 ? undefined : admin.allowed_game_ids || [];
+        if (gameId && admin.level !== 0 && !admin.allowed_game_ids?.includes(Number(gameId))) {
+            return { success: false, message: '无权限查看该游戏数据' };
+        }
+        if (gameIds) {
+            const games = gameIds.length ? await sql({
+                query: `SELECT game_code FROM Games WHERE id IN (${gameIds.map(() => '?').join(',')})`,
+                values: gameIds
+            }) as { game_code: string }[] : [];
+            gameCodes = games.map(game => game.game_code);
         }
 
-        // 构建查询条件
-        let conditions = ['ds.stat_date BETWEEN ? AND ?', `ds.stat_date >= ${AGENT_HISTORY_START_SQL}`];
-        let values = [startDate, endDate];
-
-        // 渠道过滤
-        if (allowedChannels.length > 0) {
-            conditions.push(`ds.channel_code IN (${allowedChannels.map(() => '?').join(',')})`);
-            values.push(...allowedChannels);
-        }
-
-        // 游戏过滤
-        if (gameCodeFilter) {
-            conditions.push('ds.game_code = ?');
-            values.push(gameCodeFilter);
-        } else if (currentUserInfo.level > 0 && currentUserInfo.allowed_game_ids.length > 0) {
-            // 代理用户需要过滤游戏权限
-            const gameCodesResult = await sql({
-                query: `SELECT game_code FROM Games WHERE id IN (${currentUserInfo.allowed_game_ids.map(() => '?').join(',')})`,
-                values: currentUserInfo.allowed_game_ids
-            }) as any;
-
-            if (gameCodesResult.length > 0) {
-                const gameCodes = gameCodesResult.map((g: any) => g.game_code);
-                conditions.push(`ds.game_code IN (${gameCodes.map(() => '?').join(',')})`);
-                values.push(...gameCodes);
+        const conditions = ['ds.stat_date BETWEEN ? AND ?', `ds.stat_date >= ${AGENT_HISTORY_START_SQL}`];
+        const values = [startDate, endDate];
+        for (const [column, codes] of [['channel_code', channelCodes], ['game_code', gameCodes]] as const) {
+            if (codes) {
+                conditions.push(codes.length ? `ds.${column} IN (${codes.map(() => '?').join(',')})` : '1 = 0');
+                values.push(...codes);
             }
         }
 
@@ -3860,37 +3801,48 @@ export const getDailyReportDetails = async (evt: H3Event) => {
             ORDER BY ds.stat_date DESC
         `;
 
-        const dailyStatsResult = await sql({
-            query: dailyStatsQuery,
-            values
-        }) as any;
-
-        // 格式化结果
-        const dailyStats = dailyStatsResult.map((row: any) => ({
-            date: formatDateToString(row.date),
-            activeUsers: Number(row.activeUsers) || 0,
-            registerUsers: Number(row.registerUsers) || 0,
-            validRegisterUsers: Number(row.validRegisterUsers) || 0,
-            newUsers: Number(row.newUsers) || 0,
-            yesterdayRetention: Number(row.yesterdayRetention).toFixed(1),
-            payUsers: Number(row.payUsers) || 0,
-            newPayUsers: Number(row.newPayUsers) || 0,
-            rechargeTimes: Number(row.rechargeTimes) || 0,
-            highValueUsers: Number(row.highValueUsers) || 0,
-            consumeAmount: Number(row.consumeAmount).toFixed(2),
-            realRechargeAmount: Number(row.realRechargeAmount).toFixed(2),
-            newUserRecharge: Number(row.newUserRecharge).toFixed(2),
-            payRate: Number(row.payRate).toFixed(1),
-            newPayRate: Number(row.newPayRate).toFixed(1),
-            activeArpu: Number(row.activeArpu).toFixed(2),
-            payArpu: Number(row.payArpu).toFixed(2),
-            newArpu: Number(row.newArpu).toFixed(2),
-            newPayArpu: Number(row.newPayArpu).toFixed(2),
-            ltv2: Number(row.ltv2).toFixed(2),
-            ltv3: Number(row.ltv3).toFixed(2),
-            ltv5: Number(row.ltv5).toFixed(2),
-            ltv7: Number(row.ltv7).toFixed(2)
-        }));
+        const [statsRows, payments] = await Promise.all([
+            sql({ query: dailyStatsQuery, values }) as Promise<any[]>,
+            splitSteam ? readReportPaymentAmounts(sql, {
+                startDate, endDate, channelCodes, gameCodes, limitToLastMonth: true
+            }) : undefined
+        ]);
+        const byDate = new Map(statsRows.map(row => [formatDateToString(row.date), row]));
+        // Today's payments may arrive before the daily stats job writes a row.
+        for (const date of payments?.keys() ?? []) {
+            if (!byDate.has(date)) byDate.set(date, {});
+        }
+        const dailyStats = [...byDate.keys()].sort().reverse().map(date => {
+            const row = byDate.get(date);
+            const amount = payments?.get(date);
+            return {
+                date,
+                ...(!row.date ? { statsPending: true } : {}),
+                activeUsers: Number(row.activeUsers) || 0,
+                registerUsers: Number(row.registerUsers) || 0,
+                validRegisterUsers: Number(row.validRegisterUsers) || 0,
+                newUsers: Number(row.newUsers) || 0,
+                yesterdayRetention: Number(row.yesterdayRetention ?? 0).toFixed(1),
+                payUsers: Number(row.payUsers) || 0,
+                newPayUsers: Number(row.newPayUsers) || 0,
+                rechargeTimes: Number(row.rechargeTimes) || 0,
+                highValueUsers: Number(row.highValueUsers) || 0,
+                consumeAmount: Number(row.consumeAmount ?? 0).toFixed(2),
+                realRechargeAmount: Number(payments ? amount?.cashAmount ?? 0 : row.realRechargeAmount).toFixed(2),
+                ...(payments ? { steamRechargeAmount: (amount?.steamAmount ?? 0).toFixed(2) } : {}),
+                newUserRecharge: Number(row.newUserRecharge ?? 0).toFixed(2),
+                payRate: Number(row.payRate ?? 0).toFixed(1),
+                newPayRate: Number(row.newPayRate ?? 0).toFixed(1),
+                activeArpu: Number(row.activeArpu ?? 0).toFixed(2),
+                payArpu: Number(row.payArpu ?? 0).toFixed(2),
+                newArpu: Number(row.newArpu ?? 0).toFixed(2),
+                newPayArpu: Number(row.newPayArpu ?? 0).toFixed(2),
+                ltv2: Number(row.ltv2 ?? 0).toFixed(2),
+                ltv3: Number(row.ltv3 ?? 0).toFixed(2),
+                ltv5: Number(row.ltv5 ?? 0).toFixed(2),
+                ltv7: Number(row.ltv7 ?? 0).toFixed(2)
+            };
+        });
 
         return {
             success: true,
@@ -4874,158 +4826,122 @@ export const checkUserChannel = async (evt: H3Event) => {
 export const getChannelData = async (evt: H3Event) => {
     try {
         const query = getQuery(evt);
-        const {
-            startDate,
-            endDate,
-            channelCode,
-            gameId,
-            adminId,
-            page = 1,
-            pageSize = 20
-        } = query;
-
-        // 参数验证
-        if (!startDate || !endDate) {
-            throw createError({
-                status: 400,
-                message: '开始日期和结束日期为必填项',
-            });
+        const { startDate, endDate, channelCode, gameId, page = 1, pageSize = 20 } = query;
+        if (typeof startDate !== 'string' || typeof endDate !== 'string'
+            || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
+            || startDate > endDate) {
+            throw createError({ statusCode: 400, message: '请输入有效的开始日期和结束日期' });
         }
 
-        // 分页参数
-        const currentPage = parseInt(page as string) || 1;
-        const limit = parseInt(pageSize as string) || 20;
+        const adminId = Number(getHeader(evt, 'authorization'));
+        if (!Number.isSafeInteger(adminId) || adminId <= 0) {
+            throw createError({ statusCode: 401, message: '未提供有效的管理员会话' });
+        }
+        const admin = await AdminModel.getAdminWithPermissions(adminId);
+        if (!admin || Number(admin.is_active) !== 1) {
+            throw createError({ statusCode: 403, message: '管理员不存在或已禁用' });
+        }
+
+        let channelCodes: string[] | undefined = admin.level === 0 ? undefined : admin.allowed_channel_codes || [];
+        if (channelCode) {
+            const selectedChannel = String(channelCode);
+            const AgentRelationships = await import('../model/agentRelationships');
+            const childChannels = await AgentRelationships.getAllChildChannelCodes(selectedChannel);
+            const selectedChannels = [...new Set([selectedChannel, ...childChannels])];
+            channelCodes = channelCodes === undefined
+                ? selectedChannels
+                : selectedChannels.filter(code => channelCodes!.includes(code));
+        }
+
+        let gameCodes: string[] | undefined;
+        if (admin.level !== 0) {
+            const allowedGameIds = admin.allowed_game_ids || [];
+            const games = allowedGameIds.length ? await AdminModel.getAllGames() : [];
+            gameCodes = games.filter(game => allowedGameIds.includes(game.id)).map(game => game.game_code);
+        }
+        if (gameId) {
+            const selectedGameCode = String(gameId);
+            gameCodes = gameCodes === undefined ? [selectedGameCode] : gameCodes.filter(code => code === selectedGameCode);
+        }
+
+        const currentPage = Math.max(1, parseInt(String(page)) || 1);
+        const limit = Math.max(1, parseInt(String(pageSize)) || 20);
         const offset = (currentPage - 1) * limit;
-
-        // 获取管理员权限信息
-        let adminPermissions = null;
-        let allowedChannels: string[] = [];
-
-        if (adminId) {
-            adminPermissions = await AdminModel.getAdminWithPermissions(parseInt(adminId as string));
-
-            if (adminPermissions) {
-                if (adminPermissions.level === 0) {
-                    // 超级管理员，无限制
-                    allowedChannels = [];
-                } else {
-                    // 普通管理员
-                    allowedChannels = adminPermissions.allowed_channel_codes || [];
-                }
+        const conditions = ['stat_date BETWEEN ? AND ?'];
+        const params: any[] = [startDate, endDate];
+        conditions.push(`stat_date >= ${AGENT_HISTORY_START_SQL}`);
+        for (const [column, codes] of [['channel_code', channelCodes], ['game_code', gameCodes]] as const) {
+            if (codes === undefined) continue;
+            if (codes.length === 0) {
+                conditions.push('1 = 0');
+            } else {
+                conditions.push(`${column} IN (${codes.map(() => '?').join(',')})`);
+                params.push(...codes);
             }
         }
 
-        // 构建查询条件
-        let conditions = ['stat_date BETWEEN ? AND ?', `stat_date >= ${AGENT_HISTORY_START_SQL}`];
-        let params = [startDate, endDate];
-
-        // 渠道过滤
-        if (channelCode) {
-            // 用户选择了具体渠道，查询该渠道及其所有下级渠道的数据
-            const AgentRelationships = await import('../model/agentRelationships');
-            const childChannels = await AgentRelationships.getAllChildChannelCodes(channelCode.toString());
-            const targetChannels = [channelCode.toString(), ...childChannels];
-
-            const channelPlaceholders = targetChannels.map(() => '?').join(',');
-            conditions.push(`channel_code IN (${channelPlaceholders})`);
-            params.push(...targetChannels);
-
-            console.log('[渠道数据查询] 选择了具体渠道:', {
-                selectedChannel: channelCode,
-                allChannels: targetChannels
-            });
-        } else if (allowedChannels.length > 0) {
-            // 没选择具体渠道，使用管理员权限范围
-            const channelPlaceholders = allowedChannels.map(() => '?').join(',');
-            conditions.push(`channel_code IN (${channelPlaceholders})`);
-            params.push(...allowedChannels);
-
-            console.log('[渠道数据查询] 使用管理员权限:', {
-                allowedChannels
-            });
-        } else {
-            // 超级管理员，不限制渠道
-            console.log('[渠道数据查询] 超级管理员，不限制渠道');
-        }
-
-        // 游戏过滤
-        if (gameId) {
-            conditions.push('game_code = ?');
-            params.push(gameId.toString());
-        }
-
-        // 从DailyStats表读取数据并按日期分组汇总
-        const dataQuery = `
-            SELECT 
-                stat_date,
-                SUM(register_users) as register_users,
-                SUM(valid_register_users) as valid_register_users,
-                SUM(character_count) as character_count,
-                SUM(high_value_users_200) as high_value_users_200,
-                SUM(recharge_times) as recharge_times,
-                SUM(recharge_users) as recharge_users,
-                SUM(real_recharge_amount) as real_recharge_amount,
-                SUM(high_value_recharge_amount) as high_value_recharge_amount
-            FROM DailyStats
-            WHERE ${conditions.join(' AND ')}
-            GROUP BY stat_date
-            ORDER BY stat_date DESC
-            LIMIT ? OFFSET ?
-        `;
-
-        // 计算总数 - 按日期分组后的记录数
-        const countQuery = `
-            SELECT COUNT(DISTINCT stat_date) as total
-            FROM DailyStats
-            WHERE ${conditions.join(' AND ')}
-        `;
-
-        // 执行查询
-        const [dataResult, countResult] = await Promise.all([
+        const [dataResult, paymentAmounts] = await Promise.all([
             sql({
-                query: dataQuery,
-                values: [...params, limit, offset]
+                query: `SELECT stat_date,
+                            SUM(register_users) AS register_users,
+                            SUM(valid_register_users) AS valid_register_users,
+                            SUM(character_count) AS character_count,
+                            SUM(high_value_users_200) AS high_value_users_200,
+                            SUM(recharge_times) AS recharge_times,
+                            SUM(recharge_users) AS recharge_users,
+                            SUM(high_value_recharge_amount) AS high_value_recharge_amount
+                        FROM DailyStats WHERE ${conditions.join(' AND ')}
+                        GROUP BY stat_date ORDER BY stat_date DESC`,
+                values: params,
             }),
-            sql({
-                query: countQuery,
-                values: params
-            })
+            readReportPaymentAmounts(sql, { startDate, endDate, channelCodes, gameCodes, limitToLastMonth: true }),
         ]);
 
-        // 格式化渠道数据，修复时区问题
-        const channelData = (dataResult as any[]).map(row => ({
-            stat_date: formatDateToString(row.stat_date),
-            register_users: row.register_users || 0,
-            valid_register_users: row.valid_register_users || 0,
-            character_count: row.character_count || 0,
-            high_value_users_200: row.high_value_users_200 || 0,
-            recharge_times: row.recharge_times || 0,
-            recharge_users: row.recharge_users || 0,
-            real_recharge_amount: parseFloat(row.real_recharge_amount || '0'),
-            high_value_recharge_amount: parseFloat(row.high_value_recharge_amount || '0')
-        }));
-
-        const total = ((countResult as any[])?.[0]?.total) || 0;
-
+        const dates = new Map<string, any>();
+        for (const row of dataResult as any[]) {
+            const date = formatDateToString(row.stat_date);
+            dates.set(date, {
+                stat_date: date,
+                statistics_pending: false,
+                register_users: Number(row.register_users) || 0,
+                valid_register_users: Number(row.valid_register_users) || 0,
+                character_count: Number(row.character_count) || 0,
+                high_value_users_200: Number(row.high_value_users_200) || 0,
+                recharge_times: Number(row.recharge_times) || 0,
+                recharge_users: Number(row.recharge_users) || 0,
+                high_value_recharge_amount: Number(row.high_value_recharge_amount) || 0,
+                real_recharge_amount: 0,
+                steam_recharge_amount: 0,
+            });
+        }
+        for (const [date, amounts] of paymentAmounts) {
+            const row = dates.get(date) || {
+                stat_date: date, statistics_pending: true, register_users: null, valid_register_users: null, character_count: null,
+                high_value_users_200: null, recharge_times: null, recharge_users: null, high_value_recharge_amount: null,
+            };
+            dates.set(date, { ...row, real_recharge_amount: amounts.cashAmount, steam_recharge_amount: amounts.steamAmount });
+        }
+        const rows = [...dates.values()].sort((a, b) => b.stat_date.localeCompare(a.stat_date));
+        const statisticsPending = rows.some(row => row.statistics_pending);
+        const summary = {
+            statisticsPending,
+            totalRegisterUsers: statisticsPending ? null : rows.reduce((sum, row) => sum + row.register_users, 0),
+            totalValidRegisterUsers: statisticsPending ? null : rows.reduce((sum, row) => sum + row.valid_register_users, 0),
+            totalHighValueUsers: statisticsPending ? null : rows.reduce((sum, row) => sum + row.high_value_users_200, 0),
+            totalRechargeAmount: rows.reduce((sum, row) => sum + row.real_recharge_amount, 0).toFixed(2),
+            totalSteamRechargeAmount: rows.reduce((sum, row) => sum + row.steam_recharge_amount, 0).toFixed(2),
+        };
         return {
             success: true,
             data: {
-                list: channelData,
-                pagination: {
-                    page: currentPage,
-                    pageSize: limit,
-                    total: total,
-                    totalPages: Math.ceil(total / limit)
-                }
-            }
+                list: rows.slice(offset, offset + limit),
+                summary,
+                pagination: { page: currentPage, pageSize: limit, total: rows.length, totalPages: Math.ceil(rows.length / limit) },
+            },
         };
-
-    } catch (e: any) {
-        console.error('获取渠道数据失败:', e);
-        throw createError({
-            status: 500,
-            message: e.message || '获取渠道数据失败',
-        });
+    } catch (error: any) {
+        console.error('获取渠道数据失败:', error);
+        throw createError({ statusCode: error.statusCode || 500, message: error.message || '获取渠道数据失败' });
     }
 }
 

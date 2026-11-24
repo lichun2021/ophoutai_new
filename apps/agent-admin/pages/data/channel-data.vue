@@ -15,10 +15,10 @@
 
 
     <!-- 统计汇总卡片 -->
-    <div v-if="channelData.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div v-if="channelData.length > 0" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
       <UCard class="p-4">
         <div class="text-center">
-          <div class="text-2xl font-bold text-blue-600 mb-3">{{ formatNumber(totalStats.totalRegisterUsers) }}</div>
+          <div class="text-2xl font-bold text-blue-600 mb-3">{{ totalStats.statisticsPending ? '待统计' : formatNumber(totalStats.totalRegisterUsers) }}</div>
           <div class="flex items-center justify-center gap-2">
             <UIcon name="i-heroicons-user-group" class="w-5 h-5 text-blue-500" />
             <span class="text-sm text-gray-600">总注册用户</span>
@@ -28,7 +28,7 @@
       
       <UCard class="p-4">
         <div class="text-center">
-          <div class="text-2xl font-bold text-cyan-600 mb-3">{{ formatNumber(totalStats.totalValidRegisterUsers) }}</div>
+          <div class="text-2xl font-bold text-cyan-600 mb-3">{{ totalStats.statisticsPending ? '待统计' : formatNumber(totalStats.totalValidRegisterUsers) }}</div>
           <div class="flex items-center justify-center gap-2">
             <UIcon name="i-heroicons-user-plus" class="w-5 h-5 text-cyan-500" />
             <span class="text-sm text-gray-600">总真实注册</span>
@@ -38,7 +38,7 @@
       
       <UCard class="p-4">
         <div class="text-center">
-          <div class="text-2xl font-bold text-yellow-600 mb-3">{{ formatNumber(totalStats.totalHighValueUsers) }}</div>
+          <div class="text-2xl font-bold text-yellow-600 mb-3">{{ totalStats.statisticsPending ? '待统计' : formatNumber(totalStats.totalHighValueUsers) }}</div>
           <div class="flex items-center justify-center gap-2">
             <UIcon name="i-heroicons-star" class="w-5 h-5 text-yellow-500" />
             <span class="text-sm text-gray-600">总优质用户</span>
@@ -51,7 +51,16 @@
           <div class="text-2xl font-bold text-green-600 mb-3">¥{{ totalStats.totalRechargeAmount }}</div>
           <div class="flex items-center justify-center gap-2">
             <UIcon name="i-heroicons-banknotes" class="w-5 h-5 text-green-500" />
-            <span class="text-sm text-gray-600">总充值金额</span>
+            <span class="text-sm text-gray-600">非 Steam 充值总额</span>
+          </div>
+        </div>
+      </UCard>
+      <UCard class="p-4">
+        <div class="text-center">
+          <div class="text-2xl font-bold text-orange-600 mb-3">¥{{ totalStats.totalSteamRechargeAmount }}</div>
+          <div class="flex items-center justify-center gap-2">
+            <UIcon name="i-heroicons-banknotes" class="w-5 h-5 text-orange-500" />
+            <span class="text-sm text-gray-600">Steam 充值总额</span>
           </div>
         </div>
       </UCard>
@@ -202,49 +211,49 @@
         <template #stat_date-data="{ row }">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-calendar-days" class="w-4 h-4 text-gray-400" />
-            <span class="font-medium">{{ formatDate(row.stat_date) }}</span>
+            <span class="font-medium">{{ formatDate(row.stat_date) }}<span v-if="row.statistics_pending" class="ml-2 text-xs text-gray-500">其他指标待统计</span></span>
           </div>
         </template>
 
         <template #register_users-data="{ row }">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-user-plus" class="w-4 h-4 text-blue-500" />
-            <span class="font-medium text-blue-600">{{ formatNumber(row.register_users) }}</span>
+            <span class="font-medium text-blue-600">{{ row.statistics_pending ? '—' : formatNumber(row.register_users) }}</span>
           </div>
         </template>
 
         <template #valid_register_users-data="{ row }">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-user-group" class="w-4 h-4 text-cyan-500" />
-            <span class="font-medium text-cyan-600">{{ formatNumber(row.valid_register_users) }}</span>
+            <span class="font-medium text-cyan-600">{{ row.statistics_pending ? '—' : formatNumber(row.valid_register_users) }}</span>
           </div>
         </template>
 
         <template #character_count-data="{ row }">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-purple-500" />
-            <span class="font-medium text-purple-600">{{ formatNumber(row.character_count) }}</span>
+            <span class="font-medium text-purple-600">{{ row.statistics_pending ? '—' : formatNumber(row.character_count) }}</span>
           </div>
         </template>
 
         <template #high_value_users_200-data="{ row }">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-star" class="w-4 h-4 text-yellow-500" />
-            <span class="font-medium text-yellow-600">{{ formatNumber(row.high_value_users_200) }}</span>
+            <span class="font-medium text-yellow-600">{{ row.statistics_pending ? '—' : formatNumber(row.high_value_users_200) }}</span>
           </div>
         </template>
 
         <template #recharge_times-data="{ row }">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-arrow-trending-up" class="w-4 h-4 text-indigo-500" />
-            <span class="font-medium text-indigo-600">{{ formatNumber(row.recharge_times) }}</span>
+            <span class="font-medium text-indigo-600">{{ row.statistics_pending ? '—' : formatNumber(row.recharge_times) }}</span>
           </div>
         </template>
 
         <template #recharge_users-data="{ row }">
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-users" class="w-4 h-4 text-green-500" />
-            <span class="font-medium text-green-600">{{ formatNumber(row.recharge_users) }}</span>
+            <span class="font-medium text-green-600">{{ row.statistics_pending ? '—' : formatNumber(row.recharge_users) }}</span>
           </div>
         </template>
 
@@ -255,10 +264,17 @@
           </div>
         </template>
 
+        <template #steam_recharge_amount-data="{ row }">
+          <div class="flex items-center gap-1">
+            <UIcon name="i-heroicons-currency-yen" class="w-4 h-4 text-orange-500" />
+            <span class="font-medium text-orange-600">{{ formatAmount(row.steam_recharge_amount) }}</span>
+          </div>
+        </template>
+
         <template #high_value_recharge_amount-data="{ row }">
           <div class="flex items-center gap-1">
             <UIcon name="i-heroicons-banknotes" class="w-4 h-4 text-orange-500" />
-            <span class="font-medium text-orange-600">{{ formatAmount(row.high_value_recharge_amount) }}</span>
+            <span class="font-medium text-orange-600">{{ row.statistics_pending ? '—' : formatAmount(row.high_value_recharge_amount) }}</span>
           </div>
         </template>
         </UTable>
@@ -438,7 +454,12 @@ const columns = [
   },
   {
     key: 'real_recharge_amount',
-    label: '充值总额',
+    label: '非 Steam 充值总额',
+    sortable: true
+  },
+  {
+    key: 'steam_recharge_amount',
+    label: 'Steam 充值总额',
     sortable: true
   },
   {
@@ -467,27 +488,14 @@ const currentAdminLevel = computed(() => {
 
 const adminLevel = computed(() => currentAdminLevel.value);
 
-// 统计汇总
-const totalStats = computed(() => {
-  const stats = {
-    totalRegisterUsers: 0,
-    totalValidRegisterUsers: 0,
-    totalHighValueUsers: 0,
-    totalRechargeAmount: '0.00'
-  };
-
-  if (channelData.value.length > 0) {
-    let totalRecharge = 0;
-    channelData.value.forEach(item => {
-      stats.totalRegisterUsers += Number(item.register_users || 0);
-      stats.totalValidRegisterUsers += Number(item.valid_register_users || 0);
-      stats.totalHighValueUsers += Number(item.high_value_users_200 || 0);
-      totalRecharge += Number(item.real_recharge_amount || 0);
-    });
-    stats.totalRechargeAmount = totalRecharge.toFixed(2);
-  }
-
-  return stats;
+// 汇总来自整个筛选范围，分页只影响表格。
+const totalStats = ref({
+  statisticsPending: false,
+  totalRegisterUsers: 0,
+  totalValidRegisterUsers: 0,
+  totalHighValueUsers: 0,
+  totalRechargeAmount: '0.00',
+  totalSteamRechargeAmount: '0.00'
 });
 
 // 监听DatePicker选择变化
@@ -704,6 +712,7 @@ const loadChannelData = async () => {
     if (response.success) {
       channelData.value = response.data.list || [];
       pagination.value = response.data.pagination || {};
+      totalStats.value = response.data.summary;
       
       toast.add({
         title: '数据加载成功',
@@ -761,7 +770,7 @@ const exportData = async () => {
       endDate: filters.value.endDate,
       adminId: currentAdminId.value.toString(),
       page: '1',
-      pageSize: '10000'
+      pageSize: '1000'
     });
 
     const selectedChannelCode = filters.value.secondaryChannelCode || filters.value.primaryChannelCode;
@@ -773,24 +782,35 @@ const exportData = async () => {
       params.append('gameId', filters.value.gameId);
     }
 
-    const response = await $fetch(`/api/admin/channel-data?${params.toString()}`, {
-      headers: {
-        'authorization': authStore.id.toString()
+    const exportRows = [];
+    let exportPage = 1;
+    let totalPages = 1;
+    do {
+      params.set('page', String(exportPage));
+      const response = await $fetch(`/api/admin/channel-data?${params.toString()}`, {
+        headers: { 'authorization': authStore.id.toString() }
+      });
+      if (!response.success || !response.data.list) {
+        throw new Error(response.message || '获取导出数据失败');
       }
-    });
+      exportRows.push(...response.data.list);
+      totalPages = response.data.pagination.totalPages;
+      exportPage += 1;
+    } while (exportPage <= totalPages);
 
-    if (response.success && response.data.list) {
+    if (exportRows.length > 0) {
       // 转换数据格式
-      const exportData = response.data.list.map(item => ({
-        '日期': formatDate(item.stat_date),
-        '注册': item.register_users || 0,
-        '真实注册': item.valid_register_users || 0,
-        '角色数': item.character_count || 0,
-        '优质用户(充值超过200)': item.high_value_users_200 || 0,
-        '充值次数': item.recharge_times || 0,
-        '充值人数': item.recharge_users || 0,
-        '充值总额': Number(item.real_recharge_amount || 0).toFixed(2),
-        '优质用户充值总额': Number(item.high_value_recharge_amount || 0).toFixed(2)
+      const exportData = exportRows.map(item => ({
+        '日期': formatDate(item.stat_date) + (item.statistics_pending ? '（其他指标待统计）' : ''),
+        '注册': item.statistics_pending ? '' : item.register_users || 0,
+        '真实注册': item.statistics_pending ? '' : item.valid_register_users || 0,
+        '角色数': item.statistics_pending ? '' : item.character_count || 0,
+        '优质用户(充值超过200)': item.statistics_pending ? '' : item.high_value_users_200 || 0,
+        '充值次数': item.statistics_pending ? '' : item.recharge_times || 0,
+        '充值人数': item.statistics_pending ? '' : item.recharge_users || 0,
+        '非 Steam 充值总额': Number(item.real_recharge_amount || 0).toFixed(2),
+        'Steam 充值总额': Number(item.steam_recharge_amount || 0).toFixed(2),
+        '优质用户充值总额': item.statistics_pending ? '' : Number(item.high_value_recharge_amount || 0).toFixed(2)
       }));
 
       // 动态导入xlsx库
@@ -809,7 +829,8 @@ const exportData = async () => {
         { wch: 18 }, // 优质用户(充值超过200)
         { wch: 10 }, // 充值次数
         { wch: 10 }, // 充值人数
-        { wch: 12 }, // 充值总额
+        { wch: 20 }, // 非 Steam 充值总额
+        { wch: 18 }, // Steam 充值总额
         { wch: 16 }  // 优质用户充值总额
       ];
       ws['!cols'] = colWidths;

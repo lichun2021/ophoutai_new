@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Shared utilities and models for Quantum Publish platform",
   "exports": {
+    "./server/utils/reportPaymentAmounts": "./server/utils/reportPaymentAmounts.ts",
     "./server/utils/giftPaymentProxy": "./server/utils/giftPaymentProxy.ts",
     "./server/utils/giftPaymentAmount": "./server/utils/giftPaymentAmount.ts",
     "./server/utils/jwt": "./server/utils/jwt.ts",

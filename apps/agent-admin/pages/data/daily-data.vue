@@ -36,7 +36,8 @@
                 <div>
                   <h4 class="font-medium text-sm mb-2 text-green-600">💰 收入类指标</h4>
                   <div class="space-y-1 text-xs text-gray-600">
-                    <div><span class="font-medium">付费金额:</span> 统计时间段内所有用户的付费总金额</div>
+                    <div><span class="font-medium">总流水:</span> 统计时间段内不含 Steam 和平台币消费的成功付费金额</div>
+                    <div><span class="font-medium">Steam流水:</span> 统计时间段内 Steam 的成功付费金额</div>
                     <div><span class="font-medium">新增付费金额:</span> 新注册用户产生的付费总金额</div>
                   </div>
                 </div>
@@ -54,8 +55,8 @@
                 <div>
                   <h4 class="font-medium text-sm mb-2 text-yellow-600">💎 ARPU类指标 (Average Revenue Per User)</h4>
                   <div class="space-y-1 text-xs text-gray-600">
-                    <div><span class="font-medium">付费ARPU:</span> 付费金额 ÷ 付费用户数，付费用户的平均消费金额</div>
-                    <div><span class="font-medium">总ARPU:</span> 付费金额 ÷ 活跃用户数，所有用户的平均贡献收入</div>
+                    <div><span class="font-medium">付费ARPU:</span> 真实付费金额（含 Steam）÷ 付费用户数，付费用户的平均消费金额</div>
+                    <div><span class="font-medium">总ARPU:</span> 真实付费金额（含 Steam）÷ 活跃用户数，所有用户的平均贡献收入</div>
                     <div><span class="font-medium">新增ARPU:</span> 新增付费金额 ÷ 新增用户数，新增用户的平均贡献收入</div>
                     <div><span class="font-medium">新增付费ARPU:</span> 新增付费金额 ÷ 新增付费用户数，新增付费用户的平均消费金额</div>
                   </div>
@@ -67,7 +68,7 @@
                     <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
                     <span class="text-xs font-medium text-red-700">重要说明</span>
                   </div>
-                  <p class="text-xs text-red-600">所有付费相关统计数据均不包含平台币消费，仅统计真实的充值付费。</p>
+                  <p class="text-xs text-red-600">总流水与 Steam 流水分开统计，均不包含平台币消费。消费流水包含平台币消费，付费人数、ARPU 等指标包含 Steam 付费。</p>
                 </div>
               </div>
             </div>
@@ -176,15 +177,15 @@
       <!-- 金额相关指标 -->
       <UCard class="p-4 relative">
         <div class="text-center">
-          <div class="text-2xl font-bold text-emerald-600 mb-3">¥{{ formatAmount(overviewData.payAmount) }}</div>
+          <div class="text-2xl font-bold text-emerald-600 mb-3">¥{{ formatAmount(rechargeTotals.realRechargeAmount) }}</div>
           <div class="flex items-center justify-center gap-2">
             <UIcon name="i-heroicons-banknotes" class="w-5 h-5 text-emerald-500" />
-            <span class="text-sm text-gray-600">付费金额</span>
+            <span class="text-sm text-gray-600">总流水</span>
             <UPopover mode="hover">
               <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400 cursor-help" />
               <template #panel>
                 <div class="p-3 max-w-xs">
-                  <div class="text-xs text-gray-600 mb-2">统计期间内所有成功付费金额的总和</div>
+                  <div class="text-xs text-gray-600 mb-2">统计期间内不含 Steam 的成功付费金额总和</div>
                   <div class="text-xs text-red-600">⚠️ 不包含平台币消费</div>
                 </div>
               </template>
@@ -193,6 +194,24 @@
         </div>
       </UCard>
       
+      <UCard class="p-4 relative">
+        <div class="text-center">
+          <div class="text-2xl font-bold text-sky-600 mb-3">¥{{ formatAmount(rechargeTotals.steamRechargeAmount) }}</div>
+          <div class="flex items-center justify-center gap-2">
+            <UIcon name="i-heroicons-banknotes" class="w-5 h-5 text-sky-500" />
+            <span class="text-sm text-gray-600">Steam流水</span>
+            <UPopover mode="hover">
+              <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400 cursor-help" />
+              <template #panel>
+                <div class="p-3 max-w-xs">
+                  <div class="text-xs text-gray-600">统计期间内 Steam 成功付费金额的总和</div>
+                </div>
+              </template>
+            </UPopover>
+          </div>
+        </div>
+      </UCard>
+
       <UCard class="p-4 relative">
         <div class="text-center">
           <div class="text-2xl font-bold text-cyan-600 mb-3">¥{{ formatAmount(overviewData.newPayAmount) }}</div>
@@ -262,7 +281,7 @@
               <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400 cursor-help" />
               <template #panel>
                 <div class="p-3 max-w-xs">
-                  <div class="text-xs text-gray-600 mb-2">付费金额 ÷ 付费用户数</div>
+                  <div class="text-xs text-gray-600 mb-2">真实付费金额（含 Steam）÷ 付费用户数</div>
                   <div class="text-xs text-red-600 mb-2">⚠️ 不包含平台币消费</div>
                   <div class="text-xs text-blue-600">付费用户的平均消费金额</div>
                 </div>
@@ -282,7 +301,7 @@
               <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4 text-gray-400 cursor-help" />
               <template #panel>
                 <div class="p-3 max-w-xs">
-                  <div class="text-xs text-gray-600 mb-2">付费金额 ÷ 活跃用户数</div>
+                  <div class="text-xs text-gray-600 mb-2">真实付费金额（含 Steam）÷ 活跃用户数</div>
                   <div class="text-xs text-red-600 mb-2">⚠️ 不包含平台币消费</div>
                   <div class="text-xs text-blue-600">所有用户的平均贡献收入</div>
                 </div>
@@ -495,68 +514,69 @@
                         <UIcon name="i-heroicons-calendar-days" class="w-4 h-4 text-gray-400" />
                         <span class="font-medium">{{ formatDate(row.date) }}</span>
                       </div>
+                      <div v-if="row.statsPending" class="text-xs text-amber-600 mt-1">其他指标待统计</div>
                     </td>
                     
                     <!-- 活跃用户数 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.activeUsers || 0)" color="blue" variant="soft" />
+                        <UBadge :label="formatNumber(row.activeUsers || 0, row.statsPending)" color="blue" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 注册数 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.registerUsers || 0)" color="purple" variant="soft" />
+                        <UBadge :label="formatNumber(row.registerUsers || 0, row.statsPending)" color="purple" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 有效注册数 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.validRegisterUsers || 0)" color="violet" variant="soft" />
+                        <UBadge :label="formatNumber(row.validRegisterUsers || 0, row.statsPending)" color="violet" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 新增用户 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.newUsers || 0)" color="green" variant="soft" />
+                        <UBadge :label="formatNumber(row.newUsers || 0, row.statsPending)" color="green" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 昨日留存 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="`${row.yesterdayRetention || '0'}%`" color="amber" variant="soft" />
+                        <UBadge :label="row.statsPending ? '—' : `${row.yesterdayRetention || '0'}%`" color="amber" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 充值人数 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.payUsers || 0)" color="orange" variant="soft" />
+                        <UBadge :label="formatNumber(row.payUsers || 0, row.statsPending)" color="orange" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 新增充值人数 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.newPayUsers || 0)" color="red" variant="soft" />
+                        <UBadge :label="formatNumber(row.newPayUsers || 0, row.statsPending)" color="red" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 充值次数 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.rechargeTimes || 0)" color="indigo" variant="soft" />
+                        <UBadge :label="formatNumber(row.rechargeTimes || 0, row.statsPending)" color="indigo" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 充值超100用户 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="formatNumber(row.highValueUsers || 0)" color="pink" variant="soft" />
+                        <UBadge :label="formatNumber(row.highValueUsers || 0, row.statsPending)" color="pink" variant="soft" />
                       </div>
                     </td>
                     
@@ -564,7 +584,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-currency-yen" class="w-4 h-4 text-red-500" />
-                        <span class="font-medium text-red-600">{{ formatAmount(row.consumeAmount) }}</span>
+                        <span class="font-medium text-red-600">{{ formatAmount(row.consumeAmount, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -576,25 +596,33 @@
                       </div>
                     </td>
                     
+                    <!-- Steam流水 -->
+                    <td class="table-cell" style="width: 125px;">
+                      <div class="flex items-center justify-center gap-1">
+                        <UIcon name="i-heroicons-banknotes" class="w-4 h-4 text-sky-500" />
+                        <span class="font-medium text-sky-600">{{ formatAmount(row.steamRechargeAmount) }}</span>
+                      </div>
+                    </td>
+
                     <!-- 新增用户充值 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-arrow-trending-up" class="w-4 h-4 text-emerald-500" />
-                        <span class="font-medium text-emerald-600">{{ formatAmount(row.newUserRecharge) }}</span>
+                        <span class="font-medium text-emerald-600">{{ formatAmount(row.newUserRecharge, row.statsPending) }}</span>
                       </div>
                     </td>
                     
                     <!-- 付费率 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="`${row.payRate || '0'}%`" color="cyan" variant="soft" />
+                        <UBadge :label="row.statsPending ? '—' : `${row.payRate || '0'}%`" color="cyan" variant="soft" />
                       </div>
                     </td>
                     
                     <!-- 新增付费率 -->
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex justify-center">
-                        <UBadge :label="`${row.newPayRate || '0'}%`" color="teal" variant="soft" />
+                        <UBadge :label="row.statsPending ? '—' : `${row.newPayRate || '0'}%`" color="teal" variant="soft" />
                       </div>
                     </td>
                     
@@ -602,7 +630,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-calculator" class="w-4 h-4 text-yellow-500" />
-                        <span class="font-medium text-yellow-600">{{ formatAmount(row.activeArpu) }}</span>
+                        <span class="font-medium text-yellow-600">{{ formatAmount(row.activeArpu, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -610,7 +638,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-scale" class="w-4 h-4 text-orange-500" />
-                        <span class="font-medium text-orange-600">{{ formatAmount(row.payArpu) }}</span>
+                        <span class="font-medium text-orange-600">{{ formatAmount(row.payArpu, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -618,7 +646,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-presentation-chart-line" class="w-4 h-4 text-violet-500" />
-                        <span class="font-medium text-violet-600">{{ formatAmount(row.newArpu) }}</span>
+                        <span class="font-medium text-violet-600">{{ formatAmount(row.newArpu, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -626,7 +654,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-currency-dollar" class="w-4 h-4 text-pink-500" />
-                        <span class="font-medium text-pink-600">{{ formatAmount(row.newPayArpu) }}</span>
+                        <span class="font-medium text-pink-600">{{ formatAmount(row.newPayArpu, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -634,7 +662,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-chart-pie" class="w-4 h-4 text-blue-500" />
-                        <span class="font-medium text-blue-600">{{ formatAmount(row.ltv2) }}</span>
+                        <span class="font-medium text-blue-600">{{ formatAmount(row.ltv2, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -642,7 +670,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-chart-pie" class="w-4 h-4 text-green-500" />
-                        <span class="font-medium text-green-600">{{ formatAmount(row.ltv3) }}</span>
+                        <span class="font-medium text-green-600">{{ formatAmount(row.ltv3, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -650,7 +678,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-chart-pie" class="w-4 h-4 text-purple-500" />
-                        <span class="font-medium text-purple-600">{{ formatAmount(row.ltv5) }}</span>
+                        <span class="font-medium text-purple-600">{{ formatAmount(row.ltv5, row.statsPending) }}</span>
                       </div>
                     </td>
                     
@@ -658,7 +686,7 @@
                     <td class="table-cell" style="width: 125px;">
                       <div class="flex items-center justify-center gap-1">
                         <UIcon name="i-heroicons-chart-pie" class="w-4 h-4 text-red-500" />
-                        <span class="font-medium text-red-600">{{ formatAmount(row.ltv7) }}</span>
+                        <span class="font-medium text-red-600">{{ formatAmount(row.ltv7, row.statsPending) }}</span>
                       </div>
                     </td>
                   </tr>
@@ -838,7 +866,12 @@ const dailyColumns = [
   },
   {
     key: 'realRechargeAmount',
-    label: '真实流水',
+    label: '总流水',
+    sortable: true
+  },
+  {
+    key: 'steamRechargeAmount',
+    label: 'Steam流水',
     sortable: true
   },
   {
@@ -935,6 +968,12 @@ const overviewData = ref({
 
 // 日报统计数据
 const dailyStatsData = ref([]);
+
+// 流水卡片汇总当前筛选下全部日期，不受表格分页影响。
+const rechargeTotals = computed(() => dailyStatsData.value.reduce((totals, row) => ({
+  realRechargeAmount: totals.realRechargeAmount + Number(row.realRechargeAmount || 0),
+  steamRechargeAmount: totals.steamRechargeAmount + Number(row.steamRechargeAmount || 0)
+}), { realRechargeAmount: 0, steamRechargeAmount: 0 }));
 
 // 分页数据
 const pagination = ref({
@@ -1117,6 +1156,9 @@ const onPrimaryChannelChange = async () => {
 // 加载日报数据
 const loadDailyReportData = async () => {
   loading.value = true;
+  dailyStatsData.value = [];
+  pagination.value.total = 0;
+  pagination.value.page = 1;
   try {
     const params = new URLSearchParams({
       startDate: filters.value.startDate,
@@ -1159,6 +1201,7 @@ const loadDailyReportData = async () => {
 
     // 获取日报详细数据
     params.append('groupBy', 'date');
+    params.append('splitSteam', '1');
     const dailyResponse = await $fetch(`/api/admin/daily-report-details?${params.toString()}`);
     
     if (dailyResponse.success) {
@@ -1219,31 +1262,41 @@ const exportData = async () => {
   exportLoading.value = true;
   try {
     // 获取当前的日报数据
-    const exportData = dailyStatsData.value.map(item => ({
-      '日期': formatDate(item.date),
-      '活跃用户数': item.activeUsers || 0,
-      '注册数': item.registerUsers || 0,
-      '有效注册数': item.validRegisterUsers || 0,
-      '新增用户': item.newUsers || 0,
-      '昨日留存(%)': item.yesterdayRetention || '0',
-      '充值人数': item.payUsers || 0,
-      '新增充值人数': item.newPayUsers || 0,
-      '充值次数': item.rechargeTimes || 0,
-      '充值超100用户': item.highValueUsers || 0,
-      '消费流水': Number(item.consumeAmount || 0).toFixed(2),
-      '真实流水': Number(item.realRechargeAmount || 0).toFixed(2),
-      '新增用户充值': Number(item.newUserRecharge || 0).toFixed(2),
-      '付费率(%)': item.payRate || '0',
-      '新增付费率(%)': item.newPayRate || '0',
-      '活跃ARPU': Number(item.activeArpu || 0).toFixed(2),
-      '付费ARPU': Number(item.payArpu || 0).toFixed(2),
-      '新增ARPU': Number(item.newArpu || 0).toFixed(2),
-      '新增付费ARPU': Number(item.newPayArpu || 0).toFixed(2),
-      'LTV(2天)': Number(item.ltv2 || 0).toFixed(2),
-      'LTV(3天)': Number(item.ltv3 || 0).toFixed(2),
-      'LTV(5天)': Number(item.ltv5 || 0).toFixed(2),
-      'LTV(7天)': Number(item.ltv7 || 0).toFixed(2)
-    }));
+    const exportData = dailyStatsData.value.map(item => {
+      const row = {
+        '日期': formatDate(item.date),
+        '活跃用户数': item.activeUsers || 0,
+        '注册数': item.registerUsers || 0,
+        '有效注册数': item.validRegisterUsers || 0,
+        '新增用户': item.newUsers || 0,
+        '昨日留存(%)': item.yesterdayRetention || '0',
+        '充值人数': item.payUsers || 0,
+        '新增充值人数': item.newPayUsers || 0,
+        '充值次数': item.rechargeTimes || 0,
+        '充值超100用户': item.highValueUsers || 0,
+        '消费流水': Number(item.consumeAmount || 0).toFixed(2),
+        '总流水': Number(item.realRechargeAmount || 0).toFixed(2),
+        'Steam流水': Number(item.steamRechargeAmount || 0).toFixed(2),
+        '新增用户充值': Number(item.newUserRecharge || 0).toFixed(2),
+        '付费率(%)': item.payRate || '0',
+        '新增付费率(%)': item.newPayRate || '0',
+        '活跃ARPU': Number(item.activeArpu || 0).toFixed(2),
+        '付费ARPU': Number(item.payArpu || 0).toFixed(2),
+        '新增ARPU': Number(item.newArpu || 0).toFixed(2),
+        '新增付费ARPU': Number(item.newPayArpu || 0).toFixed(2),
+        'LTV(2天)': Number(item.ltv2 || 0).toFixed(2),
+        'LTV(3天)': Number(item.ltv3 || 0).toFixed(2),
+        'LTV(5天)': Number(item.ltv5 || 0).toFixed(2),
+        'LTV(7天)': Number(item.ltv7 || 0).toFixed(2)
+      };
+      if (item.statsPending) {
+        row['日期'] += '（其他指标待统计）';
+        for (const key of Object.keys(row)) {
+          if (!['日期', '总流水', 'Steam流水'].includes(key)) row[key] = '';
+        }
+      }
+      return row;
+    });
 
     if (exportData.length === 0) {
       throw new Error('没有数据可导出');
@@ -1269,7 +1322,8 @@ const exportData = async () => {
       { wch: 12 }, // 充值次数
       { wch: 15 }, // 充值超100用户
       { wch: 12 }, // 消费流水
-      { wch: 12 }, // 真实流水
+      { wch: 12 }, // 总流水
+      { wch: 15 }, // Steam流水
       { wch: 15 }, // 新增用户充值
       { wch: 12 }, // 付费率
       { wch: 15 }, // 新增付费率
@@ -1339,13 +1393,13 @@ const formatDateRange = (startDate, endDate) => {
 };
 
 // 格式化数字
-const formatNumber = (value) => {
-  return Number(value || 0).toLocaleString();
+const formatNumber = (value, statsPending = false) => {
+  return statsPending ? '—' : Number(value || 0).toLocaleString();
 };
 
 // 格式化金额
-const formatAmount = (value) => {
-  return Number(value || 0).toFixed(2);
+const formatAmount = (value, statsPending = false) => {
+  return statsPending ? '—' : Number(value || 0).toFixed(2);
 };
 
 // 格式化日期显示 - 避免时区问题
