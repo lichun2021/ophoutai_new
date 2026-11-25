@@ -1,3 +1,4 @@
+import { getCardProduct } from '@quantum/shared/server/utils/cardProduct';
 import { findPaymentNotificationOrder, forwardGiftPayment } from '@quantum/shared/server/utils/giftPaymentProxy';
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
@@ -14,6 +15,7 @@ import { getSystemConfig, getThirdPartyPaymentConfig, getSystemParam } from '../
 import { getByWorldId } from '../model/gameServers';
 import * as GameCharactersModel from '../model/gameCharacters';
 import { requireAuth } from '@quantum/shared/server/utils/jwt';
+
 
 /**
  * 处理IP地址，将IPv6格式转换为IPv4格式
@@ -878,7 +880,7 @@ async function deductPlatformCoinsForPayment(
                             let finalGoodsId = config.andid;
                             try {
 
-                                const character = await GameCharactersModel.findByUuid(playerRoleId);
+                                const character = await GameCharactersModel.findByUuid(playerRoleId, Number(orderDetail.world_id));
                                 if (character && character.ext) {
                                     let extObj: any = {};
                                     try {
@@ -1736,21 +1738,22 @@ export const doPayment = async (evt: H3Event) => {
         const query = getQuery(evt) || {};
         const params = { ...query, ...(body && typeof body === 'object' ? body : {}) };
 
-        const extractGiftRoleId = (serverUrl: any): string => {
-            const raw = String(serverUrl || '');
-            if (!raw.startsWith('gift://')) return '';
+        const extractGiftCharacter = (serverUrl: any) => {
             try {
-                const meta = JSON.parse(decodeURIComponent(raw.slice('gift://'.length)) || '{}');
-                return String(meta.cid || meta.character_uuid || meta.characterUuid || '').trim();
+                const meta = JSON.parse(decodeURIComponent(String(serverUrl).slice('gift://'.length)) || '{}');
+                return {
+                    roleId: String(meta.cid || meta.character_uuid || meta.characterUuid || '').trim(),
+                    serverId: meta.sid ?? meta.server_id ?? meta.serverId,
+                };
             } catch {
-                return '';
+                return null;
             }
         };
 
-        // 仅用户中心商城礼包购买走 JWT userId + 角色归属校验。
-        // 平台币充值、月卡/终身卡、普通 SDKAPI 游戏内购买不走这段逻辑。
+        // 商城礼包与权益卡都使用登录账号；只有礼包需要选择收货角色。
         const isMallGiftOrder = String(params.server_url || '').startsWith('gift://');
-        if (isMallGiftOrder) {
+        const benefitCard = !isMallGiftOrder && getCardProduct(params.k);
+        if (isMallGiftOrder || benefitCard) {
             const auth = await requireAuth(evt);
             const userRows = await sql({
                 query: 'SELECT id, username, thirdparty_uid, game_code, channel_code FROM Users WHERE id = ? LIMIT 1',
@@ -1766,21 +1769,29 @@ export const doPayment = async (evt: H3Event) => {
             params.d = tokenUser.game_code || params.d;
             params.e = tokenUser.channel_code || params.e;
 
-            const roleId = String(params.role_id || params.character_uuid || params.cid || extractGiftRoleId(params.server_url) || '').trim();
-            if (!roleId) {
-                return { code: -3, msg: '缺少角色ID', data: null };
-            }
+            if (isMallGiftOrder) {
+                const giftCharacter = extractGiftCharacter(params.server_url);
+                const roleId = giftCharacter?.roleId || '';
+                const serverId = Number(giftCharacter?.serverId ?? params.h);
+                const suppliedRoleId = params.role_id || params.character_uuid || params.cid;
+                if (!roleId || !Number.isSafeInteger(serverId) || serverId <= 0
+                    || (suppliedRoleId && String(suppliedRoleId) !== roleId)
+                    || (params.h && Number(params.h) !== serverId)) {
+                    return { code: -3, msg: '礼包角色或收货区服不一致', data: null };
+                }
 
-            const roleRows = await sql({
-                query: 'SELECT id, subuser_id, server_id FROM GameCharacters WHERE uuid = ? AND user_id = ? LIMIT 1',
-                values: [roleId, auth.userId],
-            }) as any[];
-            if (roleRows.length === 0) {
-                return { code: -3, msg: '角色不存在或不属于当前用户', data: null };
-            }
+                const roleRows = await sql({
+                    query: 'SELECT id, subuser_id, server_id FROM GameCharacters WHERE uuid = ? AND user_id = ? AND server_id = ? LIMIT 1',
+                    values: [roleId, auth.userId, serverId],
+                }) as any[];
+                if (roleRows.length === 0) {
+                    return { code: -3, msg: '角色不存在或不属于当前用户的所选区服', data: null };
+                }
 
-            params.role_id = roleId;
-            if (!params.tr && roleRows[0].subuser_id) params.tr = String(roleRows[0].subuser_id);
+                params.role_id = roleId;
+                params.h = String(serverId);
+                params.tr = String(roleRows[0].subuser_id);
+            }
         }
 
         // 清除前端签名（MD5），用 SDK 密钥（HMAC-SHA256）重新签名
@@ -1790,7 +1801,7 @@ export const doPayment = async (evt: H3Event) => {
         const sdkSecret = await getSystemParam('sdk_sign_secret', 'AQE!@#a123JNJKO$@#fg1');
         params.sign = computeSdkSign(params, sdkSecret);
 
-        if (isMallGiftOrder) {
+        if (isMallGiftOrder || benefitCard) {
             return await forwardGiftPayment(evt, '/sdkapi/Unipay/pay', params);
         }
 
@@ -1896,13 +1907,13 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         }
 
         // 普通订单仍只接受原处理路径使用的商户订单号。
-        if (!String(localOrder.server_url || '').startsWith('gift://')
+        if (!String(localOrder.server_url || '').startsWith('gift://') && !getCardProduct(localOrder.product_name)
             && (!notifyOrderNo || String(localOrder.mch_order_id) !== String(notifyOrderNo))) {
             setResponseStatus(evt, 200);
             return 'fail';
         }
 
-        if (String(localOrder.server_url || '').startsWith('gift://')) {
+        if (String(localOrder.server_url || '').startsWith('gift://') || getCardProduct(localOrder.product_name)) {
             return await forwardGiftPayment(evt, '/api/payment/third-party-notify');
         }
 
@@ -1936,6 +1947,8 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             setResponseStatus(evt, 200);
             return 'fail';
         }
+
+
 
         console.log(`[${requestId}] 签名验证成功!`);
 
@@ -2119,13 +2132,13 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         }
 
         // 普通订单仍只接受原处理路径使用的商户订单号。
-        if (!String(localOrder.server_url || '').startsWith('gift://')
+        if (!String(localOrder.server_url || '').startsWith('gift://') && !getCardProduct(localOrder.product_name)
             && (!notifyOrderNo || String(localOrder.mch_order_id) !== String(notifyOrderNo))) {
             setResponseStatus(evt, 200);
             return 'fail';
         }
 
-        if (String(localOrder.server_url || '').startsWith('gift://')) {
+        if (String(localOrder.server_url || '').startsWith('gift://') || getCardProduct(localOrder.product_name)) {
             return await forwardGiftPayment(evt, '/api/payment/cashier-notify');
         }
 
@@ -2159,6 +2172,8 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             setResponseStatus(evt, 200);
             return 'fail';
         }
+
+
 
         console.log(`[${requestId}] 签名验证成功!`);
 
@@ -2311,48 +2326,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             });
         }
 
-        // ========== 月卡/终身卡激活检测 ==========
-        try {
-            const productName = String(localOrder.product_name || '');
-            const isMonthlyCard = productName.includes('月卡') || productName.includes('终身卡');
-            if (isMonthlyCard) {
-                const { activateCard, getCardByTransactionId, getBeijingDate } = await import('../model/monthlyCard');
-                const transId = localOrder.transaction_id || '';
 
-                // 防重：同一 transaction_id 只激活一次
-                const existingCard = await getCardByTransactionId(transId);
-                if (!existingCard) {
-                    const cardType = productName.includes('终身卡') ? 'lifetime' : 'monthly';
-                    const dailyCoins = cardType === 'lifetime' ? 500 : 648;
-                    const today = getBeijingDate();
-
-                    // 月卡：today + 29天（含今天共30天）；终身卡：NULL
-                    let expireDate: string | null = null;
-                    if (cardType === 'monthly') {
-                        const exp = new Date();
-                        exp.setTime(exp.getTime() + 8 * 60 * 60 * 1000 + 29 * 86400 * 1000);
-                        expireDate = exp.toISOString().slice(0, 10);
-                    }
-
-                    await activateCard({
-                        userId: localOrder.user_id!,
-                        cardType,
-                        dailyCoins,
-                        startDate: today,
-                        expireDate,
-                        purchaseAmount: orderAmount,
-                        transactionId: transId,
-                    });
-                    console.log(`[${requestId}] ✅ 月卡激活成功: type=${cardType}, userId=${localOrder.user_id}, expire=${expireDate || '永久'}`);
-                } else {
-                    console.log(`[${requestId}] ⚠️ 月卡已激活(重复回调), transaction_id=${transId}`);
-                }
-            }
-        } catch (cardErr: any) {
-            // 月卡激活失败不影响支付回调成功响应
-            console.error(`[${requestId}] 月卡激活失败(不影响回调):`, cardErr?.message);
-        }
-        // ========== END 月卡激活 ==========
 
         const endTime = Date.now();
         const processingTime = endTime - startTime;
@@ -2459,7 +2433,7 @@ export const queryPaymentOrder = async (evt: H3Event) => {
             };
         }
 
-        if (String(orderDetail.server_url || '').startsWith('gift://')) {
+        if (String(orderDetail.server_url || '').startsWith('gift://') || getCardProduct(orderDetail.product_name)) {
             return await forwardGiftPayment(evt, '/api/internal/payment/query');
         }
 

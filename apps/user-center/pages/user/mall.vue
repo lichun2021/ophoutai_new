@@ -199,7 +199,7 @@
             <span>选择角色：<span class="required-mark">*</span></span>
             <div class="character-select">
               <USelectMenu
-                v-model="selectedCharacterUuid"
+                v-model="selectedCharacterKey"
                 :options="characterSelectOptions"
                 value-attribute="value"
                 option-attribute="label"
@@ -379,7 +379,7 @@
             <!-- 抽屉内直接选角色 -->
             <div class="cart-character-row">
               <USelectMenu
-                v-model="cartCharacterUuid"
+                v-model="cartCharacterKey"
                 :options="characterSelectOptions"
                 value-attribute="value"
                 option-attribute="label"
@@ -427,11 +427,16 @@ const authStore = useAuthStore();
 const tips = useTips();
 const cartStore = useCartStore();
 
-// 记录上次选择的角色索引（使用cookie）
+// 持久化区服与角色 UUID，旧索引只用于首次迁移。
 const lastCharacterIndexCookie = useCookie('mall_last_character_index', {
   path: '/',
   sameSite: 'lax',
   maxAge: 60 * 60 * 24 * 30 // 30天
+});
+const lastCharacterKeyCookie = useCookie('mall_last_character_key', {
+  path: '/',
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 * 30
 });
 
 // 响应式数据
@@ -448,23 +453,24 @@ const paymentMethods = ref([]);
 const selectedPaymentMethod = ref('ptb');
 
 const characterList = ref([]);
+const getCharacterKey = character => `${character.server_id}:${character.uuid}`;
 const characterSelectOptions = computed(() =>
   characterList.value.map(char => ({
-    value: char.uuid,
+    value: getCharacterKey(char),
     label: `${char.server_name}-${char.uuid}${char.character_name && char.character_name !== char.uuid ? `-${char.character_name}` : ''} (Lv.${char.character_level || 1})`,
     subuser_id: char.subuser_id,
     server_id: char.server_id
   }))
 );
-const selectedCharacterUuid = ref(null);
+const selectedCharacterKey = ref(null);
 const selectedCharacter = computed(() =>
-  characterList.value.find(c => c.uuid === selectedCharacterUuid.value)
+  characterList.value.find(c => getCharacterKey(c) === selectedCharacterKey.value)
 );
 
 // ========== 购物车结算相关 ==========
-const cartCharacterUuid = ref(null);
+const cartCharacterKey = ref(null);
 const checkoutCharacter = computed(() =>
-  characterList.value.find(c => c.uuid === cartCharacterUuid.value)
+  characterList.value.find(c => getCharacterKey(c) === cartCharacterKey.value)
 );
 const checkoutLoading = ref(false);
 const charactersLoaded = ref(false);
@@ -477,7 +483,7 @@ const balanceSufficient = computed(() => {
 // 结算按钮是否可点：有商品 + 选了角色 + 余额足够 + 未在结算中
 const canCheckout = computed(() =>
   cartStore.items.length > 0 &&
-  !!cartCharacterUuid.value &&
+  !!cartCharacterKey.value &&
   !!checkoutCharacter.value &&
   balanceSufficient.value &&
   !checkoutLoading.value
@@ -488,8 +494,8 @@ const ensureCharactersLoaded = async () => {
   if (charactersLoaded.value) return;
   await loadUserCharacters();
   // 沿用上次单买选择的角色
-  if (selectedCharacterUuid.value && characterSelectOptions.value.some(o => o.value === selectedCharacterUuid.value)) {
-    cartCharacterUuid.value = selectedCharacterUuid.value;
+  if (selectedCharacterKey.value && characterSelectOptions.value.some(o => o.value === selectedCharacterKey.value)) {
+    cartCharacterKey.value = selectedCharacterKey.value;
   }
   charactersLoaded.value = true;
 };
@@ -648,7 +654,7 @@ const checkoutCart = async () => {
     tips.error('购物车为空');
     return;
   }
-  if (!cartCharacterUuid.value || !checkoutCharacter.value) {
+  if (!cartCharacterKey.value || !checkoutCharacter.value) {
     tips.error('请先选择要接收物品的角色！');
     return;
   }
@@ -826,7 +832,7 @@ const confirmPurchase = async () => {
   if (!selectedProduct.value) return;
   
   // 强制检查角色选择
-  if (!selectedCharacterUuid.value || !selectedCharacter.value) {
+  if (!selectedCharacterKey.value || !selectedCharacter.value) {
     tips.error('请先选择要接收物品的角色！');
     return;
   }
@@ -1001,14 +1007,15 @@ const loadUserCharacters = async () => {
     const list = res.data.characters || [];
     characterList.value = list;
     if (list.length > 0) {
-      // 优先使用cookie里记录的上次选择的角色索引
-      const lastIndex = parseInt(lastCharacterIndexCookie.value);
-      const validIndex = !isNaN(lastIndex) && lastIndex >= 0 && lastIndex < list.length;
-      
+      const rememberedIndex = list.findIndex(character => getCharacterKey(character) === lastCharacterKeyCookie.value);
+      const legacyIndex = lastCharacterKeyCookie.value ? -1 : parseInt(lastCharacterIndexCookie.value);
+      const validLegacyIndex = !isNaN(legacyIndex) && legacyIndex >= 0 && legacyIndex < list.length;
+
       let targetIndex;
-      if (validIndex) {
-        // 如果cookie有值,使用cookie记录的索引
-        targetIndex = lastIndex;
+      if (rememberedIndex >= 0) {
+        targetIndex = rememberedIndex;
+      } else if (validLegacyIndex) {
+        targetIndex = legacyIndex;
       } else {
         // 如果cookie没有值,选择等级最高的角色
         const sortedByLevel = [...list].sort((a, b) => {
@@ -1017,28 +1024,27 @@ const loadUserCharacters = async () => {
           return levelB - levelA; // 降序排列,等级高的在前
         });
         const highestLevelChar = sortedByLevel[0];
-        targetIndex = list.findIndex(c => c.uuid === highestLevelChar.uuid);
+        targetIndex = list.findIndex(c => getCharacterKey(c) === getCharacterKey(highestLevelChar));
         // 如果找不到(理论上不会),则使用0
         if (targetIndex < 0) targetIndex = 0;
       }
       
-      selectedCharacterUuid.value = list[targetIndex].uuid;
+      selectedCharacterKey.value = getCharacterKey(list[targetIndex]);
+      lastCharacterKeyCookie.value = selectedCharacterKey.value;
+      lastCharacterIndexCookie.value = null;
     } else {
-      selectedCharacterUuid.value = null;
+      selectedCharacterKey.value = null;
     }
   } else {
     characterList.value = [];
-    selectedCharacterUuid.value = null;
+    selectedCharacterKey.value = null;
   }
 };
 
-// 监听角色选择，写入cookie（保存索引）
-watch(selectedCharacterUuid, (val) => {
-  if (val) {
-    const index = characterList.value.findIndex(c => c.uuid === val);
-    if (index >= 0) {
-      lastCharacterIndexCookie.value = index.toString();
-    }
+// 列表排序变化时，仍记住同一区服的角色。
+watch(selectedCharacterKey, (val) => {
+  if (val && characterSelectOptions.value.some(option => option.value === val)) {
+    lastCharacterKeyCookie.value = val;
   }
 });
 

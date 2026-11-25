@@ -1,3 +1,5 @@
+import { requireAuth } from '@quantum/shared/server/utils/jwt';
+import { getCardProduct } from '@quantum/shared/server/utils/cardProduct';
 import { findPaymentNotificationOrder, forwardGiftPayment } from '@quantum/shared/server/utils/giftPaymentProxy';
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
@@ -13,6 +15,7 @@ import { updateTransactionHasPay, getRedisCluster } from '../utils/redis-cluster
 import { getSystemConfig, getThirdPartyPaymentConfig, getSystemParam } from '../utils/systemConfig';
 import { getByWorldId } from '../model/gameServers';
 import * as GameCharactersModel from '../model/gameCharacters';
+
 
 /**
  * 处理IP地址，将IPv6格式转换为IPv4格式
@@ -829,7 +832,7 @@ async function deductPlatformCoinsForPayment(
                             let finalGoodsId = config.andid;
                             try {
                                 
-                                const character = await GameCharactersModel.findByUuid(playerRoleId);
+                                const character = await GameCharactersModel.findByUuid(playerRoleId, Number(orderDetail.world_id));
                                 if (character && character.ext) {
                                     let extObj: any = {};
                                     try {
@@ -1650,7 +1653,7 @@ export const doPayment = async (evt: H3Event) => {
         const serverUrl = params.server_url ? String(params.server_url) : '';      // 游戏服务器URL → server_url
         const isGiftOrder = serverUrl.startsWith('gift://');
 
-        if (isGiftOrder) {
+        if (isGiftOrder || getCardProduct(productName)) {
             return await forwardGiftPayment(evt, '/sdkapi/Unipay/pay');
         }
 
@@ -3056,7 +3059,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         // 众合通知先识别礼包，交由 op-admin 验签和校验分单位金额。
         if (Number(body.state) === 1 && body.outTradeNo) {
             const giftOrder = await findPaymentNotificationOrder<Payment>(body, sql);
-            if (String(giftOrder?.server_url || '').startsWith('gift://')) {
+            if (String(giftOrder?.server_url || '').startsWith('gift://') || getCardProduct(giftOrder?.product_name)) {
                 return await forwardGiftPayment(evt, '/api/payment/third-party-notify');
             }
         }
@@ -3083,13 +3086,13 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         }
 
         // 普通订单仍只接受原处理路径使用的商户订单号。
-        if (!String(localOrder.server_url || '').startsWith('gift://')
+        if (!String(localOrder.server_url || '').startsWith('gift://') && !getCardProduct(localOrder.product_name)
             && (!body.trade_no || String(localOrder.mch_order_id) !== String(body.trade_no))) {
             setResponseStatus(evt, 200);
             return 'fail';
         }
 
-        if (String(localOrder.server_url || '').startsWith('gift://')) {
+        if (String(localOrder.server_url || '').startsWith('gift://') || getCardProduct(localOrder.product_name)) {
             return await forwardGiftPayment(evt, '/api/payment/third-party-notify');
         }
 
@@ -3123,6 +3126,8 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             setResponseStatus(evt, 200);
             return 'fail';
         }
+
+
 
         console.log(`[${requestId}] 签名验证成功!`);
 
@@ -3276,7 +3281,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         // 众合通知先识别礼包，交由 op-admin 验签和校验分单位金额。
         if (Number(body.state) === 1 && body.outTradeNo) {
             const giftOrder = await findPaymentNotificationOrder<Payment>(body, sql);
-            if (String(giftOrder?.server_url || '').startsWith('gift://')) {
+            if (String(giftOrder?.server_url || '').startsWith('gift://') || getCardProduct(giftOrder?.product_name)) {
                 return await forwardGiftPayment(evt, '/api/payment/cashier-notify');
             }
         }
@@ -3303,13 +3308,13 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
         }
 
         // 普通订单仍只接受原处理路径使用的商户订单号。
-        if (!String(localOrder.server_url || '').startsWith('gift://')
+        if (!String(localOrder.server_url || '').startsWith('gift://') && !getCardProduct(localOrder.product_name)
             && (!body.trade_no || String(localOrder.mch_order_id) !== String(body.trade_no))) {
             setResponseStatus(evt, 200);
             return 'fail';
         }
 
-        if (String(localOrder.server_url || '').startsWith('gift://')) {
+        if (String(localOrder.server_url || '').startsWith('gift://') || getCardProduct(localOrder.product_name)) {
             return await forwardGiftPayment(evt, '/api/payment/cashier-notify');
         }
 
@@ -3343,6 +3348,8 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             setResponseStatus(evt, 200);
             return 'fail';
         }
+
+
 
         console.log(`[${requestId}] 签名验证成功!`);
 
@@ -3586,6 +3593,12 @@ export const queryPaymentOrder = async (evt: H3Event) => {
             payment_status: orderDetail.payment_status,
             payment_way: orderDetail.payment_way
         });
+
+        if (getCardProduct(orderDetail.product_name)) {
+            const { userId } = await requireAuth(evt);
+            if (Number(orderDetail.user_id) !== Number(userId)) return { code: 403, msg: '无权查询该订单' };
+            return await forwardGiftPayment(evt, '/api/internal/payment/query');
+        }
 
         // 如果订单已经支付成功，直接返回成功状态
         if (orderDetail.payment_status === 3) {

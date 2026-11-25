@@ -15,10 +15,10 @@ export type GameCharacter = {
     created_at?: string;
 };
 
-export const findByUuid = async (uuid: string) => {
+export const findByUuid = async (uuid: string, serverId: number) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE uuid = ? LIMIT 1',
-        values: [uuid],
+        query: 'SELECT * FROM GameCharacters WHERE uuid = ? AND server_id = ? LIMIT 1',
+        values: [uuid, serverId],
     }) as any;
     return result.length > 0 ? result[0] as GameCharacter : null;
 };
@@ -189,10 +189,10 @@ export const upsertByUuid = async (characterData: Omit<GameCharacter, 'id' | 'cr
         const extData = normalizeExtData(characterData.ext);
         const characterLevel = characterData.character_level || 1;
         
-        // 1. 先根据 subuser_id + uuid 查询角色是否已存在
+        // 1. 同一角色 UUID 可以存在于不同区服，按子账号、UUID 和区服查询
         const existingResult = await sql({
-            query: 'SELECT id, server_id, server_name FROM GameCharacters WHERE subuser_id = ? AND uuid = ? LIMIT 1',
-            values: [characterData.subuser_id, characterData.uuid],
+            query: 'SELECT id, server_id, server_name FROM GameCharacters WHERE subuser_id = ? AND uuid = ? AND server_id = ? LIMIT 1',
+            values: [characterData.subuser_id, characterData.uuid, characterData.server_id || 1],
         }) as any[];
         
         if (existingResult.length > 0) {

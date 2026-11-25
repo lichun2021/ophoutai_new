@@ -97,9 +97,9 @@ async function findDuplicateUsers(conn, today, onlyUserId) {
         FROM MonthlyCards
         WHERE card_type = 'monthly'
           AND is_active = 1
-          AND (expire_date IS NULL OR expire_date >= ?)
+          AND start_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
     `;
-    const values = [today];
+    const values = [today, today];
     if (onlyUserId) {
         query += ` AND user_id = ? `;
         values.push(onlyUserId);
@@ -116,9 +116,9 @@ async function getActiveMonthlyCards(conn, userId, today) {
         `SELECT id, user_id, daily_coins, start_date, expire_date, purchase_amount, transaction_id, created_at
          FROM MonthlyCards
          WHERE user_id = ? AND card_type = 'monthly' AND is_active = 1
-           AND (expire_date IS NULL OR expire_date >= ?)
+           AND start_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
          ORDER BY created_at ASC`,
-        [userId, today]
+        [userId, today, today]
     );
     return rows;
 }
@@ -145,10 +145,10 @@ async function mergeUserCards(conn, userId, today, confirm) {
             `SELECT id, daily_coins, start_date, expire_date, purchase_amount, transaction_id, created_at
              FROM MonthlyCards
              WHERE user_id = ? AND card_type = 'monthly' AND is_active = 1
-               AND (expire_date IS NULL OR expire_date >= ?)
+               AND start_date <= ? AND (expire_date IS NULL OR expire_date >= ?)
              ORDER BY created_at ASC
              FOR UPDATE`,
-            [userId, today]
+            [userId, today, today]
         );
 
         if (cards.length <= 1) {
@@ -170,8 +170,12 @@ async function mergeUserCards(conn, userId, today, confirm) {
 
         // 含到期当天：剩余天数 = DATEDIFF(expire_date, today) + 1
         const todayDate = new Date(`${today}T00:00:00Z`);
+        const creditedOrders = new Set();
         let totalRemainingDays = 0;
         for (const c of cards) {
+            // 同一个已支付订单重入产生的重复卡不增加剩余天数。
+            if (c.transaction_id && creditedOrders.has(c.transaction_id)) continue;
+            if (c.transaction_id) creditedOrders.add(c.transaction_id);
             if (!c.expire_date) {
                 // 理论上月卡不应该是永久卡，出现说明数据异常，保守起见按 0 天算，不吞掉也不瞎猜
                 logWarn(`  user_id=${userId} card_id=${c.id} 是月卡但 expire_date=NULL，跳过其天数累加`);

@@ -294,18 +294,28 @@ export const userPurchaseGiftPackage = defineEventHandler(async (event) => {
             };
         }
 
-        // 验证角色是否属于该用户（通过子账号关联）
+        const requestedServerId = body.server_id;
+        const serverId = requestedServerId === undefined || requestedServerId === null || requestedServerId === ''
+            ? null : Number(requestedServerId);
+        if (serverId !== null && (!['string', 'number'].includes(typeof requestedServerId)
+            || !Number.isSafeInteger(serverId) || serverId <= 0)) {
+            return { code: 400, message: '请选择有效的收货区服' };
+        }
+
+        // 区服与角色 UUID 共同确定收货角色，旧请求缺少区服时只接受唯一角色。
         const character = await sql({
             query: `SELECT gc.* FROM GameCharacters gc
-                   INNER JOIN SubUsers su ON gc.subuser_id = su.id
-                   WHERE su.parent_user_id = ? AND gc.uuid = ?`,
-            values: [userId, character_uuid],  // ✅ 使用 JWT 中的 userId
+                    INNER JOIN SubUsers su ON gc.subuser_id = su.id
+                    WHERE su.parent_user_id = ? AND gc.uuid = ?
+                    ${serverId === null ? '' : 'AND gc.server_id = ?'}
+                    LIMIT 2`,
+            values: serverId === null ? [userId, character_uuid] : [userId, character_uuid, serverId],
         }) as any[];
 
-        if (character.length === 0) {
+        if (character.length !== 1) {
             return {
                 code: 400,
-                message: '角色不存在或不属于该用户'
+                message: character.length > 1 ? '该角色存在多个区服，请选择收货区服' : '角色不存在或不属于该用户'
             };
         }
 

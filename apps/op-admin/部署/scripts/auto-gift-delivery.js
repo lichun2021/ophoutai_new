@@ -94,6 +94,11 @@ async function createDbConnection() {
     }
 }
 
+// 同一角色 UUID 可存在于多个区。自动奖励只能归入付款记录指定的账号和区服。
+const paidRoleOwnerAndServer = `gc.user_id = pr.user_id
+    AND (pr.sub_user_id IS NULL OR gc.subuser_id = pr.sub_user_id)
+    AND gc.server_id = pr.world_id`;
+
 /**
  * 获取用户当日充值总额（按服务器分区）
  * 统计规则：
@@ -106,9 +111,10 @@ try {
         const platformCoinQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as daily_amount
             FROM paymentrecords pr
-            WHERE pr.wuid IN (
-                SELECT DISTINCT uuid FROM gamecharacters 
-                WHERE subuser_id = ? AND server_id = ?
+            WHERE EXISTS (
+                SELECT 1 FROM gamecharacters gc
+                WHERE gc.uuid = pr.wuid AND ${paidRoleOwnerAndServer}
+                  AND gc.subuser_id = ? AND gc.server_id = ?
             )
             AND DATE(pr.created_at) = ?
             AND pr.payment_status IN (3, 4)
@@ -122,9 +128,10 @@ try {
         const thirdPartyGiftQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as gift_amount
             FROM paymentrecords pr
-            WHERE pr.role_id IN (
-                SELECT DISTINCT uuid FROM gamecharacters 
-                WHERE subuser_id = ? AND server_id = ?
+            WHERE EXISTS (
+                SELECT 1 FROM gamecharacters gc
+                WHERE gc.uuid = pr.role_id AND ${paidRoleOwnerAndServer}
+                  AND gc.subuser_id = ? AND gc.server_id = ?
             )
             AND DATE(pr.created_at) = ?
             AND pr.payment_status IN (3, 4)
@@ -160,9 +167,10 @@ async function getUserTotalConsumeByServer(connection, subUserId, serverId) {
         const platformCoinQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as total_amount
             FROM paymentrecords pr
-            WHERE pr.wuid IN (
-                SELECT DISTINCT uuid FROM gamecharacters 
-                WHERE subuser_id = ? AND server_id = ?
+            WHERE EXISTS (
+                SELECT 1 FROM gamecharacters gc
+                WHERE gc.uuid = pr.wuid AND ${paidRoleOwnerAndServer}
+                  AND gc.subuser_id = ? AND gc.server_id = ?
             )
             AND pr.payment_status IN (3, 4)
             AND (pr.payment_way LIKE '%平台币%')
@@ -175,9 +183,10 @@ async function getUserTotalConsumeByServer(connection, subUserId, serverId) {
         const thirdPartyGiftQuery = `
             SELECT COALESCE(SUM(pr.amount), 0) as gift_amount
             FROM paymentrecords pr
-            WHERE pr.role_id IN (
-                SELECT DISTINCT uuid FROM gamecharacters 
-                WHERE subuser_id = ? AND server_id = ?
+            WHERE EXISTS (
+                SELECT 1 FROM gamecharacters gc
+                WHERE gc.uuid = pr.role_id AND ${paidRoleOwnerAndServer}
+                  AND gc.subuser_id = ? AND gc.server_id = ?
             )
             AND pr.payment_status IN (3, 4)
             AND (pr.payment_way LIKE '%微信%' OR pr.payment_way LIKE '%支付宝%' OR pr.payment_way LIKE '%wechat%' OR pr.payment_way LIKE '%alipay%')
@@ -214,7 +223,7 @@ async function getUserServerList(connection, subUserId, targetDate) {
             AND gc.server_id IS NOT NULL
             AND EXISTS (
                 SELECT 1 FROM paymentrecords pr
-                WHERE pr.wuid = gc.uuid
+                WHERE pr.wuid = gc.uuid AND ${paidRoleOwnerAndServer}
                 AND DATE(pr.created_at) = ?
                 AND pr.payment_status IN (3, 4)
                 AND (pr.payment_way LIKE '%平台币%')
@@ -229,7 +238,7 @@ async function getUserServerList(connection, subUserId, targetDate) {
             AND gc.server_id IS NOT NULL
             AND EXISTS (
                 SELECT 1 FROM paymentrecords pr
-                WHERE pr.role_id = gc.uuid
+                WHERE pr.role_id = gc.uuid AND ${paidRoleOwnerAndServer}
                 AND DATE(pr.created_at) = ?
                 AND pr.payment_status IN (3, 4)
                 AND (pr.payment_way LIKE '%微信%' OR pr.payment_way LIKE '%支付宝%' OR pr.payment_way LIKE '%wechat%' OR pr.payment_way LIKE '%alipay%')
@@ -858,7 +867,7 @@ async function getUsersWithRecharge(connection, targetDate) {
         const platformQuery = `
             SELECT DISTINCT COALESCE(pr.sub_user_id, gc.subuser_id) AS sub_user_id
             FROM paymentrecords pr
-            LEFT JOIN gamecharacters gc ON gc.uuid = pr.wuid
+            LEFT JOIN gamecharacters gc ON gc.uuid = pr.wuid AND ${paidRoleOwnerAndServer}
             WHERE DATE(pr.created_at) = ?
             AND pr.payment_status IN (3, 4)
             AND (pr.payment_way LIKE '%平台币%')
@@ -869,7 +878,7 @@ async function getUsersWithRecharge(connection, targetDate) {
         const giftQuery = `
             SELECT DISTINCT gc.subuser_id AS sub_user_id
             FROM paymentrecords pr
-            JOIN gamecharacters gc ON gc.uuid = pr.role_id
+            JOIN gamecharacters gc ON gc.uuid = pr.role_id AND ${paidRoleOwnerAndServer}
             WHERE DATE(pr.created_at) = ?
             AND pr.payment_status IN (3, 4)
             AND (pr.payment_way LIKE '%微信%' OR pr.payment_way LIKE '%支付宝%' OR pr.payment_way LIKE '%wechat%' OR pr.payment_way LIKE '%alipay%')

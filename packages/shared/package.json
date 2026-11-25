@@ -4,6 +4,8 @@
   "type": "module",
   "description": "Shared utilities and models for Quantum Publish platform",
   "exports": {
+    "./server/utils/cardProduct": "./server/utils/cardProduct.ts",
+    "./server/utils/cardEntitlements": "./server/utils/cardEntitlements.ts",
     "./server/utils/reportPaymentAmounts": "./server/utils/reportPaymentAmounts.ts",
     "./server/utils/giftPaymentProxy": "./server/utils/giftPaymentProxy.ts",
     "./server/utils/giftPaymentAmount": "./server/utils/giftPaymentAmount.ts",

@@ -15,10 +15,10 @@ export type GameCharacter = {
     created_at?: string;
 };
 
-export const findByUuid = async (uuid: string) => {
+export const findByUuid = async (uuid: string, serverId: number) => {
     const result = await sql({
-        query: 'SELECT * FROM GameCharacters WHERE uuid = ? LIMIT 1',
-        values: [uuid],
+        query: 'SELECT * FROM GameCharacters WHERE uuid = ? AND server_id = ? LIMIT 1',
+        values: [uuid, serverId],
     }) as any;
     return result.length > 0 ? result[0] as GameCharacter : null;
 };

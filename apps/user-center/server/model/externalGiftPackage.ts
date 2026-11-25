@@ -699,10 +699,17 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
         // RoleId 使用 thirdparty_uid（即角色UUID）
         const actualRoleId = record.thirdparty_uid || roleId || '';
 
-        // 通过角色UUID获取对应的子账号ID（OpenId）和服务器ID
+        // 角色 UUID 仅在区服内唯一，收货区服和账号必须与本次购买一致。
+        const targetServerId = Number(serverId);
+        if (!Number.isSafeInteger(targetServerId) || targetServerId <= 0) {
+            throw new Error('礼包收货区服无效');
+        }
         const gcRows = await sql({
-            query: 'SELECT subuser_id, server_id FROM gamecharacters WHERE uuid = ? LIMIT 1',
-            values: [actualRoleId],
+            query: `SELECT gc.subuser_id, gc.server_id FROM GameCharacters gc
+                    INNER JOIN SubUsers su ON su.id = gc.subuser_id
+                    WHERE gc.uuid = ? AND gc.server_id = ? AND su.parent_user_id = ?
+                    LIMIT 1`,
+            values: [actualRoleId, targetServerId, record.user_id],
         }) as any[];
 
         console.log(`[deliverPackageToGameViaIDIP] 查询角色信息结果:`, gcRows);
@@ -719,7 +726,7 @@ export const deliverPackageToGameViaIDIP = async (purchaseRecordId: number, serv
 
         const characterInfo = gcRows[0];
         const subUserId = characterInfo.subuser_id || record.user_id;
-        const actualServerId = characterInfo.server_id || serverId;
+        const actualServerId = targetServerId;
         console.log(`[deliverPackageToGameViaIDIP] 角色UUID=${actualRoleId}, 子账号ID=${subUserId}, 服务器ID=${actualServerId}`);
 
         // 从 GameServers 读取区服配置（使用从角色表获取的 server_id）

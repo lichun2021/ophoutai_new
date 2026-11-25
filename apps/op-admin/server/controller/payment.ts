@@ -1,3 +1,5 @@
+import { activatePaidCard } from '@quantum/shared/server/utils/cardEntitlements';
+import { getCardProduct } from '@quantum/shared/server/utils/cardProduct';
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery } from 'h3';
@@ -7,7 +9,7 @@ import { PaymentSetting } from '../model/paymentSettings';
 import * as paymentsetting from '../model/paymentSettings';
 import * as AdminModel from '../model/admin';
 import * as UserModel from '../model/user';
-import { sql } from '../db';
+import { pool, sql } from '../db';
 import { updateTransactionHasPay, getRedisCluster } from '../utils/redis-cluster';
 import { getSystemConfig, getThirdPartyPaymentConfig, getSystemParam } from '../utils/systemConfig';
 import { getByWorldId } from '../model/gameServers';
@@ -88,6 +90,72 @@ function giftOrderQueryResponse(order: Payment) {
             delivery_status: delivered ? 'delivered' : processing ? 'processing' : 'review',
         },
     };
+}
+
+
+async function activateVerifiedCard(order: Payment, paidAmount: unknown) {
+    const result = await activatePaidCard(pool, { transactionId: String(order.transaction_id || ''), paidAmount });
+    if (!result.replayed) {
+        try {
+            if (await getSystemParam('payment_routing_enabled', 'false') === 'true') {
+                const { getOrderRuleMapping, incrementRedisUsedQuota } = await import('../model/paymentRouting');
+                const ruleId = await getOrderRuleMapping(String(order.transaction_id || ''));
+                if (ruleId) await incrementRedisUsedQuota(ruleId, getCardProduct(order.product_name)!.price);
+            }
+        } catch (error) {
+            console.error('卡支付路由额度累加失败:', error);
+        }
+    }
+    return result;
+}
+
+function validateCardNotificationIdentifiers(order: Payment, rawBody: Record<string, any>) {
+    const ids = (keys: string[]) => keys.map(key => rawBody[key])
+        .filter(value => value !== undefined && value !== null && value !== '').map(String);
+    const merchantIds = ids(['outTradeNo', 'out_trade_no']);
+    const tradeIds = ids(['tradeNo', 'trade_no']);
+    const attachments = ids(['extParam', 'param']);
+    const storedTradeNo = String(order.mch_order_id || '');
+    const tradeMatches = storedTradeNo !== order.transaction_id && tradeIds.includes(storedTradeNo);
+    if (merchantIds.some(id => id !== merchantIds[0]) || tradeIds.some(id => id !== tradeIds[0])
+        || attachments.some(id => id !== order.transaction_id)
+        || (storedTradeNo !== order.transaction_id && tradeIds.some(id => id !== storedTradeNo))
+        || (!merchantIds.includes(String(order.transaction_id)) && !tradeMatches)
+        || (merchantIds.some(id => id !== order.transaction_id) && !tradeMatches)) {
+        throw new Error('支付通知卡订单号不匹配，需人工核对');
+    }
+}
+
+
+function cardPaymentResponse(order: Payment, review: boolean) {
+    return {
+        code: review ? 409 : 200,
+        msg: review ? '订单已支付，重复权益需人工对账' : '订单已支付，卡权益已处理',
+        data: { status: 1, transaction_id: order.transaction_id, processed: !review, needs_review: review },
+    };
+}
+
+async function queryVerifiedCardPayment(order: Payment) {
+    if (order.payment_status === 3 && String(order.msg || '').startsWith('CARD_')) {
+        return cardPaymentResponse(order, String(order.msg).startsWith('CARD_REVIEW_'));
+    }
+    if (!order.payment_id) throw new Error('卡订单缺少实际支付渠道，需人工对账');
+    const { getProviderByChannelId } = await import('../utils/paymentGateways');
+    const { provider, credentials } = getProviderByChannelId(String(order.payment_id));
+    if (!provider.query) return { code: 409, msg: '支付渠道不支持核实卡订单实付，需人工对账' };
+    const result = await provider.query({ out_trade_no: order.transaction_id, trade_no: order.mch_order_id }, credentials);
+    if (result.code !== 0 || result.status !== 1) {
+        return { code: result.code || 200, msg: result.msg || '尚未确认支付', data: { status: result.status || 0, processed: false } };
+    }
+    const storedTradeNo = String(order.mch_order_id || '');
+    const transactionMatches = result.out_trade_no === order.transaction_id;
+    const storedTradeMatches = storedTradeNo !== order.transaction_id && result.trade_no === storedTradeNo;
+    if ((!transactionMatches && !storedTradeMatches)
+        || (transactionMatches && storedTradeNo !== order.transaction_id && result.trade_no && result.trade_no !== storedTradeNo)) {
+        throw new Error('支付渠道返回的卡订单号不匹配，需人工对账');
+    }
+    const activation = await activateVerifiedCard(order, result.money);
+    return cardPaymentResponse(order, activation.review);
 }
 
 /**
@@ -878,7 +946,7 @@ async function deductPlatformCoinsForPayment(
                             let finalGoodsId = config.andid;
                             try {
                                 
-                                const character = await GameCharactersModel.findByUuid(playerRoleId);
+                                const character = await GameCharactersModel.findByUuid(playerRoleId, Number(orderDetail.world_id));
                                 if (character && character.ext) {
                                     let extObj: any = {};
                                     try {
@@ -1654,6 +1722,13 @@ export const doPayment = async (evt: H3Event) => {
         let resolvedPrice = price;                // 真实用于入库/下单的金额，礼包订单会被覆盖
         const serverUrl = params.server_url ? String(params.server_url) : '';      // 游戏服务器URL → server_url
         const isGiftOrder = serverUrl.startsWith('gift://');
+        const cardProduct = isGiftOrder ? null : getCardProduct(productName);
+        if (cardProduct) {
+            if (params.cashier_payment !== 'true' || !['wx', 'zfb'].includes(paymentMethod)) {
+                return { code: -1, msg: '请在权益中心购买此卡', data: null };
+            }
+            resolvedPrice = cardProduct.price.toFixed(2);
+        }
 
         const dailyLimitedProducts = new Set([
             'com.tencent.tmgp.hjol.gift_100',
@@ -1722,7 +1797,7 @@ export const doPayment = async (evt: H3Event) => {
 
         // 特殊处理：对于客服支付(kf)，金额可以为空或null
         // 礼包订单金额可由礼包配置计算，因此这里仅对非礼包订单做基础校验
-        if (!isGiftOrder && paymentMethod !== 'kf' && (!price || isNaN(parseFloat(price)))) {
+        if (!isGiftOrder && paymentMethod !== 'kf' && (!resolvedPrice || isNaN(parseFloat(resolvedPrice)))) {
             setResponseStatus(evt, 200);
             return {
                 code: -1,
@@ -1743,7 +1818,7 @@ export const doPayment = async (evt: H3Event) => {
                 );
 
                 if (currentSetting) {
-                    const amount = parseFloat(price);
+                    const amount = parseFloat(resolvedPrice);
                     const minPrice = currentSetting.MinPrice || 0;
                     const maxPrice = currentSetting.MaxPrice || 999999;
 
@@ -1836,6 +1911,16 @@ export const doPayment = async (evt: H3Event) => {
         const userGameCode = userData.game_code || '';
         const userChannelCode = userData.channel_code || '';
 
+        if (cardProduct) {
+            const active = await sql({
+                query: `SELECT id FROM MonthlyCards WHERE user_id = ? AND card_type = ? AND is_active = 1
+                        AND (expire_date IS NULL OR expire_date >= DATE(UTC_TIMESTAMP() + INTERVAL 8 HOUR))
+                        LIMIT 1`,
+                values: [userId, cardProduct.cardType]
+            }) as { id: number }[];
+            if (active.length) return { code: -11, msg: '该卡已开通，请勿重复付款', data: null };
+        }
+
         // ⏳ 每日限购：指定礼包每日仅可购买一次
         if (dailyLimitedProducts.has(productDesc)) {
             const limitRows = await sql({
@@ -1889,6 +1974,10 @@ export const doPayment = async (evt: H3Event) => {
         if (isGiftOrder) {
             try {
                 const { packageId, characterUuid, quantity, serverId: serverIdFromMeta } = parseGiftPaymentMetadata(serverUrl, serverId || 1);
+                if ((serverId && Number(serverId) !== Number(serverIdFromMeta))
+                    || (params.role_id && String(params.role_id) !== characterUuid)) {
+                    throw new Error('礼包角色或收货区服不一致');
+                }
 
                 const giftPackage = await ExternalGiftPackageModel.getGiftPackageById(packageId);
                 if (!giftPackage) {
@@ -1983,9 +2072,7 @@ export const doPayment = async (evt: H3Event) => {
             || normalizedProductNameForType.includes('ptb')
             || serverUrl.includes('cashier');
         // 月卡 / 终身卡订单：前端传 cashier_payment=true，且商品名明确匹配
-        const isCardOrder = isCashierPayment
-            && (normalizedProductNameForType.includes('月卡')
-                || normalizedProductNameForType.includes('终身卡'));
+        const isCardOrder = cardProduct !== null;
 
         // 读取商品配置并强校验价格：礼包 / 平台币充值 / 月卡终身卡 均跳过 rechargeConfig 校验
         if (!isGiftOrder && !isPlatformCoinRecharge && !isCardOrder) {
@@ -2389,7 +2476,7 @@ export const doPayment = async (evt: H3Event) => {
 
             // 记录不存在，执行插入
             // 生成商户订单号
-            const mchOrderId = isGiftOrder ? transactionId : orderId || `zfb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const mchOrderId = isGiftOrder || cardProduct ? transactionId : orderId || `zfb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
             // 预先获取渠道ID
             const { channelId: zfbChannelId } = await selectProviderBySystemParam(amountNum, 'zfb', transactionId);
@@ -2458,7 +2545,7 @@ export const doPayment = async (evt: H3Event) => {
                     ),
                     device: deviceForGateway,
                     param: transactionId
-                }, { paymentMethod, agentId, appId, gameId }, isGiftOrder ? zfbChannelId : undefined);
+                }, { paymentMethod, agentId, appId, gameId }, isGiftOrder || cardProduct ? zfbChannelId : undefined);
 
                 if (thirdPartyResult.code === 1) {
                     // 支付接口调用成功，更新订单状态为处理中
@@ -2636,7 +2723,7 @@ export const doPayment = async (evt: H3Event) => {
 
             // 记录不存在，执行插入
             // 生成商户订单号
-            const mchOrderId = isGiftOrder ? transactionId : orderId || `wx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const mchOrderId = isGiftOrder || cardProduct ? transactionId : orderId || `wx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
             // 预先获取渠道ID
             const { channelId: wxChannelId } = await selectProviderBySystemParam(amountNum, 'wx', transactionId);
@@ -2706,7 +2793,7 @@ export const doPayment = async (evt: H3Event) => {
                     ),
                     device: deviceForGateway,
                     param: transactionId
-                }, { paymentMethod, agentId, appId, gameId }, isGiftOrder ? wxChannelId : undefined);
+                }, { paymentMethod, agentId, appId, gameId }, isGiftOrder || cardProduct ? wxChannelId : undefined);
 
                 if (thirdPartyResult.code === 1) {
                     // 支付接口调用成功，更新订单状态为处理中
@@ -3077,9 +3164,10 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
 
         // 验签：根据订单 the payment_id（渠道ID）选择对应的网关
         const dbChannelId = localOrder.payment_id;
+        if (getCardProduct(localOrder.product_name) && !dbChannelId) throw new Error('卡订单缺少实际支付渠道');
         const channelId = String(dbChannelId || '1');
         const isCashGiftOrder = String(localOrder.server_url || '').startsWith('gift://');
-        if (!isCashGiftOrder && String(localOrder.mch_order_id) !== String(body.trade_no)) {
+        if (!isCashGiftOrder && !getCardProduct(localOrder.product_name) && String(localOrder.mch_order_id) !== String(body.trade_no)) {
             setResponseStatus(evt, 200);
             return 'fail';
         }
@@ -3094,6 +3182,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         } catch (error) {
             console.error(`[${requestId}] 获取支付渠道配置失败:`, error);
             if (isCashGiftOrder) throw error;
+            if (getCardProduct(localOrder.product_name)) throw error;
             // 降级到系统默认配置
             const { selectProviderBySystemParam } = await import('../utils/paymentGateways');
             const result = await selectProviderBySystemParam();
@@ -3107,6 +3196,15 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             setResponseStatus(evt, 200);
             return 'fail';
         }
+        if (!String(localOrder.server_url || '').startsWith('gift://') && getCardProduct(localOrder.product_name)) {
+            if (typeof provider.verify !== 'function' || verified !== true) return 'fail';
+            validateCardNotificationIdentifiers(localOrder, rawBody);
+            const paidAmount = body.state !== undefined ? gatewayMinorUnitsToYuan(body.amount) : body.money;
+            await activateVerifiedCard(localOrder, paidAmount);
+            setResponseStatus(evt, 200);
+            return (body.state !== undefined ? 'SUCCESS' : 'success');
+        }
+
         if (isCashGiftOrder) validateGiftNotificationIdentifiers(localOrder, rawBody);
 
 
@@ -3134,30 +3232,6 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
             return successResponse;
         }
 
-        // ── 月卡 / 终身卡 专项金额校验 ───────────────────────────────────────
-        // 固定价格配置（与前端 card-payment.vue CARD_CONFIG 保持一致）
-        const CARD_PRICE_CONFIG: Record<string, number> = {
-            '月卡':   328,
-            '终身卡': 980,
-        };
-        const productNameStr = String(localOrder.product_name || '');
-        const cardPriceKey = Object.keys(CARD_PRICE_CONFIG).find(k => productNameStr.includes(k));
-        if (cardPriceKey) {
-            const expectedPrice = CARD_PRICE_CONFIG[cardPriceKey];
-            if (Math.abs(notifyAmount - expectedPrice) > 0.01) {
-                console.error(`[${requestId}] 月卡金额校验失败:`, {
-                    product: productNameStr,
-                    expected: expectedPrice,
-                    notify: notifyAmount,
-                });
-                setResponseStatus(evt, 200);
-                return 'fail';
-            }
-            console.log(`[${requestId}] 月卡金额校验通过: ${productNameStr} ¥${notifyAmount}`);
-        }
-        // ─────────────────────────────────────────────────────────────────────
-
-
         // 更新订单状态
 
         // 修复支付方式字段
@@ -3183,64 +3257,7 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         }
         // --- End ---
 
-        // ── 月卡 / 终身卡激活（直接写 DB，无需调用内部接口）─────────────────────
-        if (cardPriceKey) {
-            try {
-                // 固定配置（与前端 CARD_CONFIG 保持一致）
-                const CARD_DB_CONFIG: Record<string, { card_type: string; daily_coins: number; expire_days: number | null }> = {
-                    '月卡':   { card_type: 'monthly',  daily_coins: 648, expire_days: 30 },
-                    '终身卡': { card_type: 'lifetime', daily_coins: 500, expire_days: null },
-                };
-                const cfg = CARD_DB_CONFIG[cardPriceKey];
-
-                // 防重：检查该 transaction_id 是否已激活
-                const existing = await sql({
-                    query: 'SELECT id FROM MonthlyCards WHERE transaction_id = ? LIMIT 1',
-                    values: [localOrder.transaction_id],
-                }) as any[];
-
-                if (existing.length > 0) {
-                    console.warn(`[${requestId}] 月卡已激活，跳过重复写入:`, localOrder.transaction_id);
-                } else {
-                    // 计算开始 / 到期时间（北京时间，只取日期部分 YYYY-MM-DD）
-                    const now = new Date();
-                    now.setTime(now.getTime() + 8 * 60 * 60 * 1000);
-                    const startAt = now.toISOString().slice(0, 10); // 只要日期
-                    let expireAt: string | null = null;
-                    if (cfg.expire_days !== null) {
-                        const exp = new Date(now);
-                        exp.setDate(exp.getDate() + cfg.expire_days);
-                        expireAt = exp.toISOString().slice(0, 10); // 只要日期
-                    }
-
-                    await sql({
-                        query: `INSERT INTO MonthlyCards
-                                    (user_id, card_type, daily_coins, start_date, expire_date,
-                                     transaction_id, is_active, purchase_amount)
-                                VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-                        values: [
-                            localOrder.user_id, cfg.card_type, cfg.daily_coins,
-                            startAt, expireAt, localOrder.transaction_id,
-                            notifyAmount,
-                        ],
-                    });
-
-                    console.log(`[${requestId}] 月卡激活成功: user=${localOrder.user_id} type=${cfg.card_type} expire=${expireAt ?? '永久'}`);
-                }
-            } catch (cardErr) {
-                console.error(`[${requestId}] 月卡激活失败:`, cardErr);
-                // 激活失败不影响回调响应，但记录日志
-                try {
-                    await sql({
-                        query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
-                        values: ['monthly_card_activate_error', `transaction_id=${localOrder.transaction_id} user=${localOrder.user_id} err=${String(cardErr)}`],
-                    });
-                } catch {}
-            }
-        }
-        // ─────────────────────────────────────────────────────────────────────
-
-        if (!cardPriceKey) {
+        if (!getCardProduct(localOrder.product_name)) {
             // 延迟通知游戏服（非礼包、非月卡订单）
             setTimeout(async () => {
                 try {
@@ -3327,9 +3344,10 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
 
         // 验签：礼包必须使用订单记录的实际支付渠道。
         const dbChannelId = localOrder.payment_id;
+        if (getCardProduct(localOrder.product_name) && !dbChannelId) throw new Error('卡订单缺少实际支付渠道');
         const channelId = String(dbChannelId || '1');
         const isCashGiftOrder = String(localOrder.server_url || '').startsWith('gift://');
-        if (!isCashGiftOrder && String(localOrder.mch_order_id) !== String(body.trade_no)
+        if (!isCashGiftOrder && !getCardProduct(localOrder.product_name) && String(localOrder.mch_order_id) !== String(body.trade_no)
             && String(localOrder.transaction_id) !== String(body.trade_no)) {
             setResponseStatus(evt, 200);
             return 'fail';
@@ -3344,7 +3362,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             credentials = result.credentials;
         } catch (error) {
             console.error(`[${requestId}] 获取支付渠道配置失败:`, error);
-            if (isCashGiftOrder) throw error;
+            if (isCashGiftOrder || getCardProduct(localOrder.product_name)) throw error;
             const result = await selectProviderBySystemParam();
             provider = result.provider;
             credentials = result.credentials;
@@ -3356,6 +3374,15 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
             setResponseStatus(evt, 200);
             return 'fail';
         }
+        if (!String(localOrder.server_url || '').startsWith('gift://') && getCardProduct(localOrder.product_name)) {
+            if (typeof provider.verify !== 'function' || verified !== true) return 'fail';
+            validateCardNotificationIdentifiers(localOrder, rawBody);
+            const paidAmount = body.state !== undefined ? gatewayMinorUnitsToYuan(body.amount) : body.money;
+            await activateVerifiedCard(localOrder, paidAmount);
+            setResponseStatus(evt, 200);
+            return 'SUCCESS';
+        }
+
         if (isCashGiftOrder) validateGiftNotificationIdentifiers(localOrder, rawBody);
 
 
@@ -3412,70 +3439,7 @@ export const handleCashierPaymentNotify = async (evt: H3Event) => {
 
         // ========== 收银台支付：区分月卡激活 vs 普通平台币充值 ==========
 
-        // 固定价格配置（与 doPayment CARD_PRICE_CONFIG 保持一致）
-        const CARD_PRICE_CONFIG: Record<string, number> = { '月卡': 328, '终身卡': 980 };
-        const CARD_DB_CONFIG: Record<string, { card_type: string; daily_coins: number; expire_days: number | null }> = {
-            '月卡':   { card_type: 'monthly',  daily_coins: 648, expire_days: 30 },
-            '终身卡': { card_type: 'lifetime', daily_coins: 500, expire_days: null },
-        };
-        const productNameStr2 = String(localOrder.product_name || '');
-        const cardPriceKey2 = Object.keys(CARD_PRICE_CONFIG).find(k => productNameStr2.includes(k));
-
-        if (cardPriceKey2) {
-            // ── 月卡 / 终身卡：激活权益，不发平台币 ──────────────────────────
-            try {
-                // 金额二次校验
-                const expectedCardPrice = CARD_PRICE_CONFIG[cardPriceKey2];
-                if (Math.abs(notifyAmount - expectedCardPrice) > 0.01) {
-                    console.error(`[${requestId}] 月卡金额校验失败:`, { expected: expectedCardPrice, notify: notifyAmount });
-                    setResponseStatus(evt, 200);
-                    return 'fail';
-                }
-
-                // 防重
-                const existingCard = await sql({
-                    query: 'SELECT id FROM MonthlyCards WHERE transaction_id = ? LIMIT 1',
-                    values: [localOrder.transaction_id],
-                }) as any[];
-
-                if (existingCard.length > 0) {
-                    console.warn(`[${requestId}] 月卡已激活，跳过重复写入:`, localOrder.transaction_id);
-                } else {
-                    const cfg2 = CARD_DB_CONFIG[cardPriceKey2];
-                    const now2 = new Date();
-                    now2.setTime(now2.getTime() + 8 * 60 * 60 * 1000);
-                    const startAt2 = now2.toISOString().slice(0, 10);
-                    let expireAt2: string | null = null;
-                    if (cfg2.expire_days !== null) {
-                        const exp2 = new Date(now2);
-                        exp2.setDate(exp2.getDate() + cfg2.expire_days);
-                        expireAt2 = exp2.toISOString().slice(0, 10);
-                    }
-
-                    await sql({
-                        query: `INSERT INTO MonthlyCards
-                                    (user_id, card_type, daily_coins, start_date, expire_date,
-                                     transaction_id, is_active, purchase_amount)
-                                VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-                        values: [
-                            localOrder.user_id, cfg2.card_type, cfg2.daily_coins,
-                            startAt2, expireAt2, localOrder.transaction_id,
-                            notifyAmount,
-                        ],
-                    });
-                    console.log(`[${requestId}] 月卡激活成功(cashier): user=${localOrder.user_id} type=${cfg2.card_type} expire=${expireAt2 ?? '永久'}`);
-                }
-            } catch (cardErr2: any) {
-                console.error(`[${requestId}] 月卡激活失败(cashier):`, cardErr2);
-                try {
-                    await sql({
-                        query: 'INSERT INTO logs (log_type, log_content) VALUES (?, ?)',
-                        values: ['monthly_card_activate_error', `cashier transaction_id=${localOrder.transaction_id} user=${localOrder.user_id} err=${String(cardErr2)}`],
-                    });
-                } catch {}
-            }
-
-        } else {
+        if (!getCardProduct(localOrder.product_name)) {
             // ── 普通平台币充值 ────────────────────────────────────────────────
             try {
                 // 计算应该到账的平台币数量（按SystemParams系数，默认1:10）
@@ -3628,6 +3592,10 @@ export const queryPaymentOrder = async (evt: H3Event) => {
         }
         const isGiftOrder = String(orderDetail.server_url || '').startsWith('gift://');
 
+
+        if (!String(orderDetail.server_url || '').startsWith('gift://') && getCardProduct(orderDetail.product_name)) {
+            return await queryVerifiedCardPayment(orderDetail);
+        }
 
         // 如果订单已经支付成功，直接返回成功状态
         if (orderDetail.payment_status === 3) {
