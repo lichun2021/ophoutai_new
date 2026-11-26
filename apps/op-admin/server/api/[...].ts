@@ -1219,6 +1219,7 @@ router.get('/payment/check/:tranId', withLogging(PaymentCtrl.checkOrder, '检查
  * @returns {string} 处理结果(success/fail)
  */
 router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知接口'));
+router.post('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知接口'));
 
 /**
  * 收银台支付回调通知接口 - 专门处理平台币充值

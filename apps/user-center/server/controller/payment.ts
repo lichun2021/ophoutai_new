@@ -1,3 +1,4 @@
+import { findPaymentNotificationOrder, forwardGiftPayment } from '@quantum/shared/server/utils/giftPaymentProxy';
 import * as PaymentModel from '../model/payment';
 import * as ExternalGiftPackageModel from '../model/externalGiftPackage';
 import { H3Event, setResponseStatus, getQuery, getRequestURL, readBody } from 'h3';
@@ -248,6 +249,9 @@ export const paymentNewReps = async (evt: H3Event) => {
 
     try {
         const body = await readBody(evt);
+        if (String(body.server_url || '').startsWith('gift://')) {
+            throw createError({ statusCode: 400, message: '礼包订单请使用礼包支付入口' });
+        }
         console.log("paymentNewReps 请求:", body);
 
         // 检查是否有 transactionId 并且记录是否存在
@@ -255,6 +259,10 @@ export const paymentNewReps = async (evt: H3Event) => {
             const existingRecord = await PaymentModel.detailByTransId(body.transactionId);
 
             if (existingRecord) {
+                if (String(existingRecord.server_url || '').startsWith('gift://')) {
+                    throw createError({ statusCode: 400, message: '礼包订单不可通过充值链接接口修改' });
+                }
+
 
                 // 获取用户的渠道信息用于更新
                 let updateUserChannelCode = '';
@@ -1639,9 +1647,10 @@ export const doPayment = async (evt: H3Event) => {
         const params = { ...query, ...(body && typeof body === 'object' ? body : {}) };
 
         const isCashier = params.cashier_payment === 'true' || evt.node.req.url?.includes('/user/cashier/pay');
+        const isMallGiftOrder = String(params.server_url || '').startsWith('gift://');
 
 
-        if (isCashier) {
+        if (isCashier && !isMallGiftOrder) {
             // ⚠️ 必须走内网地址，op-admin 监听 3003 端口，不能用外网域名
             const cashierTargetUrl = 'http://localhost:3003/api/user/cashier/pay';
             const targetUrl = cashierTargetUrl;
@@ -1687,6 +1696,10 @@ export const doPayment = async (evt: H3Event) => {
         const { computeSdkSign } = await import('../utils/sdkSign');
         const sdkSecret = await getSystemParam('sdk_sign_secret', 'AQE!@#a123JNJKO$@#fg1');
         params.sign = computeSdkSign(params, sdkSecret);
+
+        if (isMallGiftOrder) {
+            return await forwardGiftPayment(evt, '/sdkapi/Unipay/pay', params);
+        }
 
         const debugFields = Object.keys(params).filter(k => k !== 'sign' && k !== '__signed').sort();
         console.log(`[PaymentProxy] params:`, JSON.stringify(params));
@@ -1763,6 +1776,14 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         console.log(`[${requestId}] 参数类型:`, typeof body);
         console.log(`[${requestId}] 参数键值对:`, Object.keys(body));
 
+        // 众合通知先识别礼包，再交由本部署 op-admin 验签和确认实付。
+        if (Number(body.state) === 1 && body.outTradeNo) {
+            const giftOrder = await findPaymentNotificationOrder<Payment>(body, sql);
+            if (String(giftOrder?.server_url || '').startsWith('gift://')) {
+                return await forwardGiftPayment(evt, '/api/payment/third-party-notify');
+            }
+        }
+
         // 检查订单状态（先检查，避免查询不必要的订单）
         console.log(`[${requestId}] 订单状态:`, body.trade_status);
         if (body.trade_status !== 'TRADE_SUCCESS') {
@@ -1776,17 +1797,22 @@ export const handleThirdPartyNotify = async (evt: H3Event) => {
         // 查找本地订单 - 使用 trade_no 匹配 mch_order_id
         console.log(`[${requestId}] 使用 trade_no 查找订单:`, body.trade_no);
 
-        const result = await sql({
-            query: 'SELECT * FROM paymentrecords WHERE mch_order_id = ? LIMIT 1',
-            values: [body.trade_no]
-        }) as any[];
-
-        const localOrder = result.length > 0 ? result[0] : null;
+        const localOrder = await findPaymentNotificationOrder<Payment>(body, sql);
 
         if (!localOrder) {
             console.error(`[${requestId}] 订单不存在, trade_no:`, body.trade_no);
             setResponseStatus(evt, 200);
             return 'fail';
+        }
+
+        // 普通订单保持原有的商户订单号匹配范围。
+        if (!String(localOrder.server_url || '').startsWith('gift://')
+            && (!body.trade_no || String(localOrder.mch_order_id) !== String(body.trade_no))) {
+            setResponseStatus(evt, 200);
+            return 'fail';
+        }
+        if (String(localOrder.server_url || '').startsWith('gift://')) {
+            return await forwardGiftPayment(evt, '/api/payment/third-party-notify');
         }
 
         console.log(`[${requestId}] 订单查找成功!`, { transaction_id: localOrder.transaction_id, mch_order_id: localOrder.mch_order_id });
@@ -2100,6 +2126,10 @@ export const queryPaymentOrder = async (evt: H3Event) => {
                 code: 404,
                 msg: '订单不存在:' + transaction_id
             };
+        }
+
+        if (String(orderDetail.server_url || '').startsWith('gift://')) {
+            return await forwardGiftPayment(evt, '/api/internal/payment/query');
         }
 
         console.log('[PaymentQuery] 订单详情:', {

@@ -1,6 +1,10 @@
+import { fileURLToPath } from 'node:url';
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
 export default defineNuxtConfig({
+  alias: {
+    '@quantum/shared': fileURLToPath(new URL('../../packages/shared', import.meta.url))
+  },
   app: {
     head: {
       title: '用户中心',

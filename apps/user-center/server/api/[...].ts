@@ -341,6 +341,7 @@ router.get('/payment/user/:user_id', defineEventHandler(PaymentCtrl.getPaymentBy
 // ========== 支付回调（第三方通知）==========
 
 router.get('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知'));
+router.post('/payment/third-party-notify', withLogging(PaymentCtrl.handleThirdPartyNotify, '第三方支付回调通知'));
 router.get('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知'));
 router.post('/payment/cashier-notify', withLogging(PaymentCtrl.handleCashierPaymentNotify, '收银台支付回调通知'));
 

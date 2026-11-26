@@ -114,7 +114,7 @@
             </UFormGroup>
             
             <UFormGroup label="现金价格">
-              <UInput v-model.number="giftPackageForm.price_real_money" type="number" placeholder="现金价格（展示用）" />
+              <UInput v-model.number="giftPackageForm.price_real_money" type="number" min="0" step="0.01" placeholder="现金售价（元）" />
             </UFormGroup>
             
             <UFormGroup label="分类">

@@ -137,6 +137,10 @@ export const checkUserCanPurchase = async (thirdparty_uid: string, package_id: n
         return { canPurchase: false, reason: '礼包不存在' };
     }
 
+    if (giftPackage.category === 'daily' || giftPackage.category === 'cumulative') {
+        return { canPurchase: false, reason: '消费奖励礼包按条件自动发放，不支持购买' };
+    }
+
     console.log(`[限购检查] 礼包信息 - 名称: ${giftPackage.package_name}, 分类: ${giftPackage.category}, 限购: ${giftPackage.max_per_user}`);
 
     // 检查礼包是否启用

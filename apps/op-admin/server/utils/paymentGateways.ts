@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { gatewayMinorUnitsToYuan } from '@quantum/shared/server/utils/giftPaymentAmount';
 import { sql } from '../db';
 import { getSystemParam } from './systemConfig';
 
@@ -195,17 +196,19 @@ const uzepayV2Provider: PaymentProvider = {
     },
     verify(params: Record<string, any>, creds?: Record<string, any>): boolean {
         const cfg = { ...uzepayV2Config, ...(creds || {}) };
-        const provided = String(params.sign || '').trim().toLowerCase();
+        const signature = String(params.sign || '').trim();
         const signType = String(params.sign_type || 'MD5').toUpperCase();
         const base = { ...params };
         delete (base as any).sign; delete (base as any).sign_type;
         const signString = buildSignString(base);
-        if (signType === 'MD5') {
-            const expect = crypto.createHash('md5').update(signString + (cfg.md5Key || '')).digest('hex');
-            return expect === provided;
+        if (signType === 'MD5' && cfg.md5Key) {
+            const expect = crypto.createHash('md5').update(signString + cfg.md5Key).digest('hex');
+            return expect === signature.toLowerCase();
         }
-        // 可扩展 RSA 验签
-        return true;
+        if (signType === 'RSA' && cfg.rsaPlatformPublicKey && signature) {
+            return rsaVerify(signString, signature, cfg.rsaPlatformPublicKey);
+        }
+        return false;
     },
     async query(req: QueryOrderRequest, creds?: Record<string, any>): Promise<QueryOrderResponse> {
         const cfg = { ...uzepayV2Config, ...(creds || {}) };
@@ -363,6 +366,7 @@ const yxinpayProvider: PaymentProvider = {
     verify(params: Record<string, any>, creds?: Record<string, any>): boolean {
         const cfg = { ...yxinpayConfig, ...(creds || {}) };
         const signType = String(params.sign_type || cfg.signType || 'MD5').toUpperCase();
+        if (signType !== String(cfg.signType || 'MD5').toUpperCase()) return false;
         // console.log('[Pay][yxinpayV1] 签名验证开始');
         // console.log('[Pay][yxinpayV1] 签名类型:', signType);
         // console.log('[Pay][yxinpayV1] 配置的签名类型:', cfg.signType);
@@ -392,6 +396,7 @@ const yxinpayProvider: PaymentProvider = {
             console.log('[Pay][yxinpayV1] RSA验签结果:', result);
             return result;
         }
+        if (signType !== 'MD5' || !cfg.md5Key) return false;
         const provided = String(params.sign || '').trim().toLowerCase();
         const signStr = signSource + (cfg.md5Key || '');
         const expect = crypto.createHash('md5').update(signStr).digest('hex');
@@ -1033,7 +1038,7 @@ const zhonghePayProvider: PaymentProvider = {
                     trade_no: data.tradeNo || '',              // 文档字段：tradeNo
                     out_trade_no: data.outTradeNo || '',       // 文档字段：outTradeNo
                     status: Number(data.state ?? -1),          // 文档字段：state
-                    money: data.amount ? String(parseInt(data.amount) / 100) : '', // 分→元
+                    money: gatewayMinorUnitsToYuan(data.amount) ?? '',
                     addtime: data.createTime || '',
                     endtime: data.successTime || ''
                 };
